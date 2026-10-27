@@ -93,9 +93,12 @@ export default function App() {
   const [regReferral, setRegReferral] = useState('');
   const [workerApiUrl, setWorkerApiUrl] = useState<string>(() => {
     try {
-      return localStorage.getItem('lootify_worker_api_url') || '';
+      return (
+        localStorage.getItem('lootify_worker_api_url') ||
+        'https://lootify-api.sarthaksinghyadav1.workers.dev'
+      );
     } catch {
-      return '';
+      return 'https://lootify-api.sarthaksinghyadav1.workers.dev';
     }
   });
 
