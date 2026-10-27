@@ -24,7 +24,6 @@ import {
 import { BootstrapPayload, PageRoute, ThemeMode } from './types.ts';
 import { PublicPages } from './components/PublicPages.tsx';
 import { EarnerViews } from './components/EarnerViews.tsx';
-import { AdminConsole } from './components/AdminConsole.tsx';
 import {
   getClientBootstrap,
   handleClientApiAction,
@@ -40,8 +39,6 @@ const VALID_ROUTES: PageRoute[] = [
   'wallet',
   'leaderboard',
   'payout-proofs',
-  'admin',
-  'deploy-guide',
   'terms',
   'privacy',
   'contact',
@@ -56,6 +53,7 @@ function getInitialRouteFromUrl(): PageRoute {
     .filter(Boolean)
     .map((s) => s.replace(/\.html$/, ''));
   const lastSeg = (segments[segments.length - 1] || 'home') as PageRoute;
+  if (['index', 'lootify', 'LOOTIFY'].includes(lastSeg as any)) return 'home';
   if (VALID_ROUTES.includes(lastSeg)) return lastSeg;
   return 'home';
 }
@@ -333,7 +331,7 @@ export default function App() {
         setData(json);
       }
       setAuthModalOpen(false);
-      navigateToPage(targetUser?.role === 'admin' ? 'admin' : 'dashboard');
+      navigateToPage('dashboard');
       notify(`Signed in as ${targetUser?.name || emailInput}`, 'success');
     } catch (err: any) {
       notify(err.message || 'Invalid login credentials', 'error');
@@ -362,7 +360,7 @@ export default function App() {
         setData(json);
       }
       setAuthModalOpen(false);
-      navigateToPage(targetUser?.role === 'admin' ? 'admin' : 'dashboard');
+      navigateToPage('dashboard');
       notify(
         `Signed in with Google as ${targetUser?.name || params.name || params.email}!`,
         'success'
@@ -415,13 +413,12 @@ export default function App() {
     { id: 'wallet', label: 'Withdraw Cash', path: '/wallet' },
     { id: 'payout-proofs', label: 'Payment Proofs', path: '/payout-proofs' },
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
-    { id: 'deploy-guide', label: 'GitHub Website Setup', path: '/deploy-guide' },
-    { id: 'admin', label: 'Website Admin Panel', path: '/admin' },
   ];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150">
-      {/* Top 3-Zone Website Header Bar */}
+      {/* Top 3-Zone Website Header Bar (Hidden on Default Landing Page) */}
+      {activePage !== 'home' && (<>
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-8">
           {/* Zone 1: Single Website Brand Wordmark */}
@@ -574,29 +571,6 @@ export default function App() {
               <span>Sign In / Register ({currentUser.name.split(' ')[0]})</span>
             </button>
 
-            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-0.5 rounded-lg">
-              <button
-                onClick={() => switchDemoAccount('usr_earner_1', 'dashboard')}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                  currentUser.role === 'earner'
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                User View
-              </button>
-              <button
-                onClick={() => switchDemoAccount('usr_admin_1', 'admin')}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                  currentUser.role === 'admin'
-                    ? 'bg-amber-500 text-slate-950 font-semibold'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                Admin View
-              </button>
-            </div>
-
             <button
               onClick={toggleTheme}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
@@ -642,8 +616,10 @@ export default function App() {
         )}
       </div>
 
+      </>)}
+
       {/* Live Website Announcement Strip */}
-      {settings.announcementActive && (
+      {settings.announcementActive && activePage !== 'home' && (
         <div className="bg-emerald-600/10 border-b border-emerald-500/20 px-6 py-2">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 text-xs">
             <p className="text-slate-700 dark:text-slate-200">
@@ -663,7 +639,7 @@ export default function App() {
       {/* Full-Width Website Page Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 md:py-10 space-y-8">
         {/* Top Website Leaderboard Ad Banner (Monetag / Adsterra) */}
-        {headerAd && activePage !== 'admin' && (
+        {headerAd && activePage !== 'home' && (
           <div className="px-5 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 text-xs">
             <div>
               <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 mr-2">
@@ -681,14 +657,7 @@ export default function App() {
         )}
 
         {/* Active Website Page Content */}
-        {activePage === 'admin' ? (
-          <AdminConsole
-            data={data}
-            apiPost={apiPost}
-            apiDelete={apiDelete}
-            notify={notify}
-          />
-        ) : [
+        {[
             'home',
             'payout-proofs',
             'leaderboard',
@@ -790,11 +759,6 @@ export default function App() {
                   Top Earners Leaderboard (/leaderboard)
                 </button>
               </li>
-              <li>
-                <button onClick={() => navigateToPage('admin')} className="hover:underline">
-                  Website Admin Control Center (/admin)
-                </button>
-              </li>
             </ul>
           </div>
 
@@ -816,14 +780,6 @@ export default function App() {
               <li>
                 <button onClick={() => navigateToPage('contact')} className="hover:underline">
                   Contact & Publisher Support (/contact)
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => navigateToPage('deploy-guide')}
-                  className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-                >
-                  GitHub Pages + Custom Domain Guide (/deploy-guide)
                 </button>
               </li>
             </ul>
@@ -1027,16 +983,6 @@ export default function App() {
                       className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
                     >
                       Fill Member
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginEmail('admin@lootify.in');
-                        setLoginPassword('admin123');
-                      }}
-                      className="text-amber-500 font-semibold hover:underline"
-                    >
-                      Fill Admin
                     </button>
                   </div>
                 </div>

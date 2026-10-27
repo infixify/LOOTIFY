@@ -1596,31 +1596,6 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                 onClick={async () => {
                   if (onGoogleAuth) {
                     await onGoogleAuth({
-                      name: 'Sarthak (Founder & Admin)',
-                      email: 'admin@lootify.in',
-                      referralCodeInput: regRefCode,
-                    });
-                    setGoogleChooserOpen(false);
-                  }
-                }}
-                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 flex items-center justify-between text-left transition-colors"
-              >
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    Sarthak Singh (Founder Admin)
-                  </div>
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    sarthaksinghyadav1@gmail.com · Admin Role
-                  </div>
-                </div>
-                <span className="text-xs font-semibold text-amber-500">Admin →</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  if (onGoogleAuth) {
-                    await onGoogleAuth({
                       name: 'Aarav Verma',
                       email: 'aarav@lootify.in',
                       referralCodeInput: regRefCode,
