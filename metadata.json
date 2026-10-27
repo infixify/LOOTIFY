@@ -1,0 +1,6 @@
+{
+  "name": "Lootify — Multi-Earning & Rewards Website",
+  "description": "Standalone multi-page earning and rewards website featuring Offerwalls, Paid Shortlinks with 24h cooldowns, Micro-Tasks, Quizzes, 3-Layer Refer & Earn, 3-to-5-Day Pending Hold Wallet, UPI/Bank/Gift Card/Crypto payouts, and a God-Mode Admin Panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
