@@ -29,6 +29,35 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Automatic loader for GitHub Pages static branch deployment (e.g. infixify.github.io/LOOTIFY/)
+      (function() {
+        function loadStaticBundle() {
+          if (window.__LOOTIFY_STATIC_LOADED__) return;
+          var root = document.getElementById('root');
+          if (root && root.children.length > 0) return;
+          window.__LOOTIFY_STATIC_LOADED__ = true;
+
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = './assets/lootify.css';
+          document.head.appendChild(link);
+
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.src = './assets/lootify.js';
+          document.body.appendChild(s);
+        }
+
+        if (window.location.hostname.indexOf('github.io') !== -1) {
+          loadStaticBundle();
+        } else {
+          window.addEventListener('DOMContentLoaded', function() {
+            setTimeout(loadStaticBundle, 250);
+          });
+        }
+      })();
+    </script>
   </body>
 </html>
 

@@ -7,6 +7,15 @@ export default defineConfig(() => {
   return {
     base: './',
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        output: {
+          entryFileNames: 'assets/lootify.js',
+          chunkFileNames: 'assets/[name].js',
+          assetFileNames: 'assets/lootify[extname]',
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

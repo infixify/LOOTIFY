@@ -25,11 +25,40 @@
         }
       }(window.location))
     </script>
-    <script type="module" crossorigin src="./assets/index-DWcf4XJ2.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Bo5MWSG2.css">
+    <script type="module" crossorigin src="./assets/lootify.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/lootify.css">
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Automatic loader for GitHub Pages static branch deployment (e.g. infixify.github.io/LOOTIFY/)
+      (function() {
+        function loadStaticBundle() {
+          if (window.__LOOTIFY_STATIC_LOADED__) return;
+          var root = document.getElementById('root');
+          if (root && root.children.length > 0) return;
+          window.__LOOTIFY_STATIC_LOADED__ = true;
+
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = './assets/lootify.css';
+          document.head.appendChild(link);
+
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.src = './assets/lootify.js';
+          document.body.appendChild(s);
+        }
+
+        if (window.location.hostname.indexOf('github.io') !== -1) {
+          loadStaticBundle();
+        } else {
+          window.addEventListener('DOMContentLoaded', function() {
+            setTimeout(loadStaticBundle, 250);
+          });
+        }
+      })();
+    </script>
   </body>
 </html>
 

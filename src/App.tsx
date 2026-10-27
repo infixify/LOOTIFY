@@ -61,10 +61,16 @@ function getInitialRouteFromUrl(): PageRoute {
 }
 
 export default function App() {
-  const [data, setData] = useState<BootstrapPayload | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    return localStorage.getItem('lootify_user_id') || 'usr_earner_1';
+    try {
+      return localStorage.getItem('lootify_user_id') || 'usr_earner_1';
+    } catch {
+      return 'usr_earner_1';
+    }
   });
+  const [data, setData] = useState<BootstrapPayload>(() =>
+    getClientBootstrap(currentUserId)
+  );
   const [activePage, setActivePage] = useState<PageRoute>(getInitialRouteFromUrl);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => {
