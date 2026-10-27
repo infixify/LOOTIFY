@@ -1,123 +1,1133 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" class="dark" data-theme="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Lootify — Play Games. Cash Out Real ₹ INR Instantly.</title>
-    <meta name="description" content="Complete game quests, offerwalls, shortlinks & micro-tasks. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly." />
-    <meta property="og:title" content="Lootify — Play Games. Cash Out Real ₹ INR Instantly." />
-    <meta property="og:description" content="Complete game quests, offerwalls, shortlinks & micro-tasks. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly." />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script>
-      // Restore clean multi-page URLs on GitHub Pages when redirected from 404.html
-      (function(l) {
-        if (l.search[1] === '/' ) {
-          var decoded = l.search.slice(1).split('&').map(function(s) {
-            return s.replace(/~and~/g, '&')
-          }).join('?');
-          window.history.replaceState(null, null,
-              l.pathname.slice(0, -1) + decoded + l.hash
-          );
-        }
-      }(window.location))
-    </script>
-  </head>
-  <body>
-    <div id="root">
-      <!-- Pre-rendered Lootify v2 Gaming Rewards Landing Page (Hydrated automatically by React on load) -->
-      <div class="lootify-v2 grid-bg" data-theme="dark">
-        <nav id="navbar">
-          <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;height:64px;">
-            <a href="#" style="display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0;">
-              <div style="width:36px;height:36px;background:linear-gradient(135deg,#00E89A,#00A870);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:18px;color:#03100A;box-shadow:0 0 14px rgba(0,232,154,0.4);">L</div>
-              <span class="font-display" style="font-size:19px;font-weight:700;color:#E4EBF8;">LOOTIFY<span style="color:#00E89A;">.</span></span>
-            </a>
-            <div class="hide-mob" style="display:flex;align-items:center;gap:24px;">
-              <a href="#quest-modes" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">Quest Modes</a>
-              <a href="#calculator" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">Calculator</a>
-              <a href="#how-it-works" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">How It Works</a>
-              <a href="#faq" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">FAQ</a>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-              <a href="#hero-auth" class="btn btn-primary btn-sm" style="padding:9px 16px;">Sign Up Free</a>
-            </div>
-          </div>
-        </nav>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Lootify — Play Games. Cash Out Real ₹ INR Instantly.</title>
+<meta name="description" content="Complete game quests, offerwalls, shortlinks & micro-tasks. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly." />
+<meta property="og:title" content="Lootify — Play Games. Cash Out Real ₹ INR Instantly." />
+<meta property="og:description" content="Complete game quests, offerwalls, shortlinks & micro-tasks. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly." />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+  // Restore clean multi-page URLs on GitHub Pages when redirected from 404.html
+  (function(l) {
+    if (l.search[1] === '/' ) {
+      var decoded = l.search.slice(1).split('&').map(function(s) {
+        return s.replace(/~and~/g, '&')
+      }).join('?');
+      window.history.replaceState(null, null,
+          l.pathname.slice(0, -1) + decoded + l.hash
+      );
+    }
+  }(window.location));
 
-        <section id="hero" class="hero-gradient" style="position:relative;display:flex;align-items:center;overflow:hidden;padding:48px 20px;">
-          <div class="wrap" style="width:100%;position:relative;z-index:1;">
-            <div class="hero-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;">
-              <div>
-                <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(0,232,154,0.07);border:1px solid rgba(0,232,154,0.2);border-radius:100px;padding:6px 14px;margin-bottom:28px;">
-                  <div class="live-dot" style="width:6px;height:6px;"></div>
-                  <span class="font-mono" style="font-size:11px;font-weight:600;color:#00E89A;letter-spacing:.06em;">INDIA'S #1 GAMING REWARDS PLATFORM</span>
-                </div>
-                <h1 class="font-display" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.08;margin-bottom:20px;color:#E4EBF8;">
-                  Play Games.<br>
-                  <span style="color:#00E89A;text-shadow:0 0 30px rgba(0,232,154,0.35);">Cash Out</span><br>
-                  Real <span style="color:#FFB400;text-shadow:0 0 25px rgba(255,180,0,0.35);">₹ INR.</span>
-                </h1>
-                <p style="font-size:16px;line-height:1.75;color:#7A88A4;margin-bottom:28px;max-width:440px;">
-                  Complete game quests, offerwalls, shortlinks &amp; micro-tasks.. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly.
-                </p>
-              </div>
-              <div id="hero-auth">
-                <div class="card card-glow auth-card" style="padding:clamp(24px,5vw,40px);max-width:440px;width:100%;">
-                  <div style="text-align:center;margin-bottom:24px;">
-                    <div style="font-size:28px;margin-bottom:10px;">🎮</div>
-                    <h2 class="font-display" style="font-size:22px;font-weight:700;color:#E4EBF8;margin-bottom:6px;">Start Earning Now</h2>
-                    <p style="font-size:13px;color:#7A88A4;">Sign up with your Google account to start earning</p>
-                  </div>
-                  <button class="google-btn" id="btn-google-signin">
-                    Continue with Google
-                  </button>
-                  <p style="text-align:center;font-size:11px;color:#7A88A4;margin-top:16px;">
-                    🔒 Secure &nbsp;•&nbsp; No password needed &nbsp;•&nbsp; Free forever
-                  </p>
-                </div>
-              </div>
-            </div>
+  // Unregister any old service workers so stale bundles never overwrite the page
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      for (var i = 0; i < regs.length; i++) {
+        regs[i].unregister();
+      }
+    }).catch(function(){});
+  }
+</script>
+
+<style>
+:root {
+  --bg: #05080F;
+  --bg2: #090D19;
+  --bg3: #0E1423;
+  --border: #1C2640;
+  --border2: #243050;
+  --txt: #E4EBF8;
+  --txt2: #7A88A4;
+  --green: #00E89A;
+  --green2: #10B981;
+  --green-dim: rgba(0,232,154,0.08);
+  --green-glow: rgba(0,232,154,0.18);
+  --gold: #FFB400;
+  --gold-dim: rgba(255,180,0,0.08);
+  --violet: #9B6EFF;
+  --violet-dim: rgba(155,110,255,0.08);
+  --red: #FF5566;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+[data-theme="light"] {
+  --bg: #F0F5FF;
+  --bg2: #E6EDFA;
+  --bg3: #FFFFFF;
+  --border: #C8D4EC;
+  --border2: #A8B8D8;
+  --txt: #0A0E1A;
+  --txt2: #4A5878;
+  --green-dim: rgba(0,232,154,0.08);
+  --green-glow: rgba(16,185,129,0.12);
+  --gold-dim: rgba(255,180,0,0.06);
+  --violet-dim: rgba(155,110,255,0.06);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(64px + var(--safe-top));
+}
+
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--safe-top);
+  background: rgba(5,8,15,0.96);
+  z-index: 60;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── GRID BG ── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0,232,154,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,232,154,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ── TYPOGRAPHY ── */
+.font-display { font-family: 'Chakra Petch', sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── GLOW ── */
+.glow-green { box-shadow: 0 0 24px var(--green-glow), 0 0 48px rgba(0,232,154,0.06); }
+.glow-gold { box-shadow: 0 0 24px rgba(255,180,0,0.2); }
+.text-green { color: var(--green); }
+.text-gold { color: var(--gold); }
+.text-violet { color: var(--violet); }
+.text-muted { color: var(--txt2); }
+
+/* ── CARD ── */
+.card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.card:hover { border-color: var(--green2); }
+.card-glow { box-shadow: 0 0 0 1px rgba(0,232,154,0.2), 0 8px 40px rgba(0,0,0,0.4); }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; border: none; cursor: pointer;
+  font-family: 'Chakra Petch', sans-serif; font-weight: 600;
+  letter-spacing: 0.03em; border-radius: 10px;
+  transition: all 0.2s; text-decoration: none; white-space: nowrap;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--green), #00C280);
+  color: #03100A; padding: 12px 24px; font-size: 14px;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgba(0,232,154,0.4); }
+.btn-primary:active { transform: translateY(0); }
+.btn-outline {
+  background: transparent; color: var(--green);
+  border: 1.5px solid var(--green2); padding: 11px 22px; font-size: 13px;
+}
+.btn-outline:hover { background: var(--green-dim); }
+.btn-ghost {
+  background: var(--bg3); color: var(--txt);
+  border: 1px solid var(--border); padding: 10px 18px; font-size: 13px;
+}
+.btn-ghost:hover { border-color: var(--border2); }
+.btn-sm { padding: 8px 16px; font-size: 12px; }
+.btn-lg { padding: 16px 32px; font-size: 16px; }
+.btn-full { width: 100%; }
+
+/* ── BADGE ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+}
+.badge-green { background: rgba(0,232,154,0.1); border: 1px solid rgba(0,232,154,0.25); color: var(--green); }
+.badge-gold { background: rgba(255,180,0,0.1); border: 1px solid rgba(255,180,0,0.25); color: var(--gold); }
+.badge-violet { background: rgba(155,110,255,0.1); border: 1px solid rgba(155,110,255,0.25); color: var(--violet); }
+.badge-red { background: rgba(255,85,102,0.1); border: 1px solid rgba(255,85,102,0.25); color: var(--red); }
+
+/* ── PILL PARTNER ── */
+.pill {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 14px;
+  font-size: 13px; font-weight: 600; color: var(--txt2);
+  transition: all 0.2s; cursor: default;
+}
+.pill:hover { border-color: var(--green2); color: var(--txt); }
+
+/* ── LIVE DOT ── */
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,232,154,0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(0,232,154,0); }
+}
+
+/* ── NAVBAR ── */
+#navbar {
+  position: sticky; top: var(--safe-top); z-index: 50;
+  background: rgba(5,8,15,0.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.3s;
+  height: 64px;
+}
+
+/* ── HERO ── */
+.hero-gradient {
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,232,154,0.07) 0%, transparent 70%);
+}
+
+/* ── STEP CONNECTOR ── */
+.step-line {
+  position: absolute; top: 32px; left: calc(50% + 32px);
+  width: calc(100% - 64px); height: 1px;
+  background: linear-gradient(90deg, var(--green), rgba(155,110,255,0.3));
+}
+
+/* ── FAQ ── */
+.faq-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+.faq-body.open { max-height: 400px; }
+.faq-chevron { transition: transform 0.3s; font-size: 18px; color: var(--green); flex-shrink: 0; }
+.faq-chevron.open { transform: rotate(180deg); }
+
+/* ── SLIDER ── */
+input[type=range] {
+  -webkit-appearance: none; width: 100%; height: 4px;
+  border-radius: 2px; background: var(--border2); outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 10px rgba(0,232,154,0.5); cursor: pointer;
+}
+input[type=range]::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%; border: none;
+  background: var(--green); cursor: pointer;
+}
+
+/* ── MOBILE MENU ── */
+#mmenu { display: none; }
+#mmenu.open { display: flex; }
+
+/* ── CONTAINER ── */
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.section { padding: 80px 20px; }
+.section-sm { padding: 48px 20px; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .hide-mob { display: none !important; }
+  #hamburger { display: flex !important; }
+  .section { padding: 56px 16px; }
+  .section-sm { padding: 32px 16px; }
+  .wrap { padding: 0 16px; }
+}
+@media (max-width: 480px) {
+  .section { padding: 48px 16px; }
+}
+
+/* ── QUEST CARD ── */
+.qcard { transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s; cursor: pointer; }
+.qcard:hover { transform: translateY(-4px); border-color: var(--green); box-shadow: 0 12px 40px rgba(0,232,154,0.1); }
+@media (max-width: 768px) { .qcard:hover { transform: none; } }
+
+/* ── GOOGLE BTN ── */
+.google-btn {
+  width: 100%; padding: 15px 20px; border-radius: 12px;
+  background: #fff; border: 1.5px solid #E0E0E0;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 15px;
+  color: #1F1F1F; cursor: pointer;
+  transition: all 0.25s; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.google-btn:hover { box-shadow: 0 4px 20px rgba(0,232,154,0.25); border-color: var(--green); }
+
+/* ── AUTH CARD MOBILE ── */
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr !important; }
+  .auth-card { max-width: 100% !important; margin: 0 auto; }
+}
+
+/* ── BENTO GRID ── */
+.bento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.span2 { grid-column: span 2; }
+@media (max-width: 900px) {
+  .bento { grid-template-columns: 1fr 1fr; }
+  .span2 { grid-column: span 2; }
+}
+@media (max-width: 560px) {
+  .bento { grid-template-columns: 1fr; }
+  .span2 { grid-column: span 1; }
+}
+
+/* ── STATS GRID ── */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 360px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+
+/* ── STEPS GRID ── */
+.steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; position: relative; }
+@media (max-width: 768px) {
+  .steps-grid { grid-template-columns: repeat(2, 1fr); }
+  .step-line { display: none; }
+}
+@media (max-width: 480px) { .steps-grid { grid-template-columns: 1fr; } }
+.cashout-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; max-width:700px; margin:0 auto; }
+@media (max-width: 560px) { .cashout-grid { grid-template-columns: 1fr; } }
+
+/* ── WALLET GRID ── */
+.wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 480px) { .wallet-grid { grid-template-columns: 1fr; } }
+
+/* ── CALC RESULT ── */
+.calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 480px) { .calc-grid { grid-template-columns: 1fr; } }
+
+/* ── FOOTER GRID ── */
+.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+@media (max-width: 900px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; gap: 32px; } }
+
+/* ── REFERRAL TIERS ── */
+.tier-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 480px) { .tier-grid { grid-template-columns: 1fr; } }
+
+/* ── LIGHT MODE ── */
+[data-theme="light"] .card { background: #fff; }
+[data-theme="light"] .btn-ghost { background: #F0F5FF; color: var(--txt); border-color: var(--border); }
+[data-theme="light"] .google-btn { background: #fff; }
+[data-theme="light"] #navbar { background: rgba(240,245,255,0.9); }
+[data-theme="light"] body::before { background: rgba(240,245,255,0.95); }
+[data-theme="light"] .grid-bg {
+  background-image: linear-gradient(rgba(0,232,154,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,232,154,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ── COIN TICKER ── */
+.coin-badge {
+  background: rgba(255,180,0,0.1); border: 1px solid rgba(255,180,0,0.25);
+  border-radius: 6px; padding: 3px 9px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--gold);
+}
+
+/* ── HERO BIG NUMBER ── */
+.hero-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(52px, 10vw, 90px);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--green);
+  text-shadow: 0 0 40px rgba(0,232,154,0.4);
+}
+
+/* ── COUNTER ── */
+.stat-big {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 600;
+}
+
+/* Prevent any old cached #root bundle from covering #lootify-v2-landing when on the home route */
+body.on-landing-home #root {
+  display: none !important;
+}
+body.on-landing-home #lootify-v2-landing {
+  display: block !important;
+}
+body.on-app-route #lootify-v2-landing {
+  display: none !important;
+}
+body.on-app-route #root {
+  display: block !important;
+}
+
+/* No motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+</style>
+</head>
+
+<body class="grid-bg on-landing-home">
+
+<!-- ════════════════════════════════════════════════════════════════
+  STANDALONE LOOTIFY V2 GAMING REWARDS LANDING PAGE
+  (Protected outside #root so cached bundles can NEVER overwrite it)
+════════════════════════════════════════════════════════════════ -->
+<div id="lootify-v2-landing">
+
+<!-- ════════════════════════════════════════
+  NAVBAR
+════════════════════════════════════════ -->
+<nav id="navbar">
+  <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;height:64px;">
+
+    <!-- Logo -->
+    <a href="#" style="display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0;">
+      <div style="width:36px;height:36px;background:linear-gradient(135deg,var(--green),#00A870);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:18px;color:#03100A;box-shadow:0 0 14px rgba(0,232,154,0.4);">L</div>
+      <span class="font-display" style="font-size:19px;font-weight:700;color:var(--txt);">LOOTIFY<span style="color:var(--green);">.</span></span>
+    </a>
+
+    <!-- Center nav desktop -->
+    <div class="hide-mob" style="display:flex;align-items:center;gap:24px;">
+      <a href="#quest-modes" class="nav-link" style="font-size:13px;font-weight:600;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Quest Modes</a>
+      <a href="#calculator" class="nav-link" style="font-size:13px;font-weight:600;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Calculator</a>
+      <a href="#how-it-works" class="nav-link" style="font-size:13px;font-weight:600;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">How It Works</a>
+      <a href="#faq" class="nav-link" style="font-size:13px;font-weight:600;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">FAQ</a>
+    </div>
+
+    <!-- Right actions -->
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+      <div class="hide-mob" style="display:flex;align-items:center;gap:6px;">
+        <div class="live-dot"></div>
+        <span class="font-mono" style="font-size:10px;font-weight:600;color:var(--green);">LIVE</span>
+      </div>
+      <button onclick="toggleTheme()" style="width:36px;height:36px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;" title="Toggle theme">
+        <span id="theme-icon">🌙</span>
+      </button>
+      <a href="#hero-auth" id="nav-cta-btn" class="btn btn-primary btn-sm" style="padding:9px 16px;" onclick="handleNavCta(event)">Sign Up Free</a>
+      <button id="hamburger" onclick="toggleMenu()" style="display:none;width:36px;height:36px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);align-items:center;justify-content:center;cursor:pointer;color:var(--txt);font-size:18px;">☰</button>
+    </div>
+  </div>
+
+  <!-- Mobile Menu -->
+  <div id="mmenu" style="flex-direction:column;background:var(--bg2);border-top:1px solid var(--border);padding:16px 20px;gap:4px;">
+    <a href="#quest-modes" onclick="toggleMenu()" style="padding:12px 8px;font-size:14px;font-weight:600;color:var(--txt);text-decoration:none;border-bottom:1px solid var(--border);display:block;">🎮 Quest Modes</a>
+    <a href="#calculator" onclick="toggleMenu()" style="padding:12px 8px;font-size:14px;font-weight:600;color:var(--txt);text-decoration:none;border-bottom:1px solid var(--border);display:block;">🧮 Calculator</a>
+    <a href="#how-it-works" onclick="toggleMenu()" style="padding:12px 8px;font-size:14px;font-weight:600;color:var(--txt);text-decoration:none;border-bottom:1px solid var(--border);display:block;">⚙️ How It Works</a>
+    <a href="#faq" onclick="toggleMenu()" style="padding:12px 8px;font-size:14px;font-weight:600;color:var(--txt);text-decoration:none;display:block;">❓ FAQ</a>
+    <a href="#hero-auth" onclick="toggleMenu();handleNavCta(event);" class="btn btn-primary btn-full" style="margin-top:12px;">🚀 Start Earning Free</a>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════
+  HERO
+════════════════════════════════════════ -->
+<section id="hero" class="hero-gradient" style="position:relative;display:flex;align-items:center;overflow:hidden;padding:48px 20px;">
+  <!-- BG orbs -->
+  <div style="position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,232,154,0.08),transparent);top:-100px;left:-100px;pointer-events:none;"></div>
+  <div style="position:absolute;width:350px;height:350px;border-radius:50%;background:radial-gradient(circle,rgba(155,110,255,0.07),transparent);bottom:-80px;right:-80px;pointer-events:none;"></div>
+
+  <div class="wrap" style="width:100%;position:relative;z-index:1;">
+    <div class="hero-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;">
+
+      <!-- Left: Copy -->
+      <div>
+        <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(0,232,154,0.07);border:1px solid rgba(0,232,154,0.2);border-radius:100px;padding:6px 14px;margin-bottom:28px;">
+          <div class="live-dot" style="width:6px;height:6px;"></div>
+          <span class="font-mono" style="font-size:11px;font-weight:600;color:var(--green);letter-spacing:.06em;">INDIA'S #1 GAMING REWARDS PLATFORM</span>
+        </div>
+
+        <h1 class="font-display" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.08;margin-bottom:20px;color:var(--txt);">
+          Play Games.<br>
+          <span style="color:var(--green);text-shadow:0 0 30px rgba(0,232,154,0.35);">Cash Out</span><br>
+          Real <span style="color:var(--gold);text-shadow:0 0 25px rgba(255,180,0,0.35);">₹ INR.</span>
+        </h1>
+
+        <p style="font-size:16px;line-height:1.75;color:var(--txt2);margin-bottom:28px;max-width:440px;">
+          Complete game quests, offerwalls, shortlinks &amp; micro-tasks.. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly.
+        </p>
+      </div>
+
+      <!-- Right: Auth Card -->
+      <div id="hero-auth">
+        <div class="card card-glow auth-card" style="padding:clamp(24px,5vw,40px);max-width:440px;width:100%;">
+          <div style="text-align:center;margin-bottom:24px;">
+            <div style="font-size:28px;margin-bottom:10px;">🎮</div>
+            <h2 class="font-display" style="font-size:22px;font-weight:700;color:var(--txt);margin-bottom:6px;">Start Earning Now</h2>
+            <p style="font-size:13px;color:var(--txt2);">Sign up with your Google account to start earning</p>
           </div>
-        </section>
+
+          <button class="google-btn" id="btn-google-signin" type="button">
+            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
+            <span id="google-btn-text">Continue with Google</span>
+          </button>
+
+          <button id="btn-open-hub" type="button" onclick="openAppRoute('dashboard')" class="btn btn-primary btn-full" style="display:none;margin-top:12px;">
+            ⚡ Open Player Hub Dashboard →
+          </button>
+
+          <p id="auth-status-msg" style="text-align:center;font-size:11px;color:var(--txt2);margin-top:16px;">
+            🔒 Secure &nbsp;•&nbsp; No password needed &nbsp;•&nbsp; Free forever
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+  PARTNERS STRIP
+════════════════════════════════════════ -->
+<section class="section-sm" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg2);">
+  <div class="wrap">
+    <p class="font-mono" style="font-size:11px;font-weight:600;color:var(--txt2);letter-spacing:.08em;text-align:center;margin-bottom:20px;">CASHOUT CHANNELS</p>
+    <div class="cashout-grid">
+
+      <!-- Direct Transfer -->
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <p class="font-mono" style="font-size:10px;font-weight:600;color:var(--green);letter-spacing:.07em;margin-bottom:12px;">DIRECT TRANSFER</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="pill">🏦 UPI</div>
+          <div class="pill">🏛️ Bank</div>
+        </div>
+      </div>
+
+      <!-- Gift Cards -->
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <p class="font-mono" style="font-size:10px;font-weight:600;color:var(--gold);letter-spacing:.07em;margin-bottom:12px;">GIFT CARDS</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="pill">🛒 Amazon</div>
+          <div class="pill">📱 PhonePe</div>
+          <div class="pill">🎮 Google Play</div>
+        </div>
+      </div>
+
+      <!-- Online Wallets -->
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <p class="font-mono" style="font-size:10px;font-weight:600;color:var(--violet);letter-spacing:.07em;margin-bottom:12px;">ONLINE WALLETS</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="pill">₿ BTC</div>
+          <div class="pill">💰 USDT</div>
+          <div class="pill">🚰 Faucet</div>
+          <div class="pill">💼 WebMoney WMZ</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+  HOW IT WORKS
+════════════════════════════════════════ -->
+<section id="how-it-works" class="section">
+  <div class="wrap">
+    <div style="text-align:center;margin-bottom:56px;">
+      <h2 class="font-display" style="font-size:clamp(26px,4vw,44px);font-weight:700;color:var(--txt);">How Lootify Works</h2>
+      <p style="font-size:15px;color:var(--txt2);margin-top:10px;">4 steps from zero to cash in your UPI wallet</p>
+    </div>
+
+    <div class="steps-grid">
+      <div class="card" style="padding:28px;text-align:center;position:relative;">
+        <div style="width:56px;height:56px;background:linear-gradient(135deg,var(--green),#00A870);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:20px;color:#03100A;box-shadow:0 0 20px rgba(0,232,154,0.35);">1</div>
+        <div class="step-line"></div>
+        <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);margin-bottom:10px;">Create Player ID</h3>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;">Sign up with Google and start completing quests immediately.</p>
+      </div>
+      <div class="card" style="padding:28px;text-align:center;">
+        <div style="width:56px;height:56px;background:linear-gradient(135deg,var(--gold),#D97706);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:20px;color:#1A0A00;box-shadow:0 0 20px rgba(255,180,0,0.35);">2</div>
+        <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);margin-bottom:10px;">Complete Quests</h3>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;">Play games, complete offerwalls, smash shortlinks, micro-tasks &amp; refer your squad.</p>
+      </div>
+      <div class="card" style="padding:28px;text-align:center;">
+        <div style="width:56px;height:56px;background:linear-gradient(135deg,var(--violet),#6D28D9);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:20px;color:white;box-shadow:0 0 20px rgba(155,110,255,0.35);">3</div>
+        <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);margin-bottom:10px;">3–5 Day Escrow</h3>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;">Offerwall rewards go through transparent 3–5 day anti-fraud verification, then auto-release.</p>
+      </div>
+      <div class="card" style="padding:28px;text-align:center;">
+        <div style="width:56px;height:56px;background:linear-gradient(135deg,var(--green),var(--violet));border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:20px;color:white;box-shadow:0 0 20px rgba(0,232,154,0.25);">4</div>
+        <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);margin-bottom:10px;">Instant Cashout</h3>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;">Withdraw to UPI, Bank, Google Play, Amazon Pay, or USDT crypto — whenever you're ready.</p>
       </div>
     </div>
-    <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Automatic loader for GitHub Pages static branch deployment (e.g. lootify.eternant.c0m.to)
-      (function() {
-        function loadStaticBundle() {
-          if (window.__LOOTIFY_STATIC_LOADED__) return;
-          if (window.__LOOTIFY_APP_MOUNTED__) return;
-          window.__LOOTIFY_STATIC_LOADED__ = true;
+  </div>
+</section>
 
-          var link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = './assets/lootify.css';
-          document.head.appendChild(link);
+<!-- ════════════════════════════════════════
+  6 QUEST MODES BENTO GRID
+════════════════════════════════════════ -->
+<section id="quest-modes" class="section" style="background:var(--bg2);">
+  <div class="wrap">
+    <div style="text-align:center;margin-bottom:48px;">
+      <h2 class="font-display" style="font-size:clamp(26px,4vw,44px);font-weight:700;color:var(--txt);">6 Ways to Earn Loot</h2>
+      <p style="font-size:15px;color:var(--txt2);margin-top:10px;">Pick your zone — every grind is rewarded</p>
+    </div>
 
-          var s = document.createElement('script');
-          s.type = 'module';
-          s.src = './assets/lootify.js';
-          document.body.appendChild(s);
+    <div class="bento">
+
+      <!-- 1: Gaming Offerwalls (span 2) -->
+      <div class="card qcard span2" style="padding:28px;" onclick="launchQuestMode('offerwalls')">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="width:50px;height:50px;background:linear-gradient(135deg,var(--green),#065F46);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🎮</div>
+            <div>
+              <h3 class="font-display" style="font-size:17px;font-weight:700;color:var(--txt);">Gaming &amp; CPI Offerwalls</h3>
+              <p style="font-size:12px;color:var(--txt2);">Multiple Premium Offerwall Partners</p>
+            </div>
+          </div>
+        </div>
+        <p style="font-size:14px;color:var(--txt2);line-height:1.7;margin-bottom:18px;">Download mobile/PC games, reach in-game milestones, or complete high-paying surveys across multiple premium offerwall partners.</p>
+        <button type="button" class="btn btn-primary" onclick="event.stopPropagation();launchQuestMode('offerwalls')">🚀 Launch Mode</button>
+      </div>
+
+      <!-- 2: Shortlinks -->
+      <div class="card qcard" style="padding:24px;" onclick="launchQuestMode('shortlinks')">
+        <div style="font-size:26px;margin-bottom:12px;">🔗</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Paid Shortlinks Arena</h3>
+        </div>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:14px;">15–25 Coins per link. Up to 40 daily shortlinks. S2S instant postbacks. Auto 24h reset.</p>
+        <div style="background:rgba(255,180,0,0.05);border:1px solid rgba(255,180,0,0.15);border-radius:8px;padding:9px 12px;margin-bottom:14px;font-size:12px;color:var(--gold);" class="font-mono">⏱ 24h Cooldown Auto-Reset</div>
+        <button type="button" class="btn btn-outline btn-full" onclick="event.stopPropagation();launchQuestMode('shortlinks')">Launch Mode</button>
+      </div>
+
+      <!-- 3: Micro-Tasks -->
+      <div class="card qcard" style="padding:24px;" onclick="launchQuestMode('tasks')">
+        <div style="font-size:26px;margin-bottom:12px;">📋</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Micro-Tasks &amp; Social</h3>
+        </div>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:14px;">Subscribe YouTube, join Telegram squads, review apps. Screenshot proof upload for instant credit.</p>
+        <button type="button" class="btn btn-outline btn-full" style="color:var(--violet);border-color:var(--violet);" onmouseover="this.style.background='var(--violet-dim)'" onmouseout="this.style.background='transparent'" onclick="event.stopPropagation();launchQuestMode('tasks')">Launch Mode</button>
+      </div>
+
+      <!-- 4: Quiz + Spin -->
+      <div class="card qcard" style="padding:24px;" onclick="launchQuestMode('tasks')">
+        <div style="font-size:26px;margin-bottom:12px;">🎰</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Quiz, Spin &amp; 7-Day Streak</h3>
+        </div>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:14px;">Daily trivia, lucky wheel, and 7-day streak bonus loot chests. New questions every day.</p>
+        <button type="button" class="btn btn-primary btn-full" onclick="event.stopPropagation();launchQuestMode('tasks')">Launch Mode</button>
+      </div>
+
+      <!-- 5: Refer (span 2) -->
+      <div class="card qcard span2" style="padding:28px;background:linear-gradient(135deg,rgba(155,110,255,0.06),rgba(0,232,154,0.04));border-color:rgba(155,110,255,0.3);" onclick="launchQuestMode('referrals')">
+        <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
+          <div style="width:50px;height:50px;background:linear-gradient(135deg,var(--violet),#6D28D9);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">👥</div>
+          <div>
+            <h3 class="font-display" style="font-size:17px;font-weight:700;color:var(--txt);">Refer &amp; Earn</h3>
+            <p style="font-size:12px;color:var(--txt2);">Apne dost ko invite karo, unki kamaai ka hissa pao</p>
+          </div>
+        </div>
+        <p style="font-size:14px;color:var(--txt2);line-height:1.75;margin-bottom:20px;">Apna referral link share karo. Jab bhi tumhara referred dost earn kare, tumhe <span style="color:var(--green);font-weight:600;">lifetime commission</span> milti hai — koi cap nahi, hamesha ke liye.</p>
+        <button type="button" class="btn" style="background:linear-gradient(135deg,var(--violet),#6D28D9);color:#fff;padding:10px 22px;font-size:13px;border-radius:10px;font-family:'Chakra Petch',sans-serif;font-weight:600;border:none;cursor:pointer;transition:all .2s;" onmouseover="this.style.boxShadow='0 0 24px rgba(155,110,255,0.4)'" onmouseout="this.style.boxShadow='none'" onclick="event.stopPropagation();launchQuestMode('referrals')">🔗 Referral Link Lo</button>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+  EARNING CALCULATOR
+════════════════════════════════════════ -->
+<section id="calculator" class="section">
+  <div class="wrap">
+    <div style="max-width:800px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:40px;">
+        <h2 class="font-display" style="font-size:clamp(26px,4vw,44px);font-weight:700;color:var(--txt);">Earning Calculator</h2>
+        <p style="font-size:15px;color:var(--txt2);margin-top:10px;">Dekho apni grind se kitna kama sakte ho</p>
+      </div>
+
+      <div class="card glow-green" style="padding:clamp(20px,5vw,40px);">
+        <div style="display:grid;gap:28px;margin-bottom:36px;">
+
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <label style="font-size:14px;font-weight:600;color:var(--txt);">🎮 Game Offers &amp; Surveys per Week</label>
+              <span id="v1" class="font-mono" style="font-size:14px;font-weight:600;color:var(--green);">5 offers</span>
+            </div>
+            <input type="range" id="s1" min="1" max="30" value="5" oninput="calc()" style="accent-color:var(--green);"/>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);margin-top:4px;"><span>1</span><span>30</span></div>
+          </div>
+
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <label style="font-size:14px;font-weight:600;color:var(--txt);">🔗 Paid Shortlinks per Day</label>
+              <span id="v2" class="font-mono" style="font-size:14px;font-weight:600;color:var(--gold);">10 links</span>
+            </div>
+            <input type="range" id="s2" min="0" max="40" value="10" oninput="calc()" style="accent-color:var(--gold);"/>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);margin-top:4px;"><span>0</span><span>40</span></div>
+          </div>
+
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <label style="font-size:14px;font-weight:600;color:var(--txt);">👥 Active Referrals</label>
+              <span id="v3" class="font-mono" style="font-size:14px;font-weight:600;color:var(--violet);">3 friends</span>
+            </div>
+            <input type="range" id="s3" min="0" max="50" value="3" oninput="calc()" style="accent-color:var(--violet);"/>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);margin-top:4px;"><span>0</span><span>50</span></div>
+          </div>
+        </div>
+
+        <div class="calc-grid">
+          <div style="background:rgba(0,232,154,0.07);border:1px solid rgba(0,232,154,0.2);border-radius:12px;padding:20px;text-align:center;">
+            <div style="font-size:11px;color:var(--green);font-weight:600;letter-spacing:.08em;margin-bottom:8px;">EST. MONTHLY COINS</div>
+            <div id="rc" class="font-mono" style="font-size:clamp(28px,5vw,38px);font-weight:600;color:var(--green);text-shadow:0 0 20px rgba(0,232,154,0.3);">25,800</div>
+            <div style="font-size:12px;color:var(--txt2);margin-top:4px;">Lootify Coins</div>
+          </div>
+          <div style="background:rgba(255,180,0,0.07);border:1px solid rgba(255,180,0,0.2);border-radius:12px;padding:20px;text-align:center;">
+            <div style="font-size:11px;color:var(--gold);font-weight:600;letter-spacing:.08em;margin-bottom:8px;">EST. MONTHLY CASHOUT</div>
+            <div id="ri" class="font-mono" style="font-size:clamp(28px,5vw,38px);font-weight:600;color:var(--gold);text-shadow:0 0 20px rgba(255,180,0,0.3);">₹2,580</div>
+            <div style="font-size:12px;color:var(--txt2);margin-top:4px;">Indian Rupees</div>
+          </div>
+        </div>
+
+        <p style="text-align:center;font-size:11px;color:var(--txt2);margin-top:16px;">* Estimates based on average payouts. Actual earnings may vary.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+  FAQ
+════════════════════════════════════════ -->
+<section id="faq" class="section">
+  <div class="wrap">
+    <div style="max-width:720px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:44px;">
+        <h2 class="font-display" style="font-size:clamp(26px,4vw,44px);font-weight:700;color:var(--txt);">Frequently Asked Questions</h2>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;" id="faq-list"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+  CTA BANNER
+════════════════════════════════════════ -->
+<section style="padding:64px 20px;background:linear-gradient(135deg,rgba(0,232,154,0.06),rgba(155,110,255,0.05));border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="wrap" style="text-align:center;">
+    <div class="font-mono" style="font-size:11px;font-weight:600;color:var(--green);letter-spacing:.08em;margin-bottom:16px;">READY TO EARN?</div>
+    <h2 class="font-display" style="font-size:clamp(26px,4vw,48px);font-weight:700;color:var(--txt);margin-bottom:16px;">Join 2.4 Lakh+ Players<br>Earning Real Money</h2>
+    <p style="font-size:15px;color:var(--txt2);margin-bottom:32px;max-width:480px;margin-left:auto;margin-right:auto;">Start for free. No investment needed. Your first ₹20 is waiting.</p>
+    <a href="#hero-auth" class="btn btn-primary btn-lg" onclick="handleNavCta(event)">🚀 Start Earning Free Now</a>
+    <p style="font-size:12px;color:var(--txt2);margin-top:16px;">Free forever · No credit card · Instant payout</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+  FOOTER
+════════════════════════════════════════ -->
+<footer style="background:var(--bg2);border-top:1px solid var(--border);padding:56px 20px 32px;">
+  <div class="wrap">
+    <div class="footer-grid" style="margin-bottom:44px;">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <div style="width:34px;height:34px;background:linear-gradient(135deg,var(--green),#00A870);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:16px;color:#03100A;">L</div>
+          <span class="font-display" style="font-size:18px;font-weight:700;color:var(--txt);">LOOTIFY<span style="color:var(--green);">.</span></span>
+        </div>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7;max-width:260px;margin-bottom:20px;">India's next-gen gaming rewards platform. Play games, complete quests, and cash out real ₹ INR instantly.</p>
+        <div style="display:flex;gap:8px;">
+          <a href="#hero-auth" style="width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:15px;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">📱</a>
+          <a href="#hero-auth" style="width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:15px;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">💬</a>
+          <a href="#hero-auth" style="width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:15px;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">🐦</a>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-display" style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:14px;letter-spacing:.04em;">PLATFORM</h4>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <a href="#quest-modes" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Quest Modes</a>
+          <a href="#calculator" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Earning Calculator</a>
+          <a href="#how-it-works" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">How It Works</a>
+          <a href="#faq" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">FAQ</a>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-display" style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:14px;letter-spacing:.04em;">BUSINESS</h4>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <a href="#/contact" onclick="event.preventDefault();openAppRoute('contact')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Advertise With Us</a>
+          <a href="#quest-modes" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Affiliate Program</a>
+          <a href="#/contact" onclick="event.preventDefault();openAppRoute('contact')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Support / Help</a>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-display" style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:14px;letter-spacing:.04em;">LEGAL</h4>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <a href="#/terms" onclick="event.preventDefault();openAppRoute('terms')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Terms of Service</a>
+          <a href="#/privacy" onclick="event.preventDefault();openAppRoute('privacy')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Privacy Policy</a>
+          <a href="#/terms" onclick="event.preventDefault();openAppRoute('terms')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Disclaimer</a>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
+      <p style="font-size:12px;color:var(--txt2);">© 2026 Lootify.in — All rights reserved. Play smart, earn real.</p>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="live-dot" style="width:6px;height:6px;"></div>
+        <span class="font-mono" style="font-size:11px;color:var(--green);">All systems operational</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</div>
+<!-- END #lootify-v2-landing -->
+
+<!-- React Player Hub Root (Only shown on #/dashboard, #/offerwalls, #/shortlinks, etc.) -->
+<div id="root"></div>
+
+<!-- ════════════════════════════════════════
+  LOOTIFY V2 INTERACTIVE + GOOGLE OAUTH SCRIPT
+════════════════════════════════════════ -->
+<script>
+var GOOGLE_CLIENT_ID = '881444436109-t1v1a42d9l8v7ibnqplnebdkdlqp15v7.apps.googleusercontent.com';
+var WORKER_API_URL = 'https://lootify-worker-api.eternant.c0m.to';
+
+var APP_HASH_ROUTES = [
+  'dashboard',
+  'offerwalls',
+  'shortlinks',
+  'tasks',
+  'referrals',
+  'wallet',
+  'leaderboard',
+  'payout-proofs',
+  'terms',
+  'privacy',
+  'contact'
+];
+
+function isAppRouteActive() {
+  var path = (window.location.pathname || '').toLowerCase();
+  if (path.indexOf('admin') !== -1) return true;
+  var rawHash = (window.location.hash || '').replace(/^#\/?/, '').replace(/\.html$/, '');
+  return APP_HASH_ROUTES.indexOf(rawHash) !== -1;
+}
+
+function syncLandingAndAppVisibility() {
+  if (isAppRouteActive()) {
+    document.body.classList.remove('on-landing-home');
+    document.body.classList.add('on-app-route');
+    ensureStaticBundleLoaded();
+  } else {
+    document.body.classList.remove('on-app-route');
+    document.body.classList.add('on-landing-home');
+  }
+  refreshLoggedInButtons();
+}
+
+function getSavedUserId() {
+  try {
+    var uid = localStorage.getItem('lootify_user_id') || '';
+    if (uid === 'usr_earner_1' || uid === 'usr_earner_2' || uid === 'usr_earner_4' || uid === 'guest') {
+      return '';
+    }
+    return uid;
+  } catch (e) {
+    return '';
+  }
+}
+
+function refreshLoggedInButtons() {
+  var uid = getSavedUserId();
+  var openHubBtn = document.getElementById('btn-open-hub');
+  var navCtaBtn = document.getElementById('nav-cta-btn');
+  if (uid) {
+    if (openHubBtn) openHubBtn.style.display = 'inline-flex';
+    if (navCtaBtn) navCtaBtn.textContent = 'Player Hub →';
+  } else {
+    if (openHubBtn) openHubBtn.style.display = 'none';
+    if (navCtaBtn) navCtaBtn.textContent = 'Sign Up Free';
+  }
+}
+
+function openAppRoute(route) {
+  ensureStaticBundleLoaded();
+  window.location.hash = '#/' + route;
+  syncLandingAndAppVisibility();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function handleNavCta(e) {
+  if (e) e.preventDefault();
+  if (getSavedUserId()) {
+    openAppRoute('dashboard');
+  } else {
+    var el = document.getElementById('hero-auth');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+function launchQuestMode(route) {
+  if (getSavedUserId()) {
+    openAppRoute(route);
+  } else {
+    var el = document.getElementById('hero-auth');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    var statusEl = document.getElementById('auth-status-msg');
+    if (statusEl) {
+      statusEl.innerHTML = '⚡ <strong style="color:var(--green);">Sign in with Google above</strong> to launch this Quest Mode!';
+    }
+  }
+}
+
+// Theme
+function toggleTheme() {
+  var html = document.documentElement;
+  var isLight = html.getAttribute('data-theme') === 'light';
+  var nextTheme = isLight ? 'dark' : 'light';
+  html.setAttribute('data-theme', nextTheme);
+  if (nextTheme === 'dark') {
+    html.classList.add('dark');
+  } else {
+    html.classList.remove('dark');
+  }
+  var icon = document.getElementById('theme-icon');
+  if (icon) icon.textContent = isLight ? '🌙' : '☀️';
+  try {
+    localStorage.setItem('lootify-theme', nextTheme);
+    localStorage.setItem('lootify_theme', nextTheme);
+  } catch(e){}
+}
+(function() {
+  try {
+    var t = localStorage.getItem('lootify-theme') || localStorage.getItem('lootify_theme');
+    if (t === 'light') {
+      document.documentElement.setAttribute('data-theme','light');
+      document.documentElement.classList.remove('dark');
+      var icon = document.getElementById('theme-icon');
+      if (icon) icon.textContent = '☀️';
+    }
+  } catch(e){}
+})();
+
+// Mobile menu
+function toggleMenu() {
+  var mm = document.getElementById('mmenu');
+  if (mm) mm.classList.toggle('open');
+}
+
+// Navbar scroll
+window.addEventListener('scroll', function() {
+  var nav = document.getElementById('navbar');
+  if (!nav) return;
+  nav.style.background = window.scrollY > 40
+    ? (document.documentElement.getAttribute('data-theme')==='light' ? 'rgba(240,245,255,0.97)' : 'rgba(5,8,15,0.97)')
+    : (document.documentElement.getAttribute('data-theme')==='light' ? 'rgba(240,245,255,0.9)' : 'rgba(5,8,15,0.88)');
+}, {passive:true});
+
+// Complete Google Sign-In & Redirect to Dashboard
+async function completeGoogleSignIn(payload) {
+  var btnText = document.getElementById('google-btn-text');
+  var statusEl = document.getElementById('auth-status-msg');
+  if (btnText) btnText.textContent = 'Signing in to Player Hub...';
+
+  var apiBase = WORKER_API_URL;
+  try {
+    var savedUrl = localStorage.getItem('lootify_worker_api_url');
+    if (savedUrl && savedUrl.indexOf('sarthaksinghyadav1') === -1) {
+      apiBase = savedUrl.replace(/\/+$/, '');
+    } else {
+      localStorage.setItem('lootify_worker_api_url', WORKER_API_URL);
+    }
+  } catch (e) {}
+
+  var syncedUser = null;
+  try {
+    var res = await fetch(apiBase + '/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      var data = await res.json();
+      syncedUser = data.currentUser || data.user || null;
+    }
+  } catch (e) {}
+
+  if (!syncedUser) {
+    var email = (payload.email || 'player@gmail.com').toLowerCase();
+    var name = payload.name || email.split('@')[0] || 'Lootify Player';
+    var uid = 'usr_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12).toLowerCase();
+    syncedUser = {
+      id: uid,
+      name: name,
+      email: email,
+      role: 'earner',
+      referralCode: (name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5) || 'LOOT') + '100',
+      referredBy: null,
+      availableCoins: 200,
+      pendingCoins: 0,
+      lifetimeEarnedCoins: 200,
+      withdrawnCoins: 0,
+      streakDays: 1,
+      kycVerified: true,
+      joinedAt: new Date().toISOString().slice(0, 10),
+      ipHash: 'web_google_oauth',
+      status: 'active'
+    };
+  }
+
+  try {
+    localStorage.setItem('lootify_user_id', syncedUser.id);
+    window.dispatchEvent(new CustomEvent('lootify-auth-changed', { detail: { user: syncedUser } }));
+  } catch (e) {}
+
+  if (btnText) btnText.textContent = 'Continue with Google';
+  if (statusEl) {
+    statusEl.innerHTML = '✅ Signed in as <strong style="color:var(--green);">' + (syncedUser.name || syncedUser.email) + '</strong>!';
+  }
+
+  openAppRoute('dashboard');
+}
+
+// Wire Google Sign-In button
+document.getElementById('btn-google-signin').addEventListener('click', function() {
+  var clientId = GOOGLE_CLIENT_ID;
+  try {
+    clientId = localStorage.getItem('lootify_google_client_id') || GOOGLE_CLIENT_ID;
+  } catch (e) {}
+
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+    var tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId.trim(),
+      scope: 'openid email profile',
+      callback: async function(tokenResponse) {
+        if (tokenResponse && tokenResponse.access_token) {
+          try {
+            var profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
+            });
+            var profile = await profileRes.json();
+            if (profile && profile.email) {
+              await completeGoogleSignIn({
+                name: profile.name || profile.given_name || profile.email.split('@')[0],
+                email: profile.email
+              });
+            }
+          } catch (err) {
+            alert('Could not verify Google account. Please try again.');
+          }
         }
+      }
+    });
+    tokenClient.requestAccessToken({ prompt: 'select_account' });
+    return;
+  }
 
-        if (
-          window.location.hostname.indexOf('github.io') !== -1 ||
-          window.location.hostname.indexOf('c0m.to') !== -1 ||
-          window.location.hostname.indexOf('lootify') !== -1
-        ) {
-          loadStaticBundle();
-        } else {
-          window.addEventListener('DOMContentLoaded', function() {
-            setTimeout(loadStaticBundle, 250);
+  if (window.google && window.google.accounts && window.google.accounts.id) {
+    window.google.accounts.id.initialize({
+      client_id: clientId.trim(),
+      callback: async function(response) {
+        if (response && response.credential) {
+          await completeGoogleSignIn({
+            name: '',
+            email: '',
+            credential: response.credential
           });
         }
-      })();
-    </script>
-  </body>
+      }
+    });
+    window.google.accounts.id.prompt();
+    return;
+  }
+
+  var statusEl = document.getElementById('auth-status-msg');
+  if (statusEl) {
+    statusEl.innerHTML = '⏳ Loading Google Sign-In SDK... Please tap again in a moment.';
+  }
+});
+
+// Calculator
+function calc() {
+  var o = +document.getElementById('s1').value;
+  var l = +document.getElementById('s2').value;
+  var r = +document.getElementById('s3').value;
+  document.getElementById('v1').textContent = o + ' offers';
+  document.getElementById('v2').textContent = l + ' links';
+  document.getElementById('v3').textContent = r + ' friends';
+  var coins = Math.round(o*4*1200 + l*20*30 + r*50 + r*500*0.1);
+  var inr = Math.round(coins/10);
+  document.getElementById('rc').textContent = coins.toLocaleString('en-IN');
+  document.getElementById('ri').textContent = '₹' + inr.toLocaleString('en-IN');
+}
+calc();
+
+// FAQ
+var FAQS = [
+  { q:'Is Lootify legit? Will I actually get paid?', a:'Yes! Lootify is a real GPT (Get-Paid-To) platform operating with transparent coin economics. We use S2S postback verification with all offerwall partners. Withdrawals are processed via verified UPI, bank transfer, and voucher codes.' },
+  { q:'Why are some earnings in "Pending Hold"?', a:'Offerwall and advertiser rewards go through a mandatory 3–5 day anti-fraud escrow period. This protects both players and advertisers from fraudulent chargebacks. After verification, coins auto-release into your Available Balance.' },
+  { q:'What cashout methods are supported?', a:'Direct Transfer: UPI and Bank. Gift Cards: Amazon, PhonePe, and Google Play. Online Wallets: BTC, USDT, Faucet, and WebMoney WMZ.' },
+  { q:'How does the Refer &amp; Earn system work?', a:'Share your custom referral link with friends. Every time your referred friend earns on Lootify, you receive a lifetime commission on their earnings — forever, with no cap.' },
+  { q:'What are the shortlink daily limits?', a:'You can complete up to 40 shortlinks per day. The cooldown resets automatically every 24 hours with instant S2S postback credit.' },
+  { q:'Is there a minimum age requirement?', a:'Players must be 18 years or older to participate and withdraw earnings. All accounts go through email verification, and payout identity checks may apply for large withdrawals.' }
+];
+
+function buildFAQ() {
+  document.getElementById('faq-list').innerHTML = FAQS.map(function(f,i){
+    return '<div class="card" style="overflow:hidden;">' +
+      '<button type="button" onclick="faq(' + i + ')" style="width:100%;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:none;border:none;cursor:pointer;text-align:left;color:var(--txt);">' +
+        '<span style="font-size:15px;font-weight:600;">' + f.q + '</span>' +
+        '<span class="faq-chevron" id="ch' + i + '">▼</span>' +
+      '</button>' +
+      '<div class="faq-body" id="fb' + i + '">' +
+        '<div style="padding:0 20px 18px;font-size:14px;color:var(--txt2);line-height:1.8;border-top:1px solid var(--border);padding-top:14px;">' + f.a + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+function faq(i) {
+  var body = document.getElementById('fb'+i);
+  var ch = document.getElementById('ch'+i);
+  var open = body.classList.contains('open');
+  document.querySelectorAll('.faq-body').forEach(function(el){ el.classList.remove('open'); });
+  document.querySelectorAll('.faq-chevron').forEach(function(el){ el.classList.remove('open'); el.style.transform=''; });
+  if (!open) { body.classList.add('open'); ch.style.transform='rotate(180deg)'; }
+}
+buildFAQ();
+
+// Static bundle loader for Player Hub routes (with cache-busting query string)
+function ensureStaticBundleLoaded() {
+  if (window.__LOOTIFY_STATIC_LOADED__) return;
+  if (window.__LOOTIFY_APP_MOUNTED__) return;
+  if (
+    window.location.hostname.indexOf('github.io') !== -1 ||
+    window.location.hostname.indexOf('c0m.to') !== -1 ||
+    window.location.hostname.indexOf('lootify') !== -1
+  ) {
+    window.__LOOTIFY_STATIC_LOADED__ = true;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './assets/lootify.css?v=20261027v4';
+    document.head.appendChild(link);
+
+    var s = document.createElement('script');
+    s.type = 'module';
+    s.src = './assets/lootify.js?v=20261027v4';
+    document.body.appendChild(s);
+  }
+}
+
+window.addEventListener('hashchange', syncLandingAndAppVisibility);
+window.addEventListener('popstate', syncLandingAndAppVisibility);
+syncLandingAndAppVisibility();
+</script>
+<script type="module" src="/src/main.tsx"></script>
+</body>
 </html>

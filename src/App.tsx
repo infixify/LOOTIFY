@@ -81,12 +81,13 @@ export default function App() {
   const [regReferral, setRegReferral] = useState('');
   const [workerApiUrl, setWorkerApiUrl] = useState<string>(() => {
     try {
-      return (
-        localStorage.getItem('lootify_worker_api_url') ||
-        'https://lootify-api.sarthaksinghyadav1.workers.dev'
-      );
+      const saved = localStorage.getItem('lootify_worker_api_url') || '';
+      if (!saved || saved.includes('sarthaksinghyadav1.workers.dev')) {
+        return 'https://lootify-worker-api.eternant.c0m.to';
+      }
+      return saved;
     } catch {
-      return 'https://lootify-api.sarthaksinghyadav1.workers.dev';
+      return 'https://lootify-worker-api.eternant.c0m.to';
     }
   });
 
@@ -103,11 +104,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handlePopState = () => {
+    const handleRouteSync = () => {
       setActivePage(getInitialRouteFromUrl());
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    const handleAuthSync = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail?.user && customEvt.detail.user.id) {
+        const synced = syncExternalUserToClientDb(customEvt.detail.user);
+        setCurrentUserId(customEvt.detail.user.id);
+        setData(synced);
+      } else {
+        const savedId = localStorage.getItem('lootify_user_id') || '';
+        setCurrentUserId(savedId);
+        setData(getClientBootstrap(savedId));
+      }
+      setActivePage(getInitialRouteFromUrl());
+    };
+    window.addEventListener('popstate', handleRouteSync);
+    window.addEventListener('hashchange', handleRouteSync);
+    window.addEventListener('lootify-auth-changed', handleAuthSync);
+    return () => {
+      window.removeEventListener('popstate', handleRouteSync);
+      window.removeEventListener('hashchange', handleRouteSync);
+      window.removeEventListener('lootify-auth-changed', handleAuthSync);
+    };
   }, []);
 
   const notify = useCallback(
@@ -688,112 +708,6 @@ export default function App() {
           </main>
         </>
       )}
-
-      {/* Full 4-Column Multi-Page Website Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-12 mt-16">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 pb-8 border-b border-slate-200 dark:border-slate-800 text-xs">
-          <div className="space-y-3">
-            <div className="text-lg font-extrabold font-display text-emerald-600 dark:text-emerald-400">
-              {settings.siteName}.in
-            </div>
-            <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
-              India’s standalone multi-earning website powered by verified Offerwalls, Shortlinks,
-              Quizzes, and a 3-Layer Refer & Earn system with instant UPI, Bank, Gift Card, and
-              Crypto cashouts.
-            </p>
-            <p className="font-mono text-slate-500">
-              Conversion Rate: {settings.coinsPerInr} Coins = ₹1.00 INR
-            </p>
-          </div>
-
-          <div className="space-y-2.5">
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-              Website Earning Pages
-            </h4>
-            <ul className="space-y-2 text-slate-500 dark:text-slate-400">
-              <li>
-                <button onClick={() => navigateToPage('dashboard')} className="hover:underline">
-                  My Earning Account (/dashboard)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('offerwalls')} className="hover:underline">
-                  Notik.me & Lootably Offerwalls (/offerwalls)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('shortlinks')} className="hover:underline">
-                  ShrinkMe & GPLinks Shortlinks (/shortlinks)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('tasks')} className="hover:underline">
-                  Social Tasks, Quizzes & Articles (/tasks)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('referrals')} className="hover:underline">
-                  Refer & Earn 10% Commission (/referrals)
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          <div className="space-y-2.5">
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-              Payouts & Public Proofs
-            </h4>
-            <ul className="space-y-2 text-slate-500 dark:text-slate-400">
-              <li>
-                <button onClick={() => navigateToPage('wallet')} className="hover:underline">
-                  Withdraw via UPI / Bank / Crypto (/wallet)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('payout-proofs')} className="hover:underline">
-                  Live Verified Payment Proofs (/payout-proofs)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('leaderboard')} className="hover:underline">
-                  Top Earners Leaderboard (/leaderboard)
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          <div className="space-y-2.5">
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-              Legal & Website Hosting
-            </h4>
-            <ul className="space-y-2 text-slate-500 dark:text-slate-400">
-              <li>
-                <button onClick={() => navigateToPage('terms')} className="hover:underline">
-                  Terms of Service & Anti-Fraud (/terms)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('privacy')} className="hover:underline">
-                  Privacy & Cookie Policy (/privacy)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateToPage('contact')} className="hover:underline">
-                  Contact & Publisher Support (/contact)
-                </button>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <span>
-            © 2026 {settings.siteName}.in — Standalone Web Platform (Hosted on GitHub Pages +
-            Cloudflare D1 SQL).
-          </span>
-          <span>Zero Mobile App Required · 100% Browser Compatible</span>
-        </div>
-      </footer>
 
       {/* Sign In / Create Account & Cloudflare D1 Database Connection Modal */}
       {authModalOpen && (
