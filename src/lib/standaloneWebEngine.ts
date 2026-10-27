@@ -37,14 +37,36 @@ interface ClientDbSchema {
   postbackLogs: PostbackLogItem[];
 }
 
-const STORAGE_KEY = 'lootify_standalone_web_db_v1';
+const STORAGE_KEY = 'lootify_real_db_v2';
+
+const GUEST_USER_PROFILE: UserProfile = {
+  id: 'guest',
+  name: 'Guest Visitor',
+  email: '',
+  role: 'earner',
+  referralCode: 'LOOTADMIN',
+  referredBy: null,
+  referralActivated: false,
+  availableCoins: 0,
+  pendingCoins: 0,
+  lifetimeEarnedCoins: 0,
+  totalWithdrawnInr: 0,
+  completedFirstPayout: false,
+  offerwallsCompleted: 0,
+  shortlinksCompleted: 0,
+  tasksCompleted: 0,
+  streakDays: 0,
+  lastCheckInDate: null,
+  lastSpinDate: null,
+  claimedMilestones: [],
+  ipAddress: '0.0.0.0',
+  deviceFingerprint: 'fp_guest',
+  status: 'active',
+  createdAt: new Date().toISOString(),
+};
 
 function createInitialClientDb(): ClientDbSchema {
-  const now = new Date();
-  const twoDaysAgo = new Date(now.getTime() - 2 * 86400000).toISOString();
-  const oneDayAgo = new Date(now.getTime() - 1 * 86400000).toISOString();
-  const twoDaysAhead = new Date(now.getTime() + 2 * 86400000).toISOString();
-  const threeDaysAhead = new Date(now.getTime() + 3 * 86400000).toISOString();
+  const nowIso = new Date().toISOString();
 
   return {
     settings: {
@@ -76,104 +98,29 @@ function createInitialClientDb(): ClientDbSchema {
     },
     users: [
       {
-        id: 'usr_earner_1',
-        name: 'Aarav Verma',
-        email: 'aarav.verma@gmail.com',
-        role: 'earner',
-        referralCode: 'LOOTAARAV',
-        referredBy: null,
-        referralActivated: true,
-        availableCoins: 1240,
-        pendingCoins: 1850,
-        lifetimeEarnedCoins: 3090,
-        totalWithdrawnInr: 0,
-        completedFirstPayout: false,
-        offerwallsCompleted: 1,
-        shortlinksCompleted: 4,
-        tasksCompleted: 2,
-        streakDays: 3,
-        lastCheckInDate: null,
-        lastSpinDate: null,
-        claimedMilestones: [],
-        ipAddress: '103.21.124.88',
-        deviceFingerprint: 'fp_chrome_win_98a1',
-        status: 'active',
-        createdAt: twoDaysAgo,
-      },
-      {
         id: 'usr_admin_1',
-        name: 'Sarthak (Lootify Admin)',
+        name: 'Sarthak (Founder & Admin)',
         email: 'sarthaksinghyadav1@gmail.com',
         role: 'admin',
         referralCode: 'LOOTADMIN',
         referredBy: null,
         referralActivated: true,
-        availableCoins: 25000,
-        pendingCoins: 4200,
-        lifetimeEarnedCoins: 89200,
-        totalWithdrawnInr: 600,
-        completedFirstPayout: true,
-        offerwallsCompleted: 18,
-        shortlinksCompleted: 42,
-        tasksCompleted: 15,
-        streakDays: 7,
+        availableCoins: 0,
+        pendingCoins: 0,
+        lifetimeEarnedCoins: 0,
+        totalWithdrawnInr: 0,
+        completedFirstPayout: false,
+        offerwallsCompleted: 0,
+        shortlinksCompleted: 0,
+        tasksCompleted: 0,
+        streakDays: 0,
         lastCheckInDate: null,
         lastSpinDate: null,
-        claimedMilestones: [5, 25],
-        ipAddress: '49.36.112.10',
+        claimedMilestones: [],
+        ipAddress: '0.0.0.0',
         deviceFingerprint: 'fp_admin_master_01',
         status: 'active',
-        createdAt: twoDaysAgo,
-      },
-      {
-        id: 'usr_earner_2',
-        name: 'Rohan Kulkarni',
-        email: 'rohan.k@gmail.com',
-        role: 'earner',
-        referralCode: 'LOOTROHAN',
-        referredBy: 'LOOTAARAV',
-        referralActivated: true,
-        availableCoins: 5400,
-        pendingCoins: 1200,
-        lifetimeEarnedCoins: 18600,
-        totalWithdrawnInr: 120,
-        completedFirstPayout: true,
-        offerwallsCompleted: 9,
-        shortlinksCompleted: 28,
-        tasksCompleted: 11,
-        streakDays: 6,
-        lastCheckInDate: oneDayAgo,
-        lastSpinDate: oneDayAgo,
-        claimedMilestones: [5],
-        ipAddress: '157.48.92.14',
-        deviceFingerprint: 'fp_android_chrome_77b',
-        status: 'active',
-        createdAt: twoDaysAgo,
-      },
-      {
-        id: 'usr_earner_4',
-        name: 'Vikramaditya Singh',
-        email: 'vikram.s@gmail.com',
-        role: 'earner',
-        referralCode: 'LOOTVIKRAM',
-        referredBy: null,
-        referralActivated: true,
-        availableCoins: 8900,
-        pendingCoins: 3100,
-        lifetimeEarnedCoins: 42500,
-        totalWithdrawnInr: 310,
-        completedFirstPayout: true,
-        offerwallsCompleted: 24,
-        shortlinksCompleted: 65,
-        tasksCompleted: 19,
-        streakDays: 7,
-        lastCheckInDate: oneDayAgo,
-        lastSpinDate: oneDayAgo,
-        claimedMilestones: [5, 25],
-        ipAddress: '122.161.48.99',
-        deviceFingerprint: 'fp_brave_linux_32d',
-        status: 'active',
-        createdAt: twoDaysAgo,
+        createdAt: nowIso,
       },
     ],
     offerwalls: [
@@ -396,114 +343,9 @@ function createInitialClientDb(): ClientDbSchema {
       },
     ],
     completedArticles: {},
-    ledger: [
-      {
-        id: 'ldg_1',
-        userId: 'usr_earner_1',
-        userName: 'Aarav Verma',
-        sourceType: 'referral_bonus',
-        title: 'Starter Welcome Bonus & Account Verification',
-        amountCoins: 200,
-        status: 'cleared',
-        createdAt: twoDaysAgo,
-        unlocksAt: null,
-      },
-      {
-        id: 'ldg_2',
-        userId: 'usr_earner_1',
-        userName: 'Aarav Verma',
-        sourceType: 'shortlink',
-        title: 'GPLinks High-CPM India Link #1 Verified',
-        amountCoins: 540,
-        status: 'cleared',
-        createdAt: oneDayAgo,
-        unlocksAt: null,
-      },
-      {
-        id: 'ldg_3',
-        userId: 'usr_earner_1',
-        userName: 'Aarav Verma',
-        sourceType: 'referral_bonus',
-        title: 'Layer-1 Flat Referral Bonus (Rohan Kulkarni Activated)',
-        amountCoins: 500,
-        status: 'cleared',
-        createdAt: oneDayAgo,
-        unlocksAt: null,
-      },
-      {
-        id: 'ldg_4',
-        userId: 'usr_earner_1',
-        userName: 'Aarav Verma',
-        sourceType: 'offerwall',
-        title: 'Notik.me — Partner KYC & Web Registration Offer',
-        amountCoins: 1250,
-        status: 'pending_hold',
-        createdAt: oneDayAgo,
-        unlocksAt: twoDaysAhead,
-        externalTxId: 'NTK_9981204',
-      },
-      {
-        id: 'ldg_5',
-        userId: 'usr_earner_1',
-        userName: 'Aarav Verma',
-        sourceType: 'offerwall',
-        title: 'Lootably — Daily Consumer Survey #412',
-        amountCoins: 600,
-        status: 'pending_hold',
-        createdAt: now.toISOString(),
-        unlocksAt: threeDaysAhead,
-        externalTxId: 'LTB_4410982',
-      },
-    ],
-    withdrawals: [
-      {
-        id: 'wd_1001',
-        userId: 'usr_earner_2',
-        userName: 'Rohan Kulkarni',
-        userEmail: 'rohan.k@gmail.com',
-        method: 'upi',
-        tierLabel: '₹10 Starter Trust Payout',
-        coinsDeducted: 1000,
-        amountInr: 10,
-        payoutDetails: { upiId: 'rohank@okaxis' },
-        status: 'approved',
-        utrOrVoucher: 'UTR 629910482911',
-        createdAt: twoDaysAgo,
-        processedAt: twoDaysAgo,
-      },
-      {
-        id: 'wd_1002',
-        userId: 'usr_earner_4',
-        userName: 'Vikramaditya Singh',
-        userEmail: 'vikram.s@gmail.com',
-        method: 'gift_card',
-        tierLabel: '₹100 Pro Tier Payout',
-        coinsDeducted: 10000,
-        amountInr: 100,
-        payoutDetails: {
-          giftCardBrand: 'Amazon Pay Gift Card',
-          deliveryEmail: 'vikram.s@gmail.com',
-        },
-        status: 'approved',
-        utrOrVoucher: 'AMZN-GV-8841-9920',
-        createdAt: oneDayAgo,
-        processedAt: oneDayAgo,
-      },
-    ],
-    referrals: [
-      {
-        id: 'ref_1',
-        referrerId: 'usr_earner_1',
-        inviteeId: 'usr_earner_2',
-        inviteeName: 'Rohan Kulkarni',
-        inviteeEmail: 'rohan.k@gmail.com',
-        activated: true,
-        flatBonusCoins: 500,
-        totalCommissionEarnedCoins: 340,
-        sameIpFlag: false,
-        createdAt: twoDaysAgo,
-      },
-    ],
+    ledger: [],
+    withdrawals: [],
+    referrals: [],
     promoCodes: [
       {
         id: 'prm_1',
@@ -512,7 +354,7 @@ function createInitialClientDb(): ClientDbSchema {
         maxClaims: 500,
         claimedUserIds: [],
         active: true,
-        createdAt: twoDaysAgo,
+        createdAt: nowIso,
       },
       {
         id: 'prm_2',
@@ -521,7 +363,7 @@ function createInitialClientDb(): ClientDbSchema {
         maxClaims: 100,
         claimedUserIds: [],
         active: true,
-        createdAt: oneDayAgo,
+        createdAt: nowIso,
       },
     ],
     adPlacements: [
@@ -542,19 +384,7 @@ function createInitialClientDb(): ClientDbSchema {
         enabled: true,
       },
     ],
-    postbackLogs: [
-      {
-        id: 'pbl_1',
-        provider: 'Notik.me',
-        userId: 'usr_earner_1',
-        externalTxId: 'NTK_9981204',
-        coins: 1250,
-        type: 'credit',
-        status: 'accepted',
-        reason: 'Valid HMAC signature — Added to 3-day pending hold',
-        createdAt: oneDayAgo,
-      },
-    ],
+    postbackLogs: [],
   };
 }
 
@@ -576,6 +406,114 @@ function saveClientDb(db: ClientDbSchema) {
   } catch {
     // ignore
   }
+}
+
+export function syncExternalUserToClientDb(rawUser: any): BootstrapPayload {
+  const db = loadClientDb();
+  if (!rawUser || !rawUser.email) {
+    return getClientBootstrap('');
+  }
+  const cleanEmail = String(rawUser.email).trim().toLowerCase();
+  const userId = String(rawUser.id || `usr_${Date.now()}`);
+  let existing = db.users.find(
+    (u) => u.id === userId || u.email.toLowerCase() === cleanEmail
+  );
+
+  const mapped: UserProfile = {
+    id: existing?.id || userId,
+    name: String(rawUser.name || existing?.name || cleanEmail.split('@')[0]),
+    email: cleanEmail,
+    role:
+      rawUser.role === 'admin' ||
+      cleanEmail === 'sarthaksinghyadav1@gmail.com' ||
+      cleanEmail === 'admin@lootify.in'
+        ? 'admin'
+        : 'earner',
+    referralCode: String(
+      rawUser.referralCode || rawUser.referral_code || existing?.referralCode || 'LOOTUSER'
+    ),
+    referredBy: rawUser.referredBy ?? rawUser.referred_by ?? existing?.referredBy ?? null,
+    referralActivated: Boolean(
+      rawUser.referralActivated ?? rawUser.referral_activated ?? existing?.referralActivated
+    ),
+    availableCoins: Number(
+      rawUser.availableCoins ?? rawUser.available_coins ?? existing?.availableCoins ?? 0
+    ),
+    pendingCoins: Number(
+      rawUser.pendingCoins ?? rawUser.pending_coins ?? existing?.pendingCoins ?? 0
+    ),
+    lifetimeEarnedCoins: Number(
+      rawUser.lifetimeEarnedCoins ??
+        rawUser.lifetime_earned_coins ??
+        existing?.lifetimeEarnedCoins ??
+        0
+    ),
+    totalWithdrawnInr: Number(
+      rawUser.totalWithdrawnInr ?? rawUser.total_withdrawn_inr ?? existing?.totalWithdrawnInr ?? 0
+    ),
+    completedFirstPayout: Boolean(
+      rawUser.completedFirstPayout ??
+        rawUser.completed_first_payout ??
+        existing?.completedFirstPayout
+    ),
+    offerwallsCompleted: Number(
+      rawUser.offerwallsCompleted ??
+        rawUser.offerwalls_completed ??
+        existing?.offerwallsCompleted ??
+        0
+    ),
+    shortlinksCompleted: Number(
+      rawUser.shortlinksCompleted ??
+        rawUser.shortlinks_completed ??
+        existing?.shortlinksCompleted ??
+        0
+    ),
+    tasksCompleted: Number(
+      rawUser.tasksCompleted ?? rawUser.tasks_completed ?? existing?.tasksCompleted ?? 0
+    ),
+    streakDays: Number(rawUser.streakDays ?? rawUser.streak_days ?? existing?.streakDays ?? 0),
+    lastCheckInDate:
+      rawUser.lastCheckInDate ?? rawUser.last_checkin_date ?? existing?.lastCheckInDate ?? null,
+    lastSpinDate:
+      rawUser.lastSpinDate ?? rawUser.last_spin_date ?? existing?.lastSpinDate ?? null,
+    claimedMilestones: existing?.claimedMilestones || [],
+    ipAddress: String(rawUser.ipAddress || rawUser.ip_address || existing?.ipAddress || '0.0.0.0'),
+    deviceFingerprint: String(
+      rawUser.deviceFingerprint ||
+        rawUser.device_fingerprint ||
+        existing?.deviceFingerprint ||
+        'fp_web'
+    ),
+    status: (rawUser.status as any) || existing?.status || 'active',
+    createdAt: String(
+      rawUser.createdAt || rawUser.created_at || existing?.createdAt || new Date().toISOString()
+    ),
+  };
+
+  if (existing) {
+    Object.assign(existing, mapped);
+  } else {
+    db.users.push(mapped);
+  }
+
+  // Ensure welcome ledger entry exists if newly created with welcome coins
+  const hasLedger = db.ledger.some((l) => l.userId === mapped.id);
+  if (!hasLedger && mapped.availableCoins > 0) {
+    db.ledger.unshift({
+      id: `ldg_welcome_${Date.now()}`,
+      userId: mapped.id,
+      userName: mapped.name,
+      sourceType: 'referral_welcome',
+      title: `Welcome Bonus (+${mapped.availableCoins} Coins)`,
+      amountCoins: mapped.availableCoins,
+      status: 'cleared',
+      createdAt: new Date().toISOString(),
+      unlocksAt: null,
+    });
+  }
+
+  saveClientDb(db);
+  return getClientBootstrap(mapped.id);
 }
 
 function creditClientEarnings(
@@ -616,8 +554,13 @@ function creditClientEarnings(
 
 export function getClientBootstrap(userId: string): BootstrapPayload {
   const db = loadClientDb();
-  const currentUser = db.users.find((u) => u.id === userId) || db.users[0];
-  const sortedUsers = [...db.users].sort(
+  const foundUser = userId ? db.users.find((u) => u.id === userId) : undefined;
+  const currentUser: UserProfile = foundUser || GUEST_USER_PROFILE;
+
+  const realEarners = db.users.filter(
+    (u) => u.id !== 'guest' && (u.role === 'earner' || u.lifetimeEarnedCoins > 0)
+  );
+  const sortedUsers = [...realEarners].sort(
     (a, b) => b.lifetimeEarnedCoins - a.lifetimeEarnedCoins
   );
 
@@ -632,7 +575,7 @@ export function getClientBootstrap(userId: string): BootstrapPayload {
   return {
     settings: db.settings,
     currentUser,
-    allUsersCount: db.users.length + 1420,
+    allUsersCount: db.users.length,
     offerwalls: db.offerwalls,
     shortlinks: db.shortlinks,
     shortlinkCooldowns: db.shortlinkCooldowns[currentUser.id] || {},
@@ -665,11 +608,13 @@ export function handleClientApiAction(
   body: any = {}
 ): any {
   const db = loadClientDb();
-  const user = db.users.find((u) => u.id === userId) || db.users[0];
 
   if (endpoint === '/api/auth/register') {
     const { name, email, referralCodeInput } = body;
     const cleanEmail = String(email || '').trim().toLowerCase();
+    if (!name || !cleanEmail) {
+      throw new Error('Full Name and Email are required.');
+    }
     const existing = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (existing) {
       throw new Error('This email is already registered. Please Sign In instead.');
@@ -684,7 +629,10 @@ export function handleClientApiAction(
       id: newUserId,
       name: String(name).trim(),
       email: cleanEmail,
-      role: 'earner',
+      role:
+        cleanEmail === 'sarthaksinghyadav1@gmail.com' || cleanEmail === 'admin@lootify.in'
+          ? 'admin'
+          : 'earner',
       referralCode: myRefCode,
       referredBy: referralCodeInput || null,
       referralActivated: false,
@@ -700,7 +648,7 @@ export function handleClientApiAction(
       lastCheckInDate: null,
       lastSpinDate: null,
       claimedMilestones: [],
-      ipAddress: '103.21.140.12',
+      ipAddress: '0.0.0.0',
       deviceFingerprint: 'fp_web_client',
       status: 'active',
       createdAt: new Date().toISOString(),
@@ -723,7 +671,11 @@ export function handleClientApiAction(
 
   if (endpoint === '/api/auth/login') {
     const cleanEmail = String(body.email || '').trim().toLowerCase();
-    const foundUser = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    const foundUser = db.users.find(
+      (u) =>
+        u.email.toLowerCase() === cleanEmail ||
+        (cleanEmail === 'admin@lootify.in' && u.role === 'admin')
+    );
     if (!foundUser) {
       throw new Error('No account found with this email. Please Create an Account first.');
     }
@@ -769,7 +721,10 @@ export function handleClientApiAction(
       id: newUserId,
       name: displayName,
       email: cleanEmail,
-      role: 'earner',
+      role:
+        cleanEmail === 'sarthaksinghyadav1@gmail.com' || cleanEmail === 'admin@lootify.in'
+          ? 'admin'
+          : 'earner',
       referralCode: myRefCode,
       referredBy: body.referralCodeInput || null,
       referralActivated: false,
@@ -785,7 +740,7 @@ export function handleClientApiAction(
       lastCheckInDate: null,
       lastSpinDate: null,
       claimedMilestones: [],
-      ipAddress: '103.21.140.12',
+      ipAddress: '0.0.0.0',
       deviceFingerprint: 'fp_google_oauth',
       status: 'active',
       createdAt: new Date().toISOString(),
@@ -806,6 +761,12 @@ export function handleClientApiAction(
     return getClientBootstrap(newUserId);
   }
 
+  const user = db.users.find((u) => u.id === userId);
+  if (!user && !endpoint.startsWith('/api/admin/')) {
+    throw new Error('Please Sign In or Create an Account first to earn coins.');
+  }
+  const activeUser = user || db.users[0];
+
   if (endpoint.startsWith('/api/postback/')) {
     const urlObj = new URL(endpoint, 'https://lootify.in');
     const provider = urlObj.pathname.split('/').pop() || 'notik';
@@ -814,12 +775,12 @@ export function handleClientApiAction(
     const txId = String(urlObj.searchParams.get('txn_id') || `TX_${Date.now()}`);
 
     if (status === '2') {
-      const deductFromPending = Math.min(user.pendingCoins, amountCoins);
-      user.pendingCoins -= deductFromPending;
+      const deductFromPending = Math.min(activeUser.pendingCoins, amountCoins);
+      activeUser.pendingCoins -= deductFromPending;
       db.ledger.unshift({
         id: `ldg_cb_${Date.now()}`,
-        userId: user.id,
-        userName: user.name,
+        userId: activeUser.id,
+        userName: activeUser.name,
         sourceType: 'chargeback_reversal',
         title: `${provider.toUpperCase()} Chargeback Reversal (${txId})`,
         amountCoins: -amountCoins,
@@ -828,10 +789,10 @@ export function handleClientApiAction(
         unlocksAt: null,
       });
     } else {
-      user.offerwallsCompleted += 1;
+      activeUser.offerwallsCompleted += 1;
       creditClientEarnings(
         db,
-        user,
+        activeUser,
         amountCoins,
         'offerwall',
         `${provider.toUpperCase()} Offerwall Completion (${txId})`,
@@ -840,7 +801,7 @@ export function handleClientApiAction(
       );
     }
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/shortlinks/start') {
@@ -861,14 +822,21 @@ export function handleClientApiAction(
     const link = db.shortlinks.find((s) => s.id === session.shortlinkId);
     if (!link) throw new Error('Shortlink not found');
     delete db.shortlinkActiveTokens[body.token];
-    if (!db.shortlinkCooldowns[user.id]) db.shortlinkCooldowns[user.id] = {};
-    db.shortlinkCooldowns[user.id][link.id] = new Date(
+    if (!db.shortlinkCooldowns[activeUser.id]) db.shortlinkCooldowns[activeUser.id] = {};
+    db.shortlinkCooldowns[activeUser.id][link.id] = new Date(
       Date.now() + link.cooldownHours * 3600000
     ).toISOString();
-    user.shortlinksCompleted += 1;
-    creditClientEarnings(db, user, link.rewardCoins, 'shortlink', `${link.provider} — ${link.title}`, 0);
+    activeUser.shortlinksCompleted += 1;
+    creditClientEarnings(
+      db,
+      activeUser,
+      link.rewardCoins,
+      'shortlink',
+      `${link.provider} — ${link.title}`,
+      0
+    );
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/tasks/submit-proof') {
@@ -878,8 +846,8 @@ export function handleClientApiAction(
       id: `sub_${Date.now()}`,
       taskId: task.id,
       taskTitle: task.title,
-      userId: user.id,
-      userName: user.name,
+      userId: activeUser.id,
+      userName: activeUser.name,
       proofText: body.proofText,
       rewardCoins: task.rewardCoins,
       holdDays: task.holdDays,
@@ -887,77 +855,112 @@ export function handleClientApiAction(
       createdAt: new Date().toISOString(),
     });
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/quizzes/complete') {
     const quiz = db.quizzes.find((q) => q.id === body.quizId);
     if (!quiz) throw new Error('Quiz not found');
-    if (!db.completedQuizzes[user.id]) db.completedQuizzes[user.id] = [];
-    db.completedQuizzes[user.id].push(quiz.id);
-    user.tasksCompleted += 1;
-    creditClientEarnings(db, user, quiz.rewardCoins, 'quiz', `Quiz Completed: ${quiz.title}`, 0);
+    if (!db.completedQuizzes[activeUser.id]) db.completedQuizzes[activeUser.id] = [];
+    db.completedQuizzes[activeUser.id].push(quiz.id);
+    activeUser.tasksCompleted += 1;
+    creditClientEarnings(
+      db,
+      activeUser,
+      quiz.rewardCoins,
+      'quiz',
+      `Quiz Completed: ${quiz.title}`,
+      0
+    );
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/articles/complete') {
     const article = db.articles.find((a) => a.id === body.articleId);
     if (!article) throw new Error('Article not found');
-    if (!db.completedArticles[user.id]) db.completedArticles[user.id] = [];
-    db.completedArticles[user.id].push(article.id);
-    user.tasksCompleted += 1;
-    creditClientEarnings(db, user, article.rewardCoins, 'article', `Article Read: ${article.title}`, 0);
+    if (!db.completedArticles[activeUser.id]) db.completedArticles[activeUser.id] = [];
+    db.completedArticles[activeUser.id].push(article.id);
+    activeUser.tasksCompleted += 1;
+    creditClientEarnings(
+      db,
+      activeUser,
+      article.rewardCoins,
+      'article',
+      `Article Read: ${article.title}`,
+      0
+    );
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/rewards/daily-checkin') {
-    const nextIdx = user.streakDays % 7;
+    const nextIdx = activeUser.streakDays % 7;
     const rewardCoins = db.settings.dailyStreakRewards[nextIdx] || 50;
-    user.streakDays += 1;
-    user.lastCheckInDate = new Date().toISOString();
-    creditClientEarnings(db, user, rewardCoins, 'daily_streak', `Day ${user.streakDays} Check-In Bonus`, 0);
+    activeUser.streakDays += 1;
+    activeUser.lastCheckInDate = new Date().toISOString();
+    creditClientEarnings(
+      db,
+      activeUser,
+      rewardCoins,
+      'daily_streak',
+      `Day ${activeUser.streakDays} Check-In Bonus`,
+      0
+    );
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/rewards/spin-wheel') {
     const slices = db.settings.spinWheelSlices;
     const sliceIndex = Math.floor(Math.random() * slices.length);
     const wonCoins = slices[sliceIndex];
-    user.lastSpinDate = new Date().toISOString();
-    creditClientEarnings(db, user, wonCoins, 'spin_wheel', `Fortune Spin Wheel (+${wonCoins} Coins)`, 0);
+    activeUser.lastSpinDate = new Date().toISOString();
+    creditClientEarnings(
+      db,
+      activeUser,
+      wonCoins,
+      'spin_wheel',
+      `Fortune Spin Wheel (+${wonCoins} Coins)`,
+      0
+    );
     saveClientDb(db);
-    return { wonCoins, sliceIndex, bootstrap: getClientBootstrap(user.id) };
+    return { wonCoins, sliceIndex, bootstrap: getClientBootstrap(activeUser.id) };
   }
 
   if (endpoint === '/api/rewards/claim-promo') {
     const clean = String(body.code || '').trim().toUpperCase();
     const promo = db.promoCodes.find((p) => p.code.toUpperCase() === clean && p.active);
     if (!promo) throw new Error('Invalid or expired Promo Code.');
-    if (promo.claimedUserIds.includes(user.id)) throw new Error('Already claimed!');
-    promo.claimedUserIds.push(user.id);
-    creditClientEarnings(db, user, promo.rewardCoins, 'promo_code', `Promo Code Redeemed (${promo.code})`, 0);
+    if (promo.claimedUserIds.includes(activeUser.id)) throw new Error('Already claimed!');
+    promo.claimedUserIds.push(activeUser.id);
+    creditClientEarnings(
+      db,
+      activeUser,
+      promo.rewardCoins,
+      'promo_code',
+      `Promo Code Redeemed (${promo.code})`,
+      0
+    );
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/wallet/withdraw') {
     const requestedInr = Number(body.amountInr);
     const coinsRequired = requestedInr * db.settings.coinsPerInr;
-    if (user.availableCoins < coinsRequired) {
+    if (activeUser.availableCoins < coinsRequired) {
       throw new Error(`Insufficient Available Coins. Need ${coinsRequired} Coins.`);
     }
-    user.availableCoins -= coinsRequired;
+    activeUser.availableCoins -= coinsRequired;
     if (requestedInr === db.settings.starterPayoutInr) {
-      user.completedFirstPayout = true;
+      activeUser.completedFirstPayout = true;
     }
     db.withdrawals.unshift({
       id: `wd_${Date.now()}`,
-      userId: user.id,
-      userName: user.name,
-      userEmail: user.email,
+      userId: activeUser.id,
+      userName: activeUser.name,
+      userEmail: activeUser.email,
       method: body.method,
       tierLabel: `₹${requestedInr} Payout`,
       coinsDeducted: coinsRequired,
@@ -967,32 +970,32 @@ export function handleClientApiAction(
       createdAt: new Date().toISOString(),
     });
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/admin/settings') {
     db.settings = { ...db.settings, ...body };
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/admin/shortlinks' && method === 'POST') {
     db.shortlinks.unshift({ ...body, id: `sl_${Date.now()}` });
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint.startsWith('/api/admin/shortlinks/') && method === 'DELETE') {
     const id = endpoint.split('/').pop();
     db.shortlinks = db.shortlinks.filter((s) => s.id !== id);
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/admin/tasks' && method === 'POST') {
     db.tasks.unshift({ ...body, id: `tsk_${Date.now()}` });
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint === '/api/admin/promos' && method === 'POST') {
@@ -1006,14 +1009,14 @@ export function handleClientApiAction(
       createdAt: new Date().toISOString(),
     });
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint.startsWith('/api/admin/promos/') && method === 'DELETE') {
     const id = endpoint.split('/').pop();
     db.promoCodes = db.promoCodes.filter((p) => p.id !== id);
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint.includes('/api/admin/users/')) {
@@ -1031,7 +1034,7 @@ export function handleClientApiAction(
       }
     }
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   if (endpoint.includes('/api/admin/withdrawals/')) {
@@ -1043,9 +1046,9 @@ export function handleClientApiAction(
       wd.utrOrVoucher = body.utrOrVoucher || `UTR_${Date.now()}`;
     }
     saveClientDb(db);
-    return getClientBootstrap(user.id);
+    return getClientBootstrap(activeUser.id);
   }
 
   saveClientDb(db);
-  return getClientBootstrap(user.id);
+  return getClientBootstrap(activeUser.id);
 }

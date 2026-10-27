@@ -5,20 +5,11 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Award,
-  Globe,
-  Home,
-  LayoutDashboard,
-  Link2,
-  ListChecks,
+  LogOut,
   Menu,
   Moon,
-  Shield,
-  Sparkles,
   Sun,
-  Trophy,
   Users,
-  Wallet,
   X,
 } from 'lucide-react';
 import { BootstrapPayload, PageRoute, ThemeMode } from './types.ts';
@@ -27,6 +18,7 @@ import { EarnerViews } from './components/EarnerViews.tsx';
 import {
   getClientBootstrap,
   handleClientApiAction,
+  syncExternalUserToClientDb,
 } from './lib/standaloneWebEngine.ts';
 
 const VALID_ROUTES: PageRoute[] = [
@@ -61,9 +53,15 @@ function getInitialRouteFromUrl(): PageRoute {
 export default function App() {
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
     try {
-      return localStorage.getItem('lootify_user_id') || 'usr_earner_1';
+      const saved = localStorage.getItem('lootify_user_id') || '';
+      // Drop legacy fake demo user IDs
+      if (saved === 'usr_earner_1' || saved === 'usr_earner_2' || saved === 'usr_earner_4') {
+        localStorage.removeItem('lootify_user_id');
+        return '';
+      }
+      return saved;
     } catch {
-      return 'usr_earner_1';
+      return '';
     }
   });
   const [data, setData] = useState<BootstrapPayload>(() =>
@@ -213,7 +211,6 @@ export default function App() {
       const json = await res.json();
       if (!res.ok) {
         if (String(json.error || '').includes("reading 'prepare'")) {
-          // Worker DB binding not added yet — fall back cleanly to client engine
           throw new Error('USE_CLIENT_ENGINE');
         }
         throw new Error(json.error || 'Operation failed');
@@ -223,19 +220,10 @@ export default function App() {
       } else if (json.settings && json.currentUser) {
         setData(json);
       } else if (json.user && json.user.id) {
-        // Sync Cloudflare Worker D1 user response into local client state
-        try {
-          const fallbackPayload = handleClientApiAction('POST', endpoint, currentUserId, body);
-          if (fallbackPayload?.currentUser && fallbackPayload?.settings) {
-            setData(fallbackPayload);
-            return fallbackPayload;
-          }
-        } catch {
-          // If user already exists in local store during login/register, load their bootstrap
-          const existingPayload = getClientBootstrap(json.user.id);
-          setData(existingPayload);
-          return existingPayload;
-        }
+        // Sync real Cloudflare Worker D1 user response into local state
+        const syncedPayload = syncExternalUserToClientDb(json.user);
+        setData(syncedPayload);
+        return syncedPayload;
       } else {
         throw new Error('USE_CLIENT_ENGINE');
       }
@@ -258,32 +246,6 @@ export default function App() {
     }
   };
 
-  const apiDelete = async (endpoint: string) => {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'DELETE',
-        headers: { 'x-user-id': currentUserId },
-      });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error('USE_CLIENT_ENGINE');
-      }
-      const json = await res.json();
-      if (json.settings && json.currentUser) {
-        setData(json);
-      } else {
-        throw new Error('USE_CLIENT_ENGINE');
-      }
-      return json;
-    } catch {
-      const result = handleClientApiAction('DELETE', endpoint, currentUserId);
-      if (result?.settings && result?.currentUser) {
-        setData(result);
-      }
-      return result;
-    }
-  };
-
   const handleRegisterUser = async (
     name: string,
     email: string,
@@ -298,7 +260,7 @@ export default function App() {
         referralCodeInput,
       });
       const targetUser = json.currentUser || json.user;
-      if (targetUser) {
+      if (targetUser && targetUser.id !== 'guest') {
         setCurrentUserId(targetUser.id);
         localStorage.setItem('lootify_user_id', targetUser.id);
       }
@@ -323,7 +285,7 @@ export default function App() {
         password: passwordInput,
       });
       const targetUser = json.currentUser || json.user;
-      if (targetUser) {
+      if (targetUser && targetUser.id !== 'guest') {
         setCurrentUserId(targetUser.id);
         localStorage.setItem('lootify_user_id', targetUser.id);
       }
@@ -352,7 +314,7 @@ export default function App() {
     try {
       const json = await apiPost('/api/auth/google', params);
       const targetUser = json.currentUser || json.user;
-      if (targetUser) {
+      if (targetUser && targetUser.id !== 'guest') {
         setCurrentUserId(targetUser.id);
         localStorage.setItem('lootify_user_id', targetUser.id);
       }
@@ -370,16 +332,12 @@ export default function App() {
     }
   };
 
-  const switchDemoAccount = (targetUid: string, targetRoute?: PageRoute) => {
-    setCurrentUserId(targetUid);
-    localStorage.setItem('lootify_user_id', targetUid);
-    if (targetRoute) navigateToPage(targetRoute);
-    notify(
-      targetUid === 'usr_admin_1'
-        ? 'Switched to Website Admin Account (Sarthak)'
-        : 'Switched to Website Member Account (Aarav Verma)',
-      'info'
-    );
+  const handleLogoutUser = () => {
+    setCurrentUserId('');
+    localStorage.removeItem('lootify_user_id');
+    setData(getClientBootstrap(''));
+    navigateToPage('home');
+    notify('You have been signed out.', 'info');
   };
 
   if (!data || !data.currentUser || !data.settings) {
@@ -396,6 +354,7 @@ export default function App() {
   }
 
   const { settings, currentUser } = data;
+  const isLoggedIn = Boolean(currentUserId && currentUser.id !== 'guest');
   const availableInr = currentUser.availableCoins / settings.coinsPerInr;
   const headerAd = data.adPlacements.find((a) => a.slotKey === 'header_banner' && a.enabled);
 
@@ -418,205 +377,219 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150">
       {/* Top 3-Zone Website Header Bar (Hidden on Default Landing Page) */}
-      {activePage !== 'home' && (<>
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-8">
-          {/* Zone 1: Single Website Brand Wordmark */}
-          <a
-            href="/"
-            onClick={(e) => {
-              e.preventDefault();
-              navigateToPage('home');
-            }}
-            className="text-xl font-extrabold tracking-tight font-display text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0"
-          >
-            {settings.siteName}.in
-          </a>
+      {activePage !== 'home' && (
+        <>
+          <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-8">
+              {/* Zone 1: Single Website Brand Wordmark */}
+              <a
+                href="/"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateToPage('home');
+                }}
+                className="text-xl font-extrabold tracking-tight font-display text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0"
+              >
+                {settings.siteName}.in
+              </a>
 
-          {/* Zone 2: 5 Primary Website Navigation Links */}
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300">
-            <a
-              href="/"
-              onClick={(e) => {
-                e.preventDefault();
-                navigateToPage('home');
-              }}
-              className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                activePage === 'home'
-                  ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Home
-            </a>
-            <a
-              href="/offerwalls"
-              onClick={(e) => {
-                e.preventDefault();
-                navigateToPage('offerwalls');
-              }}
-              className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                activePage === 'offerwalls'
-                  ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Offerwalls
-            </a>
-            <a
-              href="/shortlinks"
-              onClick={(e) => {
-                e.preventDefault();
-                navigateToPage('shortlinks');
-              }}
-              className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                activePage === 'shortlinks'
-                  ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Shortlinks
-            </a>
-            <a
-              href="/referrals"
-              onClick={(e) => {
-                e.preventDefault();
-                navigateToPage('referrals');
-              }}
-              className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                activePage === 'referrals'
-                  ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Refer & Earn
-            </a>
-            <a
-              href="/payout-proofs"
-              onClick={(e) => {
-                e.preventDefault();
-                navigateToPage('payout-proofs');
-              }}
-              className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                activePage === 'payout-proofs'
-                  ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Payment Proofs
-            </a>
-          </nav>
-
-          {/* Zone 3: 1 Primary Action Button */}
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => navigateToPage('wallet')}
-              className="px-4 py-2 text-xs font-mono font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap shrink-0"
-            >
-              Withdraw: ₹{availableInr.toFixed(2)} ({currentUser.availableCoins.toLocaleString()}{' '}
-              Coins)
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              className="md:hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700"
-              aria-label="Open Website Menu"
-            >
-              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Secondary Multi-Page Website Navigation Bar + Theme Switch + Role Switch */}
-      <div className="bg-slate-100/90 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 px-6 py-2.5">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          {/* All Website Page Links */}
-          <div className="flex items-center gap-1 overflow-x-auto py-0.5">
-            {websitePages.map((pg) => {
-              const isCurrent = activePage === pg.id;
-              return (
+              {/* Zone 2: 5 Primary Website Navigation Links */}
+              <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300">
                 <a
-                  key={pg.id}
-                  href={pg.path}
+                  href="/"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (pg.id === 'admin' && currentUser.role !== 'admin') {
-                      switchDemoAccount('usr_admin_1', 'admin');
-                    } else {
-                      navigateToPage(pg.id);
-                    }
+                    navigateToPage('home');
                   }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
-                    isCurrent
-                      ? 'bg-emerald-600 text-white font-semibold'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
+                    activePage === 'home'
+                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
+                      : ''
                   }`}
                 >
-                  {pg.label}
+                  Home
                 </a>
-              );
-            })}
+                <a
+                  href="/offerwalls"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateToPage('offerwalls');
+                  }}
+                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
+                    activePage === 'offerwalls'
+                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
+                      : ''
+                  }`}
+                >
+                  Offerwalls
+                </a>
+                <a
+                  href="/shortlinks"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateToPage('shortlinks');
+                  }}
+                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
+                    activePage === 'shortlinks'
+                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
+                      : ''
+                  }`}
+                >
+                  Shortlinks
+                </a>
+                <a
+                  href="/referrals"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateToPage('referrals');
+                  }}
+                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
+                    activePage === 'referrals'
+                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
+                      : ''
+                  }`}
+                >
+                  Refer & Earn
+                </a>
+                <a
+                  href="/payout-proofs"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateToPage('payout-proofs');
+                  }}
+                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
+                    activePage === 'payout-proofs'
+                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
+                      : ''
+                  }`}
+                >
+                  Payment Proofs
+                </a>
+              </nav>
+
+              {/* Zone 3: 1 Primary Action Button */}
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => {
+                    if (!isLoggedIn) {
+                      setAuthTab('login');
+                      setAuthModalOpen(true);
+                    } else {
+                      navigateToPage('wallet');
+                    }
+                  }}
+                  className="px-4 py-2 text-xs font-mono font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                >
+                  {isLoggedIn
+                    ? `Withdraw: ₹${availableInr.toFixed(2)} (${currentUser.availableCoins.toLocaleString()} Coins)`
+                    : 'Sign In to Earn & Withdraw'}
+                </button>
+                <button
+                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  className="md:hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700"
+                  aria-label="Open Website Menu"
+                >
+                  {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Secondary Multi-Page Website Navigation Bar + Theme Switch */}
+          <div className="bg-slate-100/90 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 px-6 py-2.5">
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+              {/* All Website Page Links */}
+              <div className="flex items-center gap-1 overflow-x-auto py-0.5">
+                {websitePages.map((pg) => {
+                  const isCurrent = activePage === pg.id;
+                  return (
+                    <a
+                      key={pg.id}
+                      href={pg.path}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigateToPage(pg.id);
+                      }}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                        isCurrent
+                          ? 'bg-emerald-600 text-white font-semibold'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {pg.label}
+                    </a>
+                  );
+                })}
+              </div>
+
+              {/* Right Controls: Sign In / Account + Logout + Theme Switch */}
+              <div className="flex items-center gap-2 ml-auto shrink-0">
+                <button
+                  onClick={() => {
+                    setAuthTab(isLoggedIn ? 'login' : 'register');
+                    setAuthModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>
+                    {isLoggedIn
+                      ? `${currentUser.name} (${currentUser.availableCoins.toLocaleString()} Coins)`
+                      : 'Sign In / Create Account'}
+                  </span>
+                </button>
+
+                {isLoggedIn && (
+                  <button
+                    onClick={handleLogoutUser}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
+                    title="Sign Out"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Logout</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={toggleTheme}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
+                >
+                  {theme === 'dark' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Light</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-slate-700" />
+                      <span>Dark</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Dropdown Menu */}
+            {mobileMenuOpen && (
+              <div className="md:hidden pt-3 mt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-1.5">
+                {websitePages.map((pg) => (
+                  <button
+                    key={pg.id}
+                    onClick={() => navigateToPage(pg.id)}
+                    className={`text-left px-3 py-2 text-xs font-medium rounded-lg ${
+                      activePage === pg.id
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                    }`}
+                  >
+                    {pg.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-
-          {/* Right Controls: Sign In / Account + Role Switch + Theme Switch */}
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            <button
-              onClick={() => {
-                setAuthTab('login');
-                setAuthModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Sign In / Register ({currentUser.name.split(' ')[0]})</span>
-            </button>
-
-            <button
-              onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
-            >
-              {theme === 'dark' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Light</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-slate-700" />
-                  <span>Dark</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden pt-3 mt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-1.5">
-            {websitePages.map((pg) => (
-              <button
-                key={pg.id}
-                onClick={() => {
-                  if (pg.id === 'admin' && currentUser.role !== 'admin') {
-                    switchDemoAccount('usr_admin_1', 'admin');
-                  } else {
-                    navigateToPage(pg.id);
-                  }
-                }}
-                className={`text-left px-3 py-2 text-xs font-medium rounded-lg ${
-                  activePage === pg.id
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200'
-                }`}
-              >
-                {pg.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      </>)}
+        </>
+      )}
 
       {/* Live Website Announcement Strip */}
       {settings.announcementActive && activePage !== 'home' && (
@@ -656,16 +629,42 @@ export default function App() {
           </div>
         )}
 
+        {/* Prompt Guest Visitors to Sign In when viewing Earner pages */}
+        {!isLoggedIn &&
+          ['dashboard', 'offerwalls', 'shortlinks', 'tasks', 'referrals', 'wallet'].includes(
+            activePage
+          ) && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
+              <div>
+                <strong className="text-amber-600 dark:text-amber-400">
+                  You are browsing as a Guest Visitor:
+                </strong>{' '}
+                <span className="text-slate-700 dark:text-slate-200">
+                  Sign in with Google or create your free account to claim your +200 Welcome Bonus Coins and save your earnings.
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setAuthTab('register');
+                  setAuthModalOpen(true);
+                }}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shrink-0"
+              >
+                Sign In / Join Free (+200 Coins) →
+              </button>
+            </div>
+          )}
+
         {/* Active Website Page Content */}
         {[
-            'home',
-            'payout-proofs',
-            'leaderboard',
-            'deploy-guide',
-            'terms',
-            'privacy',
-            'contact',
-          ].includes(activePage) ? (
+          'home',
+          'payout-proofs',
+          'leaderboard',
+          'deploy-guide',
+          'terms',
+          'privacy',
+          'contact',
+        ].includes(activePage) ? (
           <PublicPages
             data={data}
             activePage={activePage}
@@ -805,7 +804,7 @@ export default function App() {
                   {settings.siteName}.in Account & Database
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Powered by Cloudflare D1 SQL (Unlimited Users · Zero Auth Limits)
+                  Powered by Cloudflare D1 SQL (Unlimited Users · Real Accounts)
                 </p>
               </div>
               <button
@@ -948,7 +947,7 @@ export default function App() {
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="aarav@lootify.in or admin@lootify.in"
+                    placeholder="you@gmail.com"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
                   />
                 </div>
@@ -971,21 +970,6 @@ export default function App() {
                 >
                   Sign In to Account →
                 </button>
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                  <span>Quick Test Accounts:</span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginEmail('aarav@lootify.in');
-                        setLoginPassword('123456');
-                      }}
-                      className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-                    >
-                      Fill Member
-                    </button>
-                  </div>
-                </div>
               </form>
             )}
 
@@ -1006,7 +990,7 @@ export default function App() {
                     required
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="e.g. Rohit Sharma"
+                    placeholder="Enter your full name"
                     className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
                   />
                 </div>
@@ -1044,7 +1028,7 @@ export default function App() {
                     type="text"
                     value={regReferral}
                     onChange={(e) => setRegReferral(e.target.value.toUpperCase())}
-                    placeholder="LOOT-AARAV"
+                    placeholder="Optional invite code"
                     className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono"
                   />
                 </div>
@@ -1061,8 +1045,7 @@ export default function App() {
               <div className="space-y-3.5 text-xs">
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                   Paste your <strong>Cloudflare Worker URL</strong> below after setting up Cloudflare
-                  D1 (`functions/schema.sql` + `functions/worker.js`). Leave blank to run in Instant
-                  Browser Storage mode.
+                  D1 (`functions/schema.sql` + `functions/worker.js`).
                 </p>
                 <div>
                   <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
@@ -1072,7 +1055,7 @@ export default function App() {
                     type="url"
                     value={workerApiUrl}
                     onChange={(e) => setWorkerApiUrl(e.target.value)}
-                    placeholder="https://lootify-api.yourname.workers.dev"
+                    placeholder="https://lootify-api.sarthaksinghyadav1.workers.dev"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono text-[11px]"
                   />
                 </div>
@@ -1092,16 +1075,6 @@ export default function App() {
                     className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
                   >
                     Save Database URL
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthModalOpen(false);
-                      navigateToPage('deploy-guide');
-                    }}
-                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold"
-                  >
-                    View SQL & Worker Code
                   </button>
                 </div>
               </div>

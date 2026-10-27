@@ -1,23 +1,13 @@
 import React, { useState } from 'react';
 import {
   ArrowRight,
-  Award,
-  Check,
   Copy,
   Download,
-  ExternalLink,
   FileCode,
   Globe,
-  HelpCircle,
-  Lock,
-  Mail,
   Server,
   ShieldCheck,
-  TrendingUp,
   Trophy,
-  Users,
-  Wallet,
-  Zap,
 } from 'lucide-react';
 import { BootstrapPayload, PageRoute, PayoutMethodType } from '../types.ts';
 import {
@@ -70,7 +60,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regRefCode, setRegRefCode] = useState('LOOT-AARAV');
+  const [regRefCode, setRegRefCode] = useState('');
   const [regSubmitting, setRegSubmitting] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
@@ -237,7 +227,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               Live Withdrawal Proofs
             </h1>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Every UPI, Bank Transfer, Gift Card, E-Wallet, and USDT payout processed on{' '}
+              Every real UPI, Bank Transfer, Gift Card, E-Wallet, and USDT payout processed on{' '}
               {settings.siteName}.
             </p>
           </div>
@@ -269,61 +259,72 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-slate-800/40">
-                  <th className="py-3.5 px-4">Earner</th>
-                  <th className="py-3.5 px-4">Payout Rail</th>
-                  <th className="py-3.5 px-4">Tier</th>
-                  <th className="py-3.5 px-4 text-right">Coins Redeemed</th>
-                  <th className="py-3.5 px-4 text-right">Amount (INR)</th>
-                  <th className="py-3.5 px-4">UTR / Voucher Proof</th>
-                  <th className="py-3.5 px-4">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-                {filteredProofs.map((w) => (
-                  <tr
-                    key={w.id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"
-                  >
-                    <td className="py-3.5 px-4 font-medium text-slate-900 dark:text-white">
-                      {w.userName}
-                    </td>
-                    <td className="py-3.5 px-4 text-xs text-slate-600 dark:text-slate-300 uppercase">
-                      {w.method.replace('_', ' ')}
-                    </td>
-                    <td className="py-3.5 px-4 text-xs text-slate-500 dark:text-slate-400">
-                      {w.tierLabel}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300">
-                      {w.coinsDeducted.toLocaleString()}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                      ₹{w.amountInr.toFixed(2)}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">
-                      {w.utrOrVoucher || 'Processing in Queue'}
-                    </td>
-                    <td className="py-3.5 px-4 text-xs font-medium">
-                      {w.status === 'approved' ? (
-                        <span className="text-emerald-600 dark:text-emerald-400">
-                          Paid & Verified
-                        </span>
-                      ) : w.status === 'pending' ? (
-                        <span className="text-amber-600 dark:text-amber-400">
-                          In Verification Queue
-                        </span>
-                      ) : (
-                        <span className="text-red-500">Refunded</span>
-                      )}
-                    </td>
+          {filteredProofs.length === 0 ? (
+            <div className="p-10 text-center space-y-2">
+              <div className="text-sm font-bold text-slate-900 dark:text-white">
+                No Live Withdrawals Recorded Yet
+              </div>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                This table displays 100% real user payouts from the database. Complete any 1 Offerwall or 3 Shortlinks to request the first ₹{settings.starterPayoutInr} Starter UPI Payout!
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-slate-800/40">
+                    <th className="py-3.5 px-4">Earner</th>
+                    <th className="py-3.5 px-4">Payout Rail</th>
+                    <th className="py-3.5 px-4">Tier</th>
+                    <th className="py-3.5 px-4 text-right">Coins Redeemed</th>
+                    <th className="py-3.5 px-4 text-right">Amount (INR)</th>
+                    <th className="py-3.5 px-4">UTR / Voucher Proof</th>
+                    <th className="py-3.5 px-4">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+                  {filteredProofs.map((w) => (
+                    <tr
+                      key={w.id}
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"
+                    >
+                      <td className="py-3.5 px-4 font-medium text-slate-900 dark:text-white">
+                        {w.userName}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs text-slate-600 dark:text-slate-300 uppercase">
+                        {w.method.replace('_', ' ')}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs text-slate-500 dark:text-slate-400">
+                        {w.tierLabel}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                        {w.coinsDeducted.toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+                        ₹{w.amountInr.toFixed(2)}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">
+                        {w.utrOrVoucher || 'Processing in Queue'}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs font-medium">
+                        {w.status === 'approved' ? (
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            Paid & Verified
+                          </span>
+                        ) : w.status === 'pending' ? (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            In Verification Queue
+                          </span>
+                        ) : (
+                          <span className="text-red-500">Refunded</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -354,58 +355,69 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-slate-800/40">
-                  <th className="py-3.5 px-4">Rank</th>
-                  <th className="py-3.5 px-4">Earner Name</th>
-                  <th className="py-3.5 px-4">Standing</th>
-                  <th className="py-3.5 px-4 text-right">Active Referrals</th>
-                  <th className="py-3.5 px-4 text-right">Lifetime Coins</th>
-                  <th className="py-3.5 px-4 text-right">INR Value</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-                {leaderboard.map((row) => (
-                  <tr
-                    key={row.rank}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"
-                  >
-                    <td className="py-3.5 px-4 font-mono tabular-nums font-bold text-slate-900 dark:text-white">
-                      #{row.rank}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Trophy
-                        className={`w-4 h-4 ${
-                          row.rank === 1
-                            ? 'text-amber-500'
-                            : row.rank === 2
-                            ? 'text-slate-400'
-                            : row.rank === 3
-                            ? 'text-amber-700'
-                            : 'text-slate-500'
-                        }`}
-                      />
-                      {row.name}
-                    </td>
-                    <td className="py-3.5 px-4 text-xs text-slate-500 dark:text-slate-400">
-                      {row.badge}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300">
-                      {row.referralsCount}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-amber-600 dark:text-amber-400">
-                      {row.lifetimeEarnedCoins.toLocaleString()} Coins
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                      ₹{(row.lifetimeEarnedCoins / settings.coinsPerInr).toFixed(2)}
-                    </td>
+          {leaderboard.length === 0 ? (
+            <div className="p-10 text-center space-y-2">
+              <div className="text-sm font-bold text-slate-900 dark:text-white">
+                Leaderboard is Ready for Real Earners
+              </div>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Sign in with Google or create your account to earn your first +200 Welcome Bonus Coins and claim Rank #1 on the live leaderboard!
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-slate-800/40">
+                    <th className="py-3.5 px-4">Rank</th>
+                    <th className="py-3.5 px-4">Earner Name</th>
+                    <th className="py-3.5 px-4">Standing</th>
+                    <th className="py-3.5 px-4 text-right">Active Referrals</th>
+                    <th className="py-3.5 px-4 text-right">Lifetime Coins</th>
+                    <th className="py-3.5 px-4 text-right">INR Value</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+                  {leaderboard.map((row) => (
+                    <tr
+                      key={row.rank}
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"
+                    >
+                      <td className="py-3.5 px-4 font-mono tabular-nums font-bold text-slate-900 dark:text-white">
+                        #{row.rank}
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Trophy
+                          className={`w-4 h-4 ${
+                            row.rank === 1
+                              ? 'text-amber-500'
+                              : row.rank === 2
+                              ? 'text-slate-400'
+                              : row.rank === 3
+                              ? 'text-amber-700'
+                              : 'text-slate-500'
+                          }`}
+                        />
+                        {row.name}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs text-slate-500 dark:text-slate-400">
+                        {row.badge}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                        {row.referralsCount}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-amber-600 dark:text-amber-400">
+                        {row.lifetimeEarnedCoins.toLocaleString()} Coins
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+                        ₹{(row.lifetimeEarnedCoins / settings.coinsPerInr).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -425,8 +437,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
             GitHub Push + Custom Domain + Cloudflare Setup Guide
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Aapne pucha tha: &ldquo;Repo ko directly push kese karu aur baaki cheezein easy steps me
-            batao&rdquo; — ye rahi aapki complete step-by-step guide aur 1-Click Setup Files!
+            Complete step-by-step guide aur 1-Click Setup Files for {settings.customDomain}.
           </p>
         </div>
 
@@ -449,13 +460,10 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               </li>
               <li>
                 Uspe click karein, apna GitHub account connect karein, aur{' '}
-                <strong>Create New Repository</strong> me naam dalein: <code>lootify-web</code>.
+                <strong>Create New Repository</strong> me naam dalein: <code>LOOTIFY</code>.
               </li>
               <li>
-                Humne is project me pehle se hi{' '}
-                <code>.github/workflows/deploy-pages.yml</code> aur <code>public/404.html</code>{' '}
-                bana diya hai! Jaise hi code GitHub pe jayega, aapki website automatic build ho
-                jayegi.
+                Jaise hi code GitHub pe jayega, aapki website automatic build aur live ho jayegi.
               </li>
             </ol>
           </div>
@@ -474,10 +482,6 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               <li>
                 Apne GitHub Repo me jayein → <strong>Settings</strong> → <strong>Pages</strong> par
                 click karein.
-              </li>
-              <li>
-                <strong>Build and deployment (Source)</strong> me{' '}
-                <strong>GitHub Actions</strong> select karein.
               </li>
               <li>
                 Niche <strong>Custom domain</strong> box me apna domain (jaise{' '}
@@ -516,7 +520,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                 >
                   dash.cloudflare.com
                 </a>{' '}
-                par free account kholein aur apna Custom Domain add karein.
+                par free account kholein.
               </li>
               <li>
                 Left menu me <strong>Workers & Pages → D1 SQL Database</strong> par jayein aur{' '}
@@ -524,8 +528,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               </li>
               <li>
                 Niche diya gaya <strong>SQL Schema Copy</strong> karein aur D1 ke{' '}
-                <strong>Console</strong> box me paste karke Run kar dein—saari tables 2 second me
-                ban jayengi!
+                <strong>Console</strong> box me paste karke Run kar dein.
               </li>
             </ol>
             <div className="flex flex-wrap gap-2 pt-2">
@@ -567,8 +570,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               </li>
               <li>
                 Niche se <strong>worker.js Code Copy</strong> karke Worker me paste karein aur{' '}
-                <strong>Deploy</strong> dabayein! Phir Notik.me aur Lootably me apna Postback URL
-                daal dein.
+                <strong>Deploy</strong> dabayein!
               </li>
             </ol>
             <div className="flex flex-wrap gap-2 pt-2">
@@ -586,62 +588,6 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                 <Download className="w-3.5 h-3.5" />
                 Download worker.js
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Ready-to-Paste Offerwall Postback URLs */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
-          <h3 className="text-lg font-bold">
-            Ready-to-Copy Offerwall S2S Postback URLs (For Notik.me & Lootably)
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Jab aap Notik.me aur Lootably par apna publisher account banayenge, wahan Postback URL
-            box me ye URLs copy-paste kar dein:
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                  Notik.me S2S Postback URL
-                </span>
-                <button
-                  onClick={() =>
-                    copyText(
-                      `https://${settings.apiSubdomain}/api/postback/notik?user_id={user_id}&amount={amount}&txn_id={txn_id}&status=1`,
-                      'Notik.me Postback URL'
-                    )
-                  }
-                  className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
-                >
-                  <Copy className="w-3.5 h-3.5" /> Copy
-                </button>
-              </div>
-              <code className="block text-xs font-mono break-all text-slate-700 dark:text-slate-300">
-                https://{settings.apiSubdomain}/api/postback/notik?user_id=&#123;user_id&#125;&amp;amount=&#123;amount&#125;&amp;txn_id=&#123;txn_id&#125;&amp;status=1
-              </code>
-            </div>
-
-            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                  Lootably S2S Postback URL
-                </span>
-                <button
-                  onClick={() =>
-                    copyText(
-                      `https://${settings.apiSubdomain}/api/postback/lootably?user_id={userID}&amount={currency}&txn_id={transactionID}&status={status}`,
-                      'Lootably Postback URL'
-                    )
-                  }
-                  className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
-                >
-                  <Copy className="w-3.5 h-3.5" /> Copy
-                </button>
-              </div>
-              <code className="block text-xs font-mono break-all text-slate-700 dark:text-slate-300">
-                https://{settings.apiSubdomain}/api/postback/lootably?user_id=&#123;userID&#125;&amp;amount=&#123;currency&#125;&amp;txn_id=&#123;transactionID&#125;&amp;status=&#123;status&#125;
-              </code>
             </div>
           </div>
         </div>
@@ -695,7 +641,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                 2. Mandatory {settings.pendingHoldDays}-Day Pending Escrow Hold
               </h3>
               <p>
-                To protect publisher accounts and prevent fraudulent app uninstalls, high-value
+                To protect publisher accounts and prevent fraudulent reversals, high-value
                 Offerwall completions (Notik.me, Lootably) are held in a {settings.pendingHoldDays}
                 -day Pending Balance state before moving to Withdrawable Balance. Any offerwall
                 chargeback received during this window automatically reverses the pending coins.
@@ -1011,7 +957,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                   required
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
-                  placeholder="e.g. Rohit Sharma"
+                  placeholder="Enter your full name"
                   className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -1022,7 +968,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                   required
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="rohit@gmail.com"
+                  placeholder="you@gmail.com"
                   className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -1039,12 +985,12 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">Referral Code</label>
+                  <label className="block text-xs font-medium mb-1">Referral Code (Optional)</label>
                   <input
                     type="text"
                     value={regRefCode}
                     onChange={(e) => setRegRefCode(e.target.value.toUpperCase())}
-                    placeholder="LOOT-AARAV"
+                    placeholder="Optional"
                     className="w-full px-3.5 py-2 text-sm font-mono uppercase rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -1068,7 +1014,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                   required
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="aarav@lootify.in or admin@lootify.in"
+                  placeholder="you@gmail.com"
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -1090,31 +1036,6 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               >
                 {loginSubmitting ? 'Signing In...' : 'Sign In to Dashboard →'}
               </button>
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                <span>1-Click Demo Login:</span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginEmail('aarav@lootify.in');
-                      setLoginPassword('123456');
-                    }}
-                    className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-                  >
-                    Fill Earner
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginEmail('admin@lootify.in');
-                      setLoginPassword('admin123');
-                    }}
-                    className="text-amber-600 dark:text-amber-400 font-semibold hover:underline"
-                  >
-                    Fill Admin
-                  </button>
-                </div>
-              </div>
             </form>
           )}
         </div>
@@ -1150,9 +1071,9 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
           <p className="text-xs text-slate-500 mt-1">UPI · Bank · Gift Cards · Paytm · USDT</p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Active Registered Earners</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Registered Accounts (Live DB)</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white mt-1">
-            {data.allUsersCount.toLocaleString()}+
+            {data.allUsersCount.toLocaleString()}
           </p>
           <p className="text-xs text-slate-500 mt-1">
             Protected by {settings.pendingHoldDays}-Day Escrow Guard
@@ -1184,17 +1105,17 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                01 · OFFERWALLS
+                01 · OFFERWALLS ({data.offerwalls.length} ACTIVE)
               </span>
               <span className="text-xs font-mono font-semibold text-slate-500">
                 500 – 25,000 Coins
               </span>
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Notik.me, Lootably & AdGate Offers
+              Notik.me, Lootably & Monetag Offers
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Install trending apps, test mobile games, and complete verified surveys. Server-to-Server
+              Complete verified web offers, app trials, and market surveys. Server-to-Server
               (S2S) postbacks credit coins automatically into your wallet.
             </p>
           </div>
@@ -1202,7 +1123,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
-                02 · PAID SHORTLINKS
+                02 · PAID SHORTLINKS ({data.shortlinks.length} ACTIVE)
               </span>
               <span className="text-xs font-mono font-semibold text-slate-500">
                 70 – 100 Coins / Link
@@ -1223,32 +1144,32 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                 03 · 3-LAYER REFER & EARN
               </span>
               <span className="text-xs font-mono font-semibold text-slate-500">
-                500 Coins + 10% Life
+                {settings.referralFlatBonusCoins} Coins + {settings.referralCommissionPercent}% Life
               </span>
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               Passive Lifetime Referral Income
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Your friend gets +200 Coins on signup, you get +500 Coins (₹5) on their first offer, plus
-              10% lifetime commission on everything they earn forever.
+              Your friend gets +{settings.referralWelcomeBonusCoins} Coins on signup, you get +{settings.referralFlatBonusCoins} Coins (₹{(settings.referralFlatBonusCoins / settings.coinsPerInr).toFixed(0)}) on their first offer, plus
+              {settings.referralCommissionPercent}% lifetime commission on everything they earn forever.
             </p>
           </div>
 
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
-                04 · SOCIAL MICRO-TASKS
+                04 · SOCIAL MICRO-TASKS ({data.tasks.length} ACTIVE)
               </span>
               <span className="text-xs font-mono font-semibold text-slate-500">
-                150 – 600 Coins
+                150 – 350 Coins
               </span>
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Telegram, YouTube & App Reviews
+              Telegram, YouTube & Social Tasks
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Join official channels, watch sponsor videos, or post honest reviews. Submit your
+              Join official channels, watch tutorial videos, or share posts. Submit your
               username or proof link for rapid Admin verification.
             </p>
           </div>
@@ -1256,18 +1177,18 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                05 · QUIZZES & ARTICLES
+                05 · QUIZZES & ARTICLES ({data.quizzes.length + data.articles.length} ACTIVE)
               </span>
               <span className="text-xs font-mono font-semibold text-slate-500">
-                50 – 150 Coins
+                60 – 150 Coins
               </span>
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               Timed Trivia & Read-to-Earn Guides
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Answer 3-question general knowledge & tech quizzes or read sponsored finance articles for
-              15 seconds to claim instant available coins.
+              Answer 3-question general knowledge & fintech quizzes or read sponsored finance articles for
+              10 seconds to claim instant available coins.
             </p>
           </div>
 
@@ -1307,11 +1228,11 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               STEP 01 · GOOGLE OR EMAIL LOGIN
             </div>
             <div className="text-base font-bold text-slate-900 dark:text-white">
-              Sign In & Get +200 Welcome Coins
+              Sign In & Get +{settings.referralWelcomeBonusCoins} Welcome Coins
             </div>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
               Click <strong>Continue with Google</strong> or create an email account above. Your
-              account is stored in our high-speed Cloudflare D1 SQL database with +200 bonus coins.
+              account is stored in our Cloudflare D1 SQL database with +{settings.referralWelcomeBonusCoins} bonus coins.
             </p>
           </div>
           <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
@@ -1323,7 +1244,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
             </div>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
               Quizzes, streaks, and promo codes credit directly to <strong>Available Coins</strong>.
-              High-paying Offerwalls & Shortlinks clear automatically after our {settings.pendingHoldDays}-day anti-fraud hold.
+              High-paying Offerwalls clear automatically after our {settings.pendingHoldDays}-day anti-fraud hold.
             </p>
           </div>
           <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
@@ -1475,40 +1396,51 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                <th className="py-2.5 pr-4">Member</th>
-                <th className="py-2.5 px-4">Method</th>
-                <th className="py-2.5 px-4">Amount</th>
-                <th className="py-2.5 px-4">UTR / Voucher Reference</th>
-                <th className="py-2.5 pl-4 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {publicPayoutProofs.slice(0, 5).map((w) => (
-                <tr key={w.id}>
-                  <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
-                    {w.userName}
-                  </td>
-                  <td className="py-3 px-4 uppercase font-mono text-slate-500">
-                    {w.method.replace('_', ' ')}
-                  </td>
-                  <td className="py-3 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    ₹{w.amountInr.toFixed(2)}
-                  </td>
-                  <td className="py-3 px-4 font-mono text-slate-500">
-                    {w.utrOrVoucher || 'Verified Queue'}
-                  </td>
-                  <td className="py-3 pl-4 text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                    {w.status === 'approved' ? 'Paid ✓' : 'Processing'}
-                  </td>
+        {publicPayoutProofs.length === 0 ? (
+          <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-center space-y-1.5">
+            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              Live Public Ledger Ready — Zero Fake Payouts
+            </div>
+            <p className="text-xs text-slate-500">
+              Every real withdrawal requested by members will appear here live with its verified UTR / voucher reference.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                  <th className="py-2.5 pr-4">Member</th>
+                  <th className="py-2.5 px-4">Method</th>
+                  <th className="py-2.5 px-4">Amount</th>
+                  <th className="py-2.5 px-4">UTR / Voucher Reference</th>
+                  <th className="py-2.5 pl-4 text-right">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {publicPayoutProofs.slice(0, 5).map((w) => (
+                  <tr key={w.id}>
+                    <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
+                      {w.userName}
+                    </td>
+                    <td className="py-3 px-4 uppercase font-mono text-slate-500">
+                      {w.method.replace('_', ' ')}
+                    </td>
+                    <td className="py-3 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      ₹{w.amountInr.toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-slate-500">
+                      {w.utrOrVoucher || 'Verified Queue'}
+                    </td>
+                    <td className="py-3 pl-4 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                      {w.status === 'approved' ? 'Paid ✓' : 'Processing'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* FAQ Section */}
@@ -1518,7 +1450,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
             1. Minimum withdrawal kitna hai?
           </h3>
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Naye users ke liye pehla Starter Withdrawal sirf <strong>₹{settings.starterPayoutInr} (1,000 Coins)</strong> par unlock ho jata hai. Uske baad aap ₹50, ₹100, aur ₹250+ tiers me unlimited baar UPI, Bank, Gift Card, ya USDT me withdraw kar sakte hain.
+            Naye users ke liye pehla Starter Withdrawal sirf <strong>₹{settings.starterPayoutInr} (1,000 Coins)</strong> par unlock ho jata hai. Uske baad aap ₹50, ₹100, aur ₹500 tiers me unlimited baar UPI, Bank, Gift Card, ya USDT me withdraw kar sakte hain.
           </p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
@@ -1526,7 +1458,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
             2. Pending Balance Hold ({settings.pendingHoldDays} Days) kya hai?
           </h3>
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Offerwalls aur Shortlinks ke coins {settings.pendingHoldDays} din ke liye Pending Escrow me rehte hain taaki fake/VPN completions filter ho sakein. {settings.pendingHoldDays} din baad wo apne aap Available Balance me aa jate hain.
+            Offerwalls ke coins {settings.pendingHoldDays} din ke liye Pending Escrow me rehte hain taaki fake/VPN completions filter ho sakein. {settings.pendingHoldDays} din baad wo apne aap Available Balance me aa jate hain.
           </p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
@@ -1542,12 +1474,12 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
             4. Refer & Earn me kitna milta hai?
           </h3>
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Har dost ko invite karne par dost ko +200 Coins milte hain, aur jab wo apna pehla offer poora karta hai toh aapko <strong>+500 Coins (₹5) flat bonus + lifetime 10% commission</strong> milta hai!
+            Har dost ko invite karne par dost ko +{settings.referralWelcomeBonusCoins} Coins milte hain, aur jab wo apna pehla offer poora karta hai toh aapko <strong>+{settings.referralFlatBonusCoins} Coins (₹5) flat bonus + lifetime {settings.referralCommissionPercent}% commission</strong> milta hai!
           </p>
         </div>
       </div>
 
-      {/* Interactive Google Account Chooser & Google OAuth Client ID Modal */}
+      {/* Real Google Account Sign-In Fallback Modal */}
       {googleChooserOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xl">
@@ -1576,7 +1508,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                     Sign in with Google
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Choose an account to continue to {settings.siteName}.in
+                    Enter your Google account details to continue to {settings.siteName}.in
                   </p>
                 </div>
               </div>
@@ -1589,35 +1521,6 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               </button>
             </div>
 
-            {/* Quick 1-Tap Google Accounts */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (onGoogleAuth) {
-                    await onGoogleAuth({
-                      name: 'Aarav Verma',
-                      email: 'aarav@lootify.in',
-                      referralCodeInput: regRefCode,
-                    });
-                    setGoogleChooserOpen(false);
-                  }
-                }}
-                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 flex items-center justify-between text-left transition-colors"
-              >
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    Aarav Verma (Verified Earner)
-                  </div>
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    aarav@lootify.in · 1,840 Coins
-                  </div>
-                </div>
-                <span className="text-xs font-semibold text-emerald-500">Sign In →</span>
-              </button>
-            </div>
-
-            {/* Custom Google Account Input */}
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -1631,10 +1534,10 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                   setGoogleChooserOpen(false);
                 }
               }}
-              className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs"
+              className="space-y-3 text-xs"
             >
               <div className="font-semibold text-slate-700 dark:text-slate-300">
-                Or continue with any Gmail address (+200 Welcome Coins):
+                Continue with your Gmail address (+{settings.referralWelcomeBonusCoins} Welcome Coins):
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
@@ -1642,7 +1545,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                   required
                   value={customGoogleName}
                   onChange={(e) => setCustomGoogleName(e.target.value)}
-                  placeholder="Your Name"
+                  placeholder="Your Full Name"
                   className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
                 />
                 <input
@@ -1658,22 +1561,21 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                 type="submit"
                 className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
               >
-                Continue with Gmail Account →
+                Continue with Google Account →
               </button>
             </form>
 
             {/* Optional Real Google OAuth Client ID Config */}
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 text-[11px]">
               <div className="text-slate-500">
-                <strong>Optional (Admin):</strong> Paste Google Cloud OAuth Client ID (
-                <code>.apps.googleusercontent.com</code>) for live Google One-Tap popup:
+                <strong>Google OAuth Client ID:</strong>
               </div>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={googleClientId}
                   onChange={(e) => setGoogleClientId(e.target.value)}
-                  placeholder="123456789-xxxx.apps.googleusercontent.com"
+                  placeholder="881444436109-xxxx.apps.googleusercontent.com"
                   className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono"
                 />
                 <button
@@ -1694,4 +1596,3 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
     </div>
   );
 };
-

@@ -73,16 +73,9 @@ CREATE TABLE IF NOT EXISTS referrals (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- Default Admin Account (Email: admin@lootify.in | Password: admin123)
+-- Real Founder Admin Account (Email: sarthaksinghyadav1@gmail.com)
 INSERT OR IGNORE INTO users (
   id, name, email, password_hash, role, referral_code, available_coins, pending_coins, lifetime_earned_coins
 ) VALUES (
-  'usr_admin_1', 'Sarthak (Founder & Admin)', 'admin@lootify.in', 'admin123', 'admin', 'LOOT-ADMIN', 250000, 0, 250000
-);
-
--- Default Demo Earner Account (Email: aarav@lootify.in | Password: 123456)
-INSERT OR IGNORE INTO users (
-  id, name, email, password_hash, role, referral_code, available_coins, pending_coins, lifetime_earned_coins
-) VALUES (
-  'usr_earner_1', 'Aarav Verma', 'aarav@lootify.in', '123456', 'earner', 'LOOT-AARAV', 1840, 1450, 5290
+  'usr_admin_1', 'Sarthak (Founder & Admin)', 'sarthaksinghyadav1@gmail.com', 'admin123', 'admin', 'LOOTADMIN', 0, 0, 0
 );
