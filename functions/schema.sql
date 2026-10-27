@@ -1,12 +1,14 @@
 -- ============================================================================
 -- LOOTIFY — CLOUDFLARE D1 (SERVERLESS SQLITE) DATABASE SCHEMA (functions/schema.sql)
 -- Free Tier: 5,000,000 (50 Lakh) Reads/Day + 100,000 Writes/Day FREE
+-- Copy & Paste this entire file into Cloudflare D1 -> Console -> Execute
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL DEFAULT '',
   role TEXT DEFAULT 'earner',
   referral_code TEXT UNIQUE NOT NULL,
   referred_by TEXT,
@@ -69,4 +71,18 @@ CREATE TABLE IF NOT EXISTS referrals (
   total_commission_coins INTEGER DEFAULT 0,
   same_ip_flag INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Default Admin Account (Email: admin@lootify.in | Password: admin123)
+INSERT OR IGNORE INTO users (
+  id, name, email, password_hash, role, referral_code, available_coins, pending_coins, lifetime_earned_coins
+) VALUES (
+  'usr_admin_1', 'Sarthak (Founder & Admin)', 'admin@lootify.in', 'admin123', 'admin', 'LOOT-ADMIN', 250000, 0, 250000
+);
+
+-- Default Demo Earner Account (Email: aarav@lootify.in | Password: 123456)
+INSERT OR IGNORE INTO users (
+  id, name, email, password_hash, role, referral_code, available_coins, pending_coins, lifetime_earned_coins
+) VALUES (
+  'usr_earner_1', 'Aarav Verma', 'aarav@lootify.in', '123456', 'earner', 'LOOT-AARAV', 1840, 1450, 5290
 );

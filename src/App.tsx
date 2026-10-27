@@ -82,6 +82,23 @@ export default function App() {
     type: 'success' | 'error' | 'info';
   } | null>(null);
 
+  // Auth & Cloudflare Worker Connection Modal State
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authTab, setAuthTab] = useState<'login' | 'register' | 'database'>('login');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regReferral, setRegReferral] = useState('');
+  const [workerApiUrl, setWorkerApiUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem('lootify_worker_api_url') || '';
+    } catch {
+      return '';
+    }
+  });
+
   // Navigate to a website page and update browser URL / hash cleanly
   const navigateToPage = useCallback((page: PageRoute) => {
     setActivePage(page);
@@ -127,10 +144,21 @@ export default function App() {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  const resolveApiUrl = useCallback(
+    (endpoint: string) => {
+      const cleanBase = workerApiUrl.trim().replace(/\/+$/, '');
+      if (cleanBase && endpoint.startsWith('/api/')) {
+        return `${cleanBase}${endpoint}`;
+      }
+      return endpoint;
+    },
+    [workerApiUrl]
+  );
+
   const fetchBootstrap = useCallback(
     async (uid = currentUserId) => {
       try {
-        const res = await fetch(`/api/bootstrap?userId=${encodeURIComponent(uid)}`, {
+        const res = await fetch(resolveApiUrl(`/api/bootstrap?userId=${encodeURIComponent(uid)}`), {
           headers: { 'x-user-id': uid },
         });
         const contentType = res.headers.get('content-type') || '';
@@ -144,7 +172,7 @@ export default function App() {
         setData(getClientBootstrap(uid));
       }
     },
-    [currentUserId]
+    [currentUserId, resolveApiUrl]
   );
 
   useEffect(() => {
@@ -153,7 +181,7 @@ export default function App() {
 
   const apiPost = async (endpoint: string, body: any = {}) => {
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(resolveApiUrl(endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,6 +206,11 @@ export default function App() {
         setData(json.bootstrap);
       } else if (json.settings && json.currentUser) {
         setData(json);
+      } else if (json.user && json.user.id) {
+        // Sync Cloudflare Worker D1 user response into local client state
+        const fallbackPayload = handleClientApiAction('POST', endpoint, currentUserId, body);
+        setData(fallbackPayload);
+        return fallbackPayload;
       } else {
         await fetchBootstrap(currentUserId);
       }
@@ -198,7 +231,7 @@ export default function App() {
 
   const apiDelete = async (endpoint: string) => {
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(resolveApiUrl(endpoint), {
         method: 'DELETE',
         headers: { 'x-user-id': currentUserId },
       });
@@ -220,18 +253,58 @@ export default function App() {
     }
   };
 
-  const handleRegisterUser = async (name: string, email: string, referralCodeInput: string) => {
+  const handleRegisterUser = async (
+    name: string,
+    email: string,
+    referralCodeInput: string,
+    password = 'user123'
+  ) => {
     try {
-      const json = await apiPost('/api/auth/register', { name, email, referralCodeInput });
-      setCurrentUserId(json.currentUser.id);
-      localStorage.setItem('lootify_user_id', json.currentUser.id);
-      setData(json);
+      const json = await apiPost('/api/auth/register', {
+        name,
+        email,
+        password,
+        referralCodeInput,
+      });
+      const targetUser = json.currentUser || json.user;
+      if (targetUser) {
+        setCurrentUserId(targetUser.id);
+        localStorage.setItem('lootify_user_id', targetUser.id);
+      }
+      if (json.settings && json.currentUser) {
+        setData(json);
+      }
+      setAuthModalOpen(false);
+      navigateToPage('dashboard');
       notify(
-        `Welcome to ${json.settings.siteName}.in, ${json.currentUser.name}! Bonus coins added to your wallet.`,
+        `Welcome to Lootify.in, ${targetUser?.name || name}! +200 Bonus Coins added to your wallet.`,
         'success'
       );
     } catch (err: any) {
       notify(err.message || 'Registration failed', 'error');
+    }
+  };
+
+  const handleLoginUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const json = await apiPost('/api/auth/login', {
+        email: loginEmail,
+        password: loginPassword,
+      });
+      const targetUser = json.currentUser || json.user;
+      if (targetUser) {
+        setCurrentUserId(targetUser.id);
+        localStorage.setItem('lootify_user_id', targetUser.id);
+      }
+      if (json.settings && json.currentUser) {
+        setData(json);
+      }
+      setAuthModalOpen(false);
+      navigateToPage(targetUser?.role === 'admin' ? 'admin' : 'dashboard');
+      notify(`Signed in as ${targetUser?.name || loginEmail}`, 'success');
+    } catch (err: any) {
+      notify(err.message || 'Invalid login credentials', 'error');
     }
   };
 
@@ -424,12 +497,18 @@ export default function App() {
             })}
           </div>
 
-          {/* Right Controls: URL Path Preview + Role Switch + Theme Switch */}
+          {/* Right Controls: Sign In / Account + Role Switch + Theme Switch */}
           <div className="flex items-center gap-2 ml-auto shrink-0">
-            <span className="hidden xl:inline-block font-mono text-[11px] text-slate-500 bg-white dark:bg-slate-800 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700">
-              https://{settings.customDomain}
-              {activePage === 'home' ? '/' : `/${activePage}`}
-            </span>
+            <button
+              onClick={() => {
+                setAuthTab('login');
+                setAuthModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Sign In / Register ({currentUser.name.split(' ')[0]})</span>
+            </button>
 
             <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-0.5 rounded-lg">
               <button
@@ -691,6 +770,244 @@ export default function App() {
           <span>Zero Mobile App Required · 100% Browser Compatible</span>
         </div>
       </footer>
+
+      {/* Sign In / Create Account & Cloudflare D1 Database Connection Modal */}
+      {authModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-extrabold font-display text-slate-900 dark:text-white">
+                  {settings.siteName}.in Account & Database
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Powered by Cloudflare D1 SQL (Unlimited Users · Zero Auth Limits)
+                </p>
+              </div>
+              <button
+                onClick={() => setAuthModalOpen(false)}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
+              <button
+                onClick={() => setAuthTab('login')}
+                className={`py-2 rounded-lg transition-colors ${
+                  authTab === 'login'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => setAuthTab('register')}
+                className={`py-2 rounded-lg transition-colors ${
+                  authTab === 'register'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                Create Account
+              </button>
+              <button
+                onClick={() => setAuthTab('database')}
+                className={`py-2 rounded-lg transition-colors ${
+                  authTab === 'database'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                Connect DB
+              </button>
+            </div>
+
+            {authTab === 'login' && (
+              <form onSubmit={handleLoginUser} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="aarav@lootify.in or admin@lootify.in"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
+                >
+                  Sign In to Account →
+                </button>
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>Quick Test Accounts:</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginEmail('aarav@lootify.in');
+                        setLoginPassword('123456');
+                      }}
+                      className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                    >
+                      Fill Member
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginEmail('admin@lootify.in');
+                        setLoginPassword('admin123');
+                      }}
+                      className="text-amber-500 font-semibold hover:underline"
+                    >
+                      Fill Admin
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {authTab === 'register' && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleRegisterUser(regName, regEmail, regReferral, regPassword);
+                }}
+                className="space-y-3 text-xs"
+              >
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Your Full Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="e.g. Rohit Sharma"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="you@gmail.com"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Create Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    placeholder="Min 6 characters"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Referral Code (Optional — Get +200 Bonus Coins)
+                  </label>
+                  <input
+                    type="text"
+                    value={regReferral}
+                    onChange={(e) => setRegReferral(e.target.value.toUpperCase())}
+                    placeholder="LOOT-AARAV"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
+                >
+                  Create Free Account (+200 Coins) →
+                </button>
+              </form>
+            )}
+
+            {authTab === 'database' && (
+              <div className="space-y-3.5 text-xs">
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Paste your <strong>Cloudflare Worker URL</strong> below after setting up Cloudflare
+                  D1 (`functions/schema.sql` + `functions/worker.js`). Leave blank to run in Instant
+                  Browser Storage mode.
+                </p>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Cloudflare Worker Backend URL
+                  </label>
+                  <input
+                    type="url"
+                    value={workerApiUrl}
+                    onChange={(e) => setWorkerApiUrl(e.target.value)}
+                    placeholder="https://lootify-api.yourname.workers.dev"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono text-[11px]"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem('lootify_worker_api_url', workerApiUrl.trim());
+                      notify(
+                        workerApiUrl.trim()
+                          ? `Connected to Cloudflare Worker: ${workerApiUrl.trim()}`
+                          : 'Using Standalone Browser Database Mode',
+                        'success'
+                      );
+                      setAuthModalOpen(false);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
+                  >
+                    Save Database URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthModalOpen(false);
+                      navigateToPage('deploy-guide');
+                    }}
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold"
+                  >
+                    View SQL & Worker Code
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification */}
       {toast && (

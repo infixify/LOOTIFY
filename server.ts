@@ -1003,6 +1003,26 @@ async function startServer() {
     res.json(buildBootstrapPayload(db, newUser.id));
   });
 
+  app.post('/api/auth/login', (req: Request, res: Response) => {
+    const db = getDb();
+    const cleanEmail = String(req.body.email || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      return res.status(400).json({ error: 'Email is required to sign in.' });
+    }
+    const foundUser = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (!foundUser) {
+      return res.status(404).json({
+        error: 'No account found with this email. Please Create an Account first.',
+      });
+    }
+    if (foundUser.status === 'banned') {
+      return res.status(403).json({
+        error: 'This account has been suspended by Admin.',
+      });
+    }
+    res.json(buildBootstrapPayload(db, foundUser.id));
+  });
+
   // 3. Real S2S Offerwall Postback Webhook Endpoints (Notik.me & Lootably)
   // Example URL: /api/postback/notik?user_id=usr_earner_1&amount=850&txn_id=NTK123&status=1
   app.all('/api/postback/:provider', (req: Request, res: Response) => {

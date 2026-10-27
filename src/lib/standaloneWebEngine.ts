@@ -669,8 +669,13 @@ export function handleClientApiAction(
 
   if (endpoint === '/api/auth/register') {
     const { name, email, referralCodeInput } = body;
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const existing = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      throw new Error('This email is already registered. Please Sign In instead.');
+    }
     const newUserId = `usr_${Date.now()}`;
-    const myRefCode = `LOOT${String(name)
+    const myRefCode = `LOOT-${String(name)
       .replace(/[^a-zA-Z]/g, '')
       .toUpperCase()
       .slice(0, 5)}${Math.floor(10 + Math.random() * 89)}`;
@@ -678,7 +683,7 @@ export function handleClientApiAction(
     const newUser: UserProfile = {
       id: newUserId,
       name: String(name).trim(),
-      email: String(email).trim().toLowerCase(),
+      email: cleanEmail,
       role: 'earner',
       referralCode: myRefCode,
       referredBy: referralCodeInput || null,
@@ -701,8 +706,31 @@ export function handleClientApiAction(
       createdAt: new Date().toISOString(),
     };
     db.users.push(newUser);
+    db.ledger.unshift({
+      id: `ldg_welcome_${Date.now()}`,
+      userId: newUserId,
+      userName: newUser.name,
+      sourceType: 'referral_welcome',
+      title: `Welcome Signup Bonus (+${welcomeCoins} Coins)`,
+      amountCoins: welcomeCoins,
+      status: 'cleared',
+      createdAt: new Date().toISOString(),
+      unlocksAt: null,
+    });
     saveClientDb(db);
     return getClientBootstrap(newUserId);
+  }
+
+  if (endpoint === '/api/auth/login') {
+    const cleanEmail = String(body.email || '').trim().toLowerCase();
+    const foundUser = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (!foundUser) {
+      throw new Error('No account found with this email. Please Create an Account first.');
+    }
+    if (foundUser.status === 'banned') {
+      throw new Error('This account has been suspended by Admin.');
+    }
+    return getClientBootstrap(foundUser.id);
   }
 
   if (endpoint.startsWith('/api/postback/')) {
