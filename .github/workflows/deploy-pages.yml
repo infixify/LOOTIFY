@@ -1,4 +1,4 @@
-name: Deploy Lootify to GitHub Pages
+name: Deploy Lootify Website to GitHub Pages
 
 on:
   push:
@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  deploy-static-pages:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -24,24 +24,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build static frontend for GitHub Pages
-        run: npm run build
-
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload artifact
+      - name: Upload ready-to-serve HTML pages from ./site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './dist'
+          path: './site'
 
       - name: Deploy to GitHub Pages
         id: deployment

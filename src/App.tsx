@@ -48,8 +48,15 @@ const VALID_ROUTES: PageRoute[] = [
 ];
 
 function getInitialRouteFromUrl(): PageRoute {
-  const path = window.location.pathname.replace(/^\/+|\/+$/g, '') as PageRoute;
-  if (VALID_ROUTES.includes(path)) return path;
+  const hashClean = window.location.hash.replace(/^#\/?/, '').replace(/\.html$/, '') as PageRoute;
+  if (VALID_ROUTES.includes(hashClean)) return hashClean;
+
+  const segments = window.location.pathname
+    .split('/')
+    .filter(Boolean)
+    .map((s) => s.replace(/\.html$/, ''));
+  const lastSeg = (segments[segments.length - 1] || 'home') as PageRoute;
+  if (VALID_ROUTES.includes(lastSeg)) return lastSeg;
   return 'home';
 }
 
@@ -69,13 +76,12 @@ export default function App() {
     type: 'success' | 'error' | 'info';
   } | null>(null);
 
-  // Navigate to a website page and update real browser URL path
+  // Navigate to a website page and update browser URL / hash cleanly
   const navigateToPage = useCallback((page: PageRoute) => {
     setActivePage(page);
     setMobileMenuOpen(false);
-    const nextUrl = page === 'home' ? '/' : `/${page}`;
     try {
-      window.history.pushState({ page }, '', nextUrl);
+      window.location.hash = page === 'home' ? '' : `#/${page}`;
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
       // Fallback if inside sandboxed iframe
