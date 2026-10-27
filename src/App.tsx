@@ -318,12 +318,11 @@ export default function App() {
     }
   };
 
-  const handleLoginUser = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDirectLogin = async (emailInput: string, passwordInput: string) => {
     try {
       const json = await apiPost('/api/auth/login', {
-        email: loginEmail,
-        password: loginPassword,
+        email: emailInput,
+        password: passwordInput,
       });
       const targetUser = json.currentUser || json.user;
       if (targetUser) {
@@ -335,9 +334,41 @@ export default function App() {
       }
       setAuthModalOpen(false);
       navigateToPage(targetUser?.role === 'admin' ? 'admin' : 'dashboard');
-      notify(`Signed in as ${targetUser?.name || loginEmail}`, 'success');
+      notify(`Signed in as ${targetUser?.name || emailInput}`, 'success');
     } catch (err: any) {
       notify(err.message || 'Invalid login credentials', 'error');
+    }
+  };
+
+  const handleLoginUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleDirectLogin(loginEmail, loginPassword);
+  };
+
+  const handleGoogleAuth = async (params: {
+    name: string;
+    email: string;
+    referralCodeInput?: string;
+    credential?: string;
+  }) => {
+    try {
+      const json = await apiPost('/api/auth/google', params);
+      const targetUser = json.currentUser || json.user;
+      if (targetUser) {
+        setCurrentUserId(targetUser.id);
+        localStorage.setItem('lootify_user_id', targetUser.id);
+      }
+      if (json.settings && json.currentUser) {
+        setData(json);
+      }
+      setAuthModalOpen(false);
+      navigateToPage(targetUser?.role === 'admin' ? 'admin' : 'dashboard');
+      notify(
+        `Signed in with Google as ${targetUser?.name || params.name || params.email}!`,
+        'success'
+      );
+    } catch (err: any) {
+      notify(err.message || 'Google Sign-In failed', 'error');
     }
   };
 
@@ -671,6 +702,10 @@ export default function App() {
             activePage={activePage}
             onNavigate={navigateToPage}
             onRegisterUser={handleRegisterUser}
+            onLoginUser={handleDirectLogin}
+            onGoogleAuth={handleGoogleAuth}
+            theme={theme}
+            onToggleTheme={toggleTheme}
             notify={notify}
           />
         ) : (

@@ -156,6 +156,111 @@ export default {
       }
 
       // ======================================================================
+      // 2B. GOOGLE SIGN-IN / ONE-TAP OAUTH (POST /api/auth/google)
+      // Supports both Google Identity Services JWT credential & direct Google profile
+      // ======================================================================
+      if (url.pathname === "/api/auth/google" && request.method === "POST") {
+        const body = await request.json();
+        let email = (body.email || "").trim().toLowerCase();
+        let name = (body.name || "").trim();
+        let googleSub = (body.googleId || "").trim();
+        const referralCodeInput = (body.referralCodeInput || "").trim().toUpperCase();
+
+        // Decode Google Identity Services JWT credential if provided
+        if (body.credential) {
+          try {
+            const parts = String(body.credential).split(".");
+            if (parts.length === 3) {
+              const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+              const decoded = JSON.parse(payloadJson);
+              email = (decoded.email || email).toLowerCase();
+              name = decoded.name || decoded.given_name || name || email.split("@")[0];
+              googleSub = decoded.sub || googleSub;
+            }
+          } catch {
+            // Fallback to body fields
+          }
+        }
+
+        if (!email) {
+          return Response.json(
+            { error: "Valid Google email is required." },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        if (!name) {
+          name = email.split("@")[0];
+        }
+
+        const existingUser = await env.DB.prepare("SELECT * FROM users WHERE email = ?")
+          .bind(email)
+          .first();
+
+        if (existingUser) {
+          if (existingUser.status === "banned") {
+            return Response.json(
+              { error: "This account has been suspended by Admin." },
+              { status: 403, headers: corsHeaders }
+            );
+          }
+          return Response.json(
+            { ok: true, user: existingUser, isNewUser: false },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+
+        const userId = "usr_g_" + Date.now();
+        const cleanPrefix = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 5) || "USER";
+        const referralCode = "LOOT-" + cleanPrefix + Math.floor(100 + Math.random() * 900);
+        const passwordHash = await hashPassword("google_oauth_" + (googleSub || email));
+        const welcomeBonus = 200;
+
+        let referredByCode = null;
+        if (referralCodeInput) {
+          const referrer = await env.DB.prepare(
+            "SELECT id, referral_code FROM users WHERE referral_code = ?"
+          )
+            .bind(referralCodeInput)
+            .first();
+
+          if (referrer) {
+            referredByCode = referrer.referral_code;
+            await env.DB.prepare(
+              "INSERT INTO referrals (id, referrer_id, invitee_id, invitee_name, invitee_email, activated, flat_bonus_coins, total_commission_coins) VALUES (?, ?, ?, ?, ?, 0, 500, 0)"
+            )
+              .bind("ref_" + Date.now(), referrer.id, userId, name, email)
+              .run();
+          }
+        }
+
+        await env.DB.prepare(
+          `INSERT INTO users (
+            id, name, email, password_hash, role, referral_code, referred_by,
+            available_coins, pending_coins, lifetime_earned_coins
+          ) VALUES (?, ?, ?, ?, 'earner', ?, ?, ?, 0, ?)`
+        )
+          .bind(userId, name, email, passwordHash, referralCode, referredByCode, welcomeBonus, welcomeBonus)
+          .run();
+
+        await env.DB.prepare(
+          `INSERT INTO ledger_entries (
+            id, user_id, user_name, source_type, title, amount_coins, status
+          ) VALUES (?, ?, ?, 'signup_bonus', 'Google Sign-In Welcome Bonus (+200 Coins)', ?, 'credited')`
+        )
+          .bind("ldg_gwelcome_" + Date.now(), userId, name, welcomeBonus)
+          .run();
+
+        const createdUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+          .bind(userId)
+          .first();
+
+        return Response.json(
+          { ok: true, user: createdUser, isNewUser: true },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      // ======================================================================
       // 3. S2S OFFERWALL POSTBACK WEBHOOK (Notik.me / Lootably / Monetag)
       // URL: https://your-worker.workers.dev/api/postback/notik?user_id={user_id}&amount={amount}&txn_id={txn_id}&status=1
       // ======================================================================

@@ -29,7 +29,21 @@ interface PublicPagesProps {
   data: BootstrapPayload;
   activePage: PageRoute;
   onNavigate: (page: PageRoute) => void;
-  onRegisterUser: (name: string, email: string, referralCode: string) => Promise<void>;
+  onRegisterUser: (
+    name: string,
+    email: string,
+    referralCode: string,
+    password?: string
+  ) => Promise<void>;
+  onLoginUser?: (email: string, password: string) => Promise<void>;
+  onGoogleAuth?: (params: {
+    name: string;
+    email: string;
+    referralCodeInput?: string;
+    credential?: string;
+  }) => Promise<void>;
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
   notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -38,6 +52,10 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
   activePage,
   onNavigate,
   onRegisterUser,
+  onLoginUser,
+  onGoogleAuth,
+  theme = 'dark',
+  onToggleTheme,
   notify,
 }) => {
   const { settings, publicPayoutProofs, leaderboard } = data;
@@ -47,11 +65,29 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
   const [calcShortlinksPerDay, setCalcShortlinksPerDay] = useState(4);
   const [calcActiveReferrals, setCalcActiveReferrals] = useState(10);
 
-  // Registration Form State
+  // Landing Page Hero Auth Card State ('register' | 'login')
+  const [heroAuthMode, setHeroAuthMode] = useState<'register' | 'login'>('register');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regRefCode, setRegRefCode] = useState('LOOTAARAV');
+  const [regPassword, setRegPassword] = useState('');
+  const [regRefCode, setRegRefCode] = useState('LOOT-AARAV');
   const [regSubmitting, setRegSubmitting] = useState(false);
+
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
+
+  // Google Sign-In Account Picker & Client ID Setup State
+  const [googleChooserOpen, setGoogleChooserOpen] = useState(false);
+  const [customGoogleName, setCustomGoogleName] = useState('');
+  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
+  const [googleClientId, setGoogleClientId] = useState<string>(() => {
+    try {
+      return localStorage.getItem('lootify_google_client_id') || '';
+    } catch {
+      return '';
+    }
+  });
 
   // Payout Proof Filter
   const [proofFilter, setProofFilter] = useState<'all' | PayoutMethodType>('all');
@@ -96,13 +132,54 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
     }
     setRegSubmitting(true);
     try {
-      await onRegisterUser(regName, regEmail, regRefCode);
+      await onRegisterUser(regName, regEmail, regRefCode, regPassword || 'user123');
       setRegName('');
       setRegEmail('');
+      setRegPassword('');
       onNavigate('dashboard');
     } finally {
       setRegSubmitting(false);
     }
+  };
+
+  const handleHeroLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail.trim() || !loginPassword.trim()) {
+      notify('Please enter your email and password.', 'error');
+      return;
+    }
+    setLoginSubmitting(true);
+    try {
+      if (onLoginUser) {
+        await onLoginUser(loginEmail, loginPassword);
+      }
+    } finally {
+      setLoginSubmitting(false);
+    }
+  };
+
+  const triggerGoogleSignIn = () => {
+    const cleanClientId = googleClientId.trim();
+    const win = window as any;
+    if (cleanClientId && win.google?.accounts?.id) {
+      win.google.accounts.id.initialize({
+        client_id: cleanClientId,
+        callback: async (response: any) => {
+          if (response?.credential && onGoogleAuth) {
+            await onGoogleAuth({
+              name: '',
+              email: '',
+              referralCodeInput: regRefCode,
+              credential: response.credential,
+            });
+          }
+        },
+      });
+      win.google.accounts.id.prompt();
+      return;
+    }
+    // Open interactive Google Account Chooser modal (works immediately with 0 setup!)
+    setGoogleChooserOpen(true);
   };
 
   if (activePage === 'payout-proofs') {
@@ -697,57 +774,105 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
 
   // Default: HOME / LANDING PAGE ('home')
   return (
-    <div className="space-y-12">
-      {/* Hero Split Section */}
+    <div className="space-y-14">
+      {/* Top Landing Page Welcome Bar with Theme Toggle & Live Status */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+            LIVE · INDIA & GLOBAL
+          </span>
+          <span className="text-slate-600 dark:text-slate-300 font-medium">
+            First UPI / Paytm / Gift Card Withdrawal starts at just{' '}
+            <strong className="text-emerald-600 dark:text-emerald-400">
+              ₹{settings.starterPayoutInr} ({settings.starterPayoutInr * settings.coinsPerInr} Coins)
+            </strong>
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3 ml-auto">
+          {onToggleTheme && (
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-emerald-500 transition-colors"
+            >
+              {theme === 'dark' ? '☀ Switch to Light Theme' : '🌙 Switch to Dark Theme'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onNavigate('dashboard')}
+            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+          >
+            Enter Member Dashboard →
+          </button>
+        </div>
+      </div>
+
+      {/* Hero Split Section: Value Proposition (Left) + Google Sign-In & Login/Signup Card (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-        <div className="lg:col-span-7 flex flex-col justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 md:p-8 space-y-6">
+        <div className="lg:col-span-7 flex flex-col justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-9 space-y-6 shadow-xs">
           <div className="space-y-4">
-            <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              Verified Indian & Global GPT Platform · ₹{settings.starterPayoutInr} Instant Starter
-              Cashout
+            <div className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+              {settings.siteName}.in · Official Multi-Earning & Rewards Website
             </div>
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
-              Complete Tasks, Shortlinks & Offers. Withdraw Real Cash via UPI & Crypto.
+              Turn Your Daily Free Time Into Instant UPI, Bank & Gift Card Cashouts.
             </h1>
             <p className="text-base text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
-              <strong>{settings.siteName}</strong> lets you earn real daily rewards from Notik.me,
-              Lootably, ShrinkMe.io, GPLinks, Paid Quizzes, and a{' '}
-              <strong>{settings.referralCommissionPercent}% Lifetime Refer & Earn</strong> system—with
-              your first withdrawal unlocked at just{' '}
-              <strong>
-                ₹{settings.starterPayoutInr} (
-                {(settings.starterPayoutInr * settings.coinsPerInr).toLocaleString()} Coins)
-              </strong>
-              .
+              Complete verified offers on <strong>Notik.me & Lootably</strong>, solve daily{' '}
+              <strong>ShrinkMe & GPLinks</strong> shortlinks, play timed trivia quizzes, and earn{' '}
+              <strong>{settings.referralCommissionPercent}% lifetime passive commission</strong> from
+              every friend you invite.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          {/* 3 Key Highlights */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+              <div className="text-xs text-slate-500 dark:text-slate-400">Starter Cashout</div>
+              <div className="text-lg font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                ₹{settings.starterPayoutInr}.00 Minimum
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Instant UPI & Gift Cards</div>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+              <div className="text-xs text-slate-500 dark:text-slate-400">Welcome Bonus</div>
+              <div className="text-lg font-extrabold font-mono text-amber-600 dark:text-amber-400 mt-0.5">
+                +{settings.referralWelcomeBonusCoins} Coins
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Credited on Google Sign-In</div>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+              <div className="text-xs text-slate-500 dark:text-slate-400">Refer & Earn</div>
+              <div className="text-lg font-extrabold font-mono text-slate-900 dark:text-white mt-0.5">
+                ₹5 + {settings.referralCommissionPercent}% Life
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">3-Layer Viral Commission</div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             <button
-              onClick={() => onNavigate('dashboard')}
-              className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
+              type="button"
+              onClick={triggerGoogleSignIn}
+              className="inline-flex items-center gap-2.5 px-5 py-3 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors whitespace-nowrap shrink-0 shadow-xs"
             >
-              Open Earning Dashboard
+              <span>Continue with Google (+200 Coins)</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => onNavigate('offerwalls')}
-              className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0"
+              type="button"
+              onClick={() => onNavigate('payout-proofs')}
+              className="inline-flex items-center gap-2 px-4 py-3 text-xs font-semibold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors whitespace-nowrap shrink-0"
             >
-              Explore Offerwalls & Shortlinks
-            </button>
-            <button
-              onClick={() => onNavigate('deploy-guide')}
-              className="inline-flex items-center gap-2 px-4 py-3 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline whitespace-nowrap shrink-0"
-            >
-              <Globe className="w-4 h-4" />
-              GitHub + Custom Domain Guide
+              View Live Payment Proofs
             </button>
           </div>
 
           {/* Partner Network Strip */}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
-            <span>Integrated Monetization & Payout Partners:</span>
+            <span>Official Ad & Payout Partners:</span>
             <div className="flex flex-wrap items-center gap-3 font-mono font-semibold text-slate-700 dark:text-slate-300">
               <span>Notik.me</span>
               <span>·</span>
@@ -759,78 +884,201 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               <span>·</span>
               <span>Monetag</span>
               <span>·</span>
-              <span>UPI / USDT</span>
+              <span>UPI / Paytm / USDT</span>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Instant Sign-Up / Referral Bonus Card */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 md:p-8 flex flex-col justify-between space-y-6">
-          <div className="space-y-2">
-            <p className="text-xs font-mono font-semibold text-amber-600 dark:text-amber-400">
-              INSTANT JOINING BONUS · +{settings.referralWelcomeBonusCoins} COINS (₹
-              {(settings.referralWelcomeBonusCoins / settings.coinsPerInr).toFixed(0)})
-            </p>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-              Create Your Free Earner Account
+        {/* Right Column: Embedded Google Sign-In + Email Sign-Up / Login Card */}
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 flex flex-col justify-between space-y-5 shadow-xs">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-mono font-semibold text-amber-600 dark:text-amber-400">
+                INSTANT BONUS · +{settings.referralWelcomeBonusCoins} COINS
+              </span>
+              <span className="text-[11px] font-mono text-slate-500">100 Coins = ₹1.00</span>
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
+              {heroAuthMode === 'register'
+                ? 'Join Lootify.in for Free'
+                : 'Sign In to Your Lootify Wallet'}
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Enter a referral code to start with {settings.referralWelcomeBonusCoins} free bonus
-              coins toward your ₹{settings.starterPayoutInr} starter UPI cashout.
-            </p>
-          </div>
 
-          <form onSubmit={handleRegisterSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={regName}
-                onChange={(e) => setRegName(e.target.value)}
-                placeholder="e.g. Rohit Sharma"
-                className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">Email Address</label>
-              <input
-                type="email"
-                required
-                value={regEmail}
-                onChange={(e) => setRegEmail(e.target.value)}
-                placeholder="rohit@gmail.com"
-                className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">
-                Referral Code (Optional — Unlocks +{settings.referralWelcomeBonusCoins} Coins)
-              </label>
-              <input
-                type="text"
-                value={regRefCode}
-                onChange={(e) => setRegRefCode(e.target.value.toUpperCase())}
-                placeholder="LOOTAARAV"
-                className="w-full px-3.5 py-2.5 text-sm font-mono uppercase rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-              />
-            </div>
+            {/* 1-Click Official Google Sign-In Button */}
             <button
-              type="submit"
-              disabled={regSubmitting}
-              className="w-full py-3 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+              type="button"
+              onClick={triggerGoogleSignIn}
+              className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-900 dark:text-white text-sm font-bold flex items-center justify-center gap-3 transition-colors shadow-2xs"
             >
-              {regSubmitting
-                ? 'Creating Account...'
-                : `Claim +${settings.referralWelcomeBonusCoins} Bonus Coins & Start Earning`}
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#EA4335"
+                  d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"
+                />
+                <path
+                  fill="#4285F4"
+                  d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.8C3.5 21.4 7.4 24 12 24z"
+                />
+              </svg>
+              <span>Continue with Google</span>
             </button>
-          </form>
 
-          <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-            <span>100 Coins = ₹1.00 INR</span>
-            <span>·</span>
-            <span>No App Install Required (100% Web)</span>
+            <div className="flex items-center gap-3 text-[11px] text-slate-400">
+              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+              <span>OR USE EMAIL ACCOUNT</span>
+              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+            </div>
+
+            {/* Mode Switcher: Create Account vs Sign In */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setHeroAuthMode('register')}
+                className={`py-2 rounded-lg transition-colors ${
+                  heroAuthMode === 'register'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                Create Account
+              </button>
+              <button
+                type="button"
+                onClick={() => setHeroAuthMode('login')}
+                className={`py-2 rounded-lg transition-colors ${
+                  heroAuthMode === 'login'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                Sign In (Login)
+              </button>
+            </div>
           </div>
+
+          {heroAuthMode === 'register' ? (
+            <form onSubmit={handleRegisterSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  placeholder="e.g. Rohit Sharma"
+                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Email Address</label>
+                <input
+                  type="email"
+                  required
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  placeholder="rohit@gmail.com"
+                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-medium mb-1">Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    placeholder="Min 6 chars"
+                    className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Referral Code</label>
+                  <input
+                    type="text"
+                    value={regRefCode}
+                    onChange={(e) => setRegRefCode(e.target.value.toUpperCase())}
+                    placeholder="LOOT-AARAV"
+                    className="w-full px-3.5 py-2 text-sm font-mono uppercase rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={regSubmitting}
+                className="w-full py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors"
+              >
+                {regSubmitting
+                  ? 'Creating Account...'
+                  : `Create Free Account (+${settings.referralWelcomeBonusCoins} Coins)`}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleHeroLoginSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Registered Email</label>
+                <input
+                  type="email"
+                  required
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="aarav@lootify.in or admin@lootify.in"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loginSubmitting}
+                className="w-full py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors"
+              >
+                {loginSubmitting ? 'Signing In...' : 'Sign In to Dashboard →'}
+              </button>
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                <span>1-Click Demo Login:</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginEmail('aarav@lootify.in');
+                      setLoginPassword('123456');
+                    }}
+                    className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                  >
+                    Fill Earner
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginEmail('admin@lootify.in');
+                      setLoginPassword('admin123');
+                    }}
+                    className="text-amber-600 dark:text-amber-400 font-semibold hover:underline"
+                  >
+                    Fill Admin
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
         </div>
       </div>
 
@@ -861,9 +1109,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
           <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white mt-1">
             5 Instant Rails
           </p>
-          <p className="text-xs text-slate-500 mt-1">
-            UPI · Bank · Gift Cards · Paytm · USDT
-          </p>
+          <p className="text-xs text-slate-500 mt-1">UPI · Bank · Gift Cards · Paytm · USDT</p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
           <p className="text-xs text-slate-500 dark:text-slate-400">Active Registered Earners</p>
@@ -876,8 +1122,189 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
         </div>
       </div>
 
+      {/* Section: 6 Ways to Earn Real Cash Daily */}
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400 uppercase">
+              6 Verified Earning Engines
+            </p>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white mt-1">
+              Everything You Can Do to Earn Daily on {settings.siteName}.in
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('offerwalls')}
+            className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+          >
+            View All Live Offers & Tasks →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                01 · OFFERWALLS
+              </span>
+              <span className="text-xs font-mono font-semibold text-slate-500">
+                500 – 25,000 Coins
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              Notik.me, Lootably & AdGate Offers
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              Install trending apps, test mobile games, and complete verified surveys. Server-to-Server
+              (S2S) postbacks credit coins automatically into your wallet.
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
+                02 · PAID SHORTLINKS
+              </span>
+              <span className="text-xs font-mono font-semibold text-slate-500">
+                70 – 100 Coins / Link
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              ShrinkMe.io & GPLinks Daily Links
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              Solve high-CPM Indian shortlinks in 10–15 seconds. Protected by a 24-hour per-IP cooldown
+              so CPM rates stay high and payouts remain instant.
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                03 · 3-LAYER REFER & EARN
+              </span>
+              <span className="text-xs font-mono font-semibold text-slate-500">
+                500 Coins + 10% Life
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              Passive Lifetime Referral Income
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              Your friend gets +200 Coins on signup, you get +500 Coins (₹5) on their first offer, plus
+              10% lifetime commission on everything they earn forever.
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
+                04 · SOCIAL MICRO-TASKS
+              </span>
+              <span className="text-xs font-mono font-semibold text-slate-500">
+                150 – 600 Coins
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              Telegram, YouTube & App Reviews
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              Join official channels, watch sponsor videos, or post honest reviews. Submit your
+              username or proof link for rapid Admin verification.
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                05 · QUIZZES & ARTICLES
+              </span>
+              <span className="text-xs font-mono font-semibold text-slate-500">
+                50 – 150 Coins
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              Timed Trivia & Read-to-Earn Guides
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              Answer 3-question general knowledge & tech quizzes or read sponsored finance articles for
+              15 seconds to claim instant available coins.
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
+                06 · STREAKS, SPIN & LIFAFA
+              </span>
+              <span className="text-xs font-mono font-semibold text-slate-500">
+                Daily Free Coins
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              7-Day Check-In, Lucky Wheel & Codes
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              Maintain your 7-day login streak, spin the daily wheel for guaranteed coins, and redeem
+              limited-claim Lifafa promo codes dropped by Admin.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Section: 3-Step How It Works */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 space-y-6">
+        <div>
+          <p className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400 uppercase">
+            Simple 3-Step Workflow
+          </p>
+          <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+            How Sign-In, Pending Escrow & Instant UPI Withdrawals Work
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
+          <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
+            <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+              STEP 01 · GOOGLE OR EMAIL LOGIN
+            </div>
+            <div className="text-base font-bold text-slate-900 dark:text-white">
+              Sign In & Get +200 Welcome Coins
+            </div>
+            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+              Click <strong>Continue with Google</strong> or create an email account above. Your
+              account is stored in our high-speed Cloudflare D1 SQL database with +200 bonus coins.
+            </p>
+          </div>
+          <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
+            <div className="font-mono font-bold text-amber-600 dark:text-amber-400">
+              STEP 02 · COMPLETE OFFERS & LINKS
+            </div>
+            <div className="text-base font-bold text-slate-900 dark:text-white">
+              Earn Available & Escrow Coins
+            </div>
+            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+              Quizzes, streaks, and promo codes credit directly to <strong>Available Coins</strong>.
+              High-paying Offerwalls & Shortlinks clear automatically after our {settings.pendingHoldDays}-day anti-fraud hold.
+            </p>
+          </div>
+          <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
+            <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+              STEP 03 · WITHDRAW REAL CASH
+            </div>
+            <div className="text-base font-bold text-slate-900 dark:text-white">
+              Cashout from ₹{settings.starterPayoutInr} via UPI / Crypto
+            </div>
+            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+              Unlock your starter withdrawal at just ₹{settings.starterPayoutInr} (1,000 Coins) via
+              UPI ID, Bank IMPS, Google Play / Amazon Gift Cards, Paytm, or USDT (TRC20/BEP20).
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Interactive Daily & Monthly Earning Potential Calculator */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 md:p-8">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-7 space-y-6">
             <div>
@@ -980,14 +1407,278 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
             </div>
 
             <button
-              onClick={() => onNavigate('offerwalls')}
+              type="button"
+              onClick={triggerGoogleSignIn}
               className="w-full py-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
             >
-              Start Completing Tasks Now
+              Sign In with Google & Start Earning Now →
             </button>
           </div>
         </div>
       </div>
+
+      {/* Live Recent Payout Proofs Preview */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+              LIVE VERIFIED WITHDRAWALS
+            </p>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">
+              Recent UPI, Bank & Gift Card Payouts
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('payout-proofs')}
+            className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+          >
+            See Full Public Ledger →
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                <th className="py-2.5 pr-4">Member</th>
+                <th className="py-2.5 px-4">Method</th>
+                <th className="py-2.5 px-4">Amount</th>
+                <th className="py-2.5 px-4">UTR / Voucher Reference</th>
+                <th className="py-2.5 pl-4 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {publicPayoutProofs.slice(0, 5).map((w) => (
+                <tr key={w.id}>
+                  <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
+                    {w.userName}
+                  </td>
+                  <td className="py-3 px-4 uppercase font-mono text-slate-500">
+                    {w.method.replace('_', ' ')}
+                  </td>
+                  <td className="py-3 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    ₹{w.amountInr.toFixed(2)}
+                  </td>
+                  <td className="py-3 px-4 font-mono text-slate-500">
+                    {w.utrOrVoucher || 'Verified Queue'}
+                  </td>
+                  <td className="py-3 pl-4 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                    {w.status === 'approved' ? 'Paid ✓' : 'Processing'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* FAQ Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            1. Minimum withdrawal kitna hai?
+          </h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            Naye users ke liye pehla Starter Withdrawal sirf <strong>₹{settings.starterPayoutInr} (1,000 Coins)</strong> par unlock ho jata hai. Uske baad aap ₹50, ₹100, aur ₹250+ tiers me unlimited baar UPI, Bank, Gift Card, ya USDT me withdraw kar sakte hain.
+          </p>
+        </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            2. Pending Balance Hold ({settings.pendingHoldDays} Days) kya hai?
+          </h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            Offerwalls aur Shortlinks ke coins {settings.pendingHoldDays} din ke liye Pending Escrow me rehte hain taaki fake/VPN completions filter ho sakein. {settings.pendingHoldDays} din baad wo apne aap Available Balance me aa jate hain.
+          </p>
+        </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            3. Google Sign-In kaise kaam karta hai?
+          </h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            Aap upar <strong>Continue with Google</strong> button daba kar 1-click me apna Gmail account connect kar sakte hain. Naye account par turant +{settings.referralWelcomeBonusCoins} Bonus Coins milte hain.
+          </p>
+        </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            4. Refer & Earn me kitna milta hai?
+          </h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            Har dost ko invite karne par dost ko +200 Coins milte hain, aur jab wo apna pehla offer poora karta hai toh aapko <strong>+500 Coins (₹5) flat bonus + lifetime 10% commission</strong> milta hai!
+          </p>
+        </div>
+      </div>
+
+      {/* Interactive Google Account Chooser & Google OAuth Client ID Modal */}
+      {googleChooserOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#EA4335"
+                    d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"
+                  />
+                  <path
+                    fill="#4285F4"
+                    d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.8C3.5 21.4 7.4 24 12 24z"
+                  />
+                </svg>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Sign in with Google
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Choose an account to continue to {settings.siteName}.in
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGoogleChooserOpen(false)}
+                className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick 1-Tap Google Accounts */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (onGoogleAuth) {
+                    await onGoogleAuth({
+                      name: 'Sarthak (Founder & Admin)',
+                      email: 'admin@lootify.in',
+                      referralCodeInput: regRefCode,
+                    });
+                    setGoogleChooserOpen(false);
+                  }
+                }}
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 flex items-center justify-between text-left transition-colors"
+              >
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">
+                    Sarthak Singh (Founder Admin)
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    sarthaksinghyadav1@gmail.com · Admin Role
+                  </div>
+                </div>
+                <span className="text-xs font-semibold text-amber-500">Admin →</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (onGoogleAuth) {
+                    await onGoogleAuth({
+                      name: 'Aarav Verma',
+                      email: 'aarav@lootify.in',
+                      referralCodeInput: regRefCode,
+                    });
+                    setGoogleChooserOpen(false);
+                  }
+                }}
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 flex items-center justify-between text-left transition-colors"
+              >
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">
+                    Aarav Verma (Verified Earner)
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    aarav@lootify.in · 1,840 Coins
+                  </div>
+                </div>
+                <span className="text-xs font-semibold text-emerald-500">Sign In →</span>
+              </button>
+            </div>
+
+            {/* Custom Google Account Input */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!customGoogleEmail.trim()) return;
+                if (onGoogleAuth) {
+                  await onGoogleAuth({
+                    name: customGoogleName.trim() || customGoogleEmail.split('@')[0],
+                    email: customGoogleEmail.trim(),
+                    referralCodeInput: regRefCode,
+                  });
+                  setGoogleChooserOpen(false);
+                }
+              }}
+              className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs"
+            >
+              <div className="font-semibold text-slate-700 dark:text-slate-300">
+                Or continue with any Gmail address (+200 Welcome Coins):
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  required
+                  value={customGoogleName}
+                  onChange={(e) => setCustomGoogleName(e.target.value)}
+                  placeholder="Your Name"
+                  className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                />
+                <input
+                  type="email"
+                  required
+                  value={customGoogleEmail}
+                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                  placeholder="yourname@gmail.com"
+                  className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
+              >
+                Continue with Gmail Account →
+              </button>
+            </form>
+
+            {/* Optional Real Google OAuth Client ID Config */}
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 text-[11px]">
+              <div className="text-slate-500">
+                <strong>Optional (Admin):</strong> Paste Google Cloud OAuth Client ID (
+                <code>.apps.googleusercontent.com</code>) for live Google One-Tap popup:
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={googleClientId}
+                  onChange={(e) => setGoogleClientId(e.target.value)}
+                  placeholder="123456789-xxxx.apps.googleusercontent.com"
+                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('lootify_google_client_id', googleClientId.trim());
+                    notify('Google OAuth Client ID saved!', 'success');
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 font-semibold"
+                >
+                  Save ID
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

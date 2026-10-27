@@ -54,8 +54,8 @@ function createInitialDatabase(): DatabaseSchema {
   return {
     settings: {
       siteName: 'Lootify',
-      customDomain: 'lootify.in',
-      apiSubdomain: 'api.lootify.in',
+      customDomain: 'lootify.eternant.c0m.to',
+      apiSubdomain: 'lootify-api.sarthaksinghyadav1.workers.dev',
       defaultTheme: 'dark',
       coinsPerInr: 100, // 100 Coins = ₹1
       pendingHoldDays: 3, // 3-day anti-chargeback hold
@@ -1021,6 +1021,84 @@ async function startServer() {
       });
     }
     res.json(buildBootstrapPayload(db, foundUser.id));
+  });
+
+  app.post('/api/auth/google', (req: Request, res: Response) => {
+    const db = getDb();
+    let cleanEmail = String(req.body.email || '').trim().toLowerCase();
+    let cleanName = String(req.body.name || '').trim();
+    if (req.body.credential) {
+      try {
+        const parts = String(req.body.credential).split('.');
+        if (parts.length === 3) {
+          const decoded = JSON.parse(
+            Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8')
+          );
+          cleanEmail = String(decoded.email || cleanEmail).toLowerCase();
+          cleanName = String(decoded.name || decoded.given_name || cleanName);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!cleanEmail) {
+      return res.status(400).json({ error: 'Valid Google email is required.' });
+    }
+    const existing = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      if (existing.status === 'banned') {
+        return res.status(403).json({ error: 'This account has been suspended by Admin.' });
+      }
+      return res.json(buildBootstrapPayload(db, existing.id));
+    }
+
+    const displayName = cleanName || cleanEmail.split('@')[0];
+    const newUserId = `usr_g_${Date.now()}`;
+    const myRefCode = `LOOT-${displayName
+      .replace(/[^a-zA-Z]/g, '')
+      .toUpperCase()
+      .slice(0, 5)}${Math.floor(10 + Math.random() * 89)}`;
+    const welcomeCoins = db.settings.referralWelcomeBonusCoins;
+
+    const newUser: UserProfile = {
+      id: newUserId,
+      name: displayName,
+      email: cleanEmail,
+      role: 'earner',
+      referralCode: myRefCode,
+      referredBy: req.body.referralCodeInput || null,
+      referralActivated: false,
+      availableCoins: welcomeCoins,
+      pendingCoins: 0,
+      lifetimeEarnedCoins: welcomeCoins,
+      totalWithdrawnInr: 0,
+      completedFirstPayout: false,
+      offerwallsCompleted: 0,
+      shortlinksCompleted: 0,
+      tasksCompleted: 0,
+      streakDays: 0,
+      lastCheckInDate: null,
+      lastSpinDate: null,
+      claimedMilestones: [],
+      ipAddress: '103.21.140.12',
+      deviceFingerprint: 'fp_google_oauth',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    db.users.push(newUser);
+    db.ledger.unshift({
+      id: `ldg_gwelcome_${Date.now()}`,
+      userId: newUserId,
+      userName: newUser.name,
+      sourceType: 'referral_welcome',
+      title: `Google Sign-In Welcome Bonus (+${welcomeCoins} Coins)`,
+      amountCoins: welcomeCoins,
+      status: 'cleared',
+      createdAt: new Date().toISOString(),
+      unlocksAt: null,
+    });
+    saveDb();
+    res.json(buildBootstrapPayload(db, newUserId));
   });
 
   // 3. Real S2S Offerwall Postback Webhook Endpoints (Notik.me & Lootably)

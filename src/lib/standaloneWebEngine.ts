@@ -49,8 +49,8 @@ function createInitialClientDb(): ClientDbSchema {
   return {
     settings: {
       siteName: 'Lootify',
-      customDomain: 'lootify.in',
-      apiSubdomain: 'api.lootify.in',
+      customDomain: 'lootify.eternant.c0m.to',
+      apiSubdomain: 'lootify-api.sarthaksinghyadav1.workers.dev',
       defaultTheme: 'dark',
       coinsPerInr: 100,
       pendingHoldDays: 3,
@@ -731,6 +731,79 @@ export function handleClientApiAction(
       throw new Error('This account has been suspended by Admin.');
     }
     return getClientBootstrap(foundUser.id);
+  }
+
+  if (endpoint === '/api/auth/google') {
+    let cleanEmail = String(body.email || '').trim().toLowerCase();
+    let cleanName = String(body.name || '').trim();
+    if (body.credential) {
+      try {
+        const parts = String(body.credential).split('.');
+        if (parts.length === 3) {
+          const decoded = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          cleanEmail = String(decoded.email || cleanEmail).toLowerCase();
+          cleanName = String(decoded.name || decoded.given_name || cleanName);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!cleanEmail) {
+      throw new Error('Valid Google account email is required.');
+    }
+    const existing = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      if (existing.status === 'banned') {
+        throw new Error('This account has been suspended by Admin.');
+      }
+      return getClientBootstrap(existing.id);
+    }
+    const newUserId = `usr_g_${Date.now()}`;
+    const displayName = cleanName || cleanEmail.split('@')[0];
+    const myRefCode = `LOOT-${displayName
+      .replace(/[^a-zA-Z]/g, '')
+      .toUpperCase()
+      .slice(0, 5)}${Math.floor(10 + Math.random() * 89)}`;
+    const welcomeCoins = db.settings.referralWelcomeBonusCoins;
+    const newUser: UserProfile = {
+      id: newUserId,
+      name: displayName,
+      email: cleanEmail,
+      role: 'earner',
+      referralCode: myRefCode,
+      referredBy: body.referralCodeInput || null,
+      referralActivated: false,
+      availableCoins: welcomeCoins,
+      pendingCoins: 0,
+      lifetimeEarnedCoins: welcomeCoins,
+      totalWithdrawnInr: 0,
+      completedFirstPayout: false,
+      offerwallsCompleted: 0,
+      shortlinksCompleted: 0,
+      tasksCompleted: 0,
+      streakDays: 0,
+      lastCheckInDate: null,
+      lastSpinDate: null,
+      claimedMilestones: [],
+      ipAddress: '103.21.140.12',
+      deviceFingerprint: 'fp_google_oauth',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    db.users.push(newUser);
+    db.ledger.unshift({
+      id: `ldg_gwelcome_${Date.now()}`,
+      userId: newUserId,
+      userName: newUser.name,
+      sourceType: 'referral_welcome',
+      title: `Google Sign-In Welcome Bonus (+${welcomeCoins} Coins)`,
+      amountCoins: welcomeCoins,
+      status: 'cleared',
+      createdAt: new Date().toISOString(),
+      unlocksAt: null,
+    });
+    saveClientDb(db);
+    return getClientBootstrap(newUserId);
   }
 
   if (endpoint.startsWith('/api/postback/')) {
