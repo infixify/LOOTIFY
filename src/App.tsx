@@ -161,7 +161,7 @@ export default function App() {
   const fetchBootstrap = useCallback(
     async (uid = currentUserId) => {
       try {
-        const res = await fetch(resolveApiUrl(`/api/bootstrap?userId=${encodeURIComponent(uid)}`), {
+        const res = await fetch(`/api/bootstrap?userId=${encodeURIComponent(uid)}`, {
           headers: { 'x-user-id': uid },
         });
         const contentType = res.headers.get('content-type') || '';
@@ -169,13 +169,16 @@ export default function App() {
           throw new Error('Static GitHub Pages host detected');
         }
         const payload: BootstrapPayload = await res.json();
+        if (!payload || !payload.currentUser || !payload.settings) {
+          throw new Error('Incomplete bootstrap payload');
+        }
         setData(payload);
       } catch {
         // Automatic fallback when hosted as static website on GitHub Pages
         setData(getClientBootstrap(uid));
       }
     },
-    [currentUserId, resolveApiUrl]
+    [currentUserId]
   );
 
   useEffect(() => {
@@ -184,7 +187,12 @@ export default function App() {
 
   const apiPost = async (endpoint: string, body: any = {}) => {
     try {
-      const res = await fetch(resolveApiUrl(endpoint), {
+      const targetUrl =
+        endpoint.startsWith('/api/auth/') || endpoint.startsWith('/api/postback/')
+          ? resolveApiUrl(endpoint)
+          : endpoint;
+
+      const res = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,32 +206,52 @@ export default function App() {
       }
       if (endpoint.startsWith('/api/postback/')) {
         if (!res.ok) throw new Error('USE_CLIENT_ENGINE');
-        await fetchBootstrap(currentUserId);
+        const fallbackPayload = handleClientApiAction('POST', endpoint, currentUserId, body);
+        if (fallbackPayload?.currentUser && fallbackPayload?.settings) {
+          setData(fallbackPayload);
+        }
         return { ok: true };
       }
       const json = await res.json();
       if (!res.ok) {
+        if (String(json.error || '').includes("reading 'prepare'")) {
+          // Worker DB binding not added yet — fall back cleanly to client engine
+          throw new Error('USE_CLIENT_ENGINE');
+        }
         throw new Error(json.error || 'Operation failed');
       }
-      if (json.bootstrap) {
+      if (json.bootstrap && json.bootstrap.currentUser && json.bootstrap.settings) {
         setData(json.bootstrap);
       } else if (json.settings && json.currentUser) {
         setData(json);
       } else if (json.user && json.user.id) {
         // Sync Cloudflare Worker D1 user response into local client state
-        const fallbackPayload = handleClientApiAction('POST', endpoint, currentUserId, body);
-        setData(fallbackPayload);
-        return fallbackPayload;
+        try {
+          const fallbackPayload = handleClientApiAction('POST', endpoint, currentUserId, body);
+          if (fallbackPayload?.currentUser && fallbackPayload?.settings) {
+            setData(fallbackPayload);
+            return fallbackPayload;
+          }
+        } catch {
+          // If user already exists in local store during login/register, load their bootstrap
+          const existingPayload = getClientBootstrap(json.user.id);
+          setData(existingPayload);
+          return existingPayload;
+        }
       } else {
-        await fetchBootstrap(currentUserId);
+        throw new Error('USE_CLIENT_ENGINE');
       }
       return json;
     } catch (err: any) {
-      if (err.message === 'USE_CLIENT_ENGINE' || err instanceof TypeError || err instanceof SyntaxError) {
+      if (
+        err.message === 'USE_CLIENT_ENGINE' ||
+        err instanceof TypeError ||
+        err instanceof SyntaxError
+      ) {
         const result = handleClientApiAction('POST', endpoint, currentUserId, body);
-        if (result.bootstrap) {
+        if (result?.bootstrap?.currentUser) {
           setData(result.bootstrap);
-        } else if (result.settings && result.currentUser) {
+        } else if (result?.settings && result?.currentUser) {
           setData(result);
         }
         return result;
@@ -234,7 +262,7 @@ export default function App() {
 
   const apiDelete = async (endpoint: string) => {
     try {
-      const res = await fetch(resolveApiUrl(endpoint), {
+      const res = await fetch(endpoint, {
         method: 'DELETE',
         headers: { 'x-user-id': currentUserId },
       });
@@ -246,12 +274,14 @@ export default function App() {
       if (json.settings && json.currentUser) {
         setData(json);
       } else {
-        await fetchBootstrap(currentUserId);
+        throw new Error('USE_CLIENT_ENGINE');
       }
       return json;
     } catch {
       const result = handleClientApiAction('DELETE', endpoint, currentUserId);
-      setData(result);
+      if (result?.settings && result?.currentUser) {
+        setData(result);
+      }
       return result;
     }
   };
@@ -323,7 +353,7 @@ export default function App() {
     );
   };
 
-  if (!data) {
+  if (!data || !data.currentUser || !data.settings) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-6">
         <div className="text-center space-y-2">
