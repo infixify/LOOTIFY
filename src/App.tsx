@@ -894,6 +894,93 @@ export default function App() {
               </button>
             </div>
 
+            {(authTab === 'login' || authTab === 'register') && (
+              <button
+                type="button"
+                onClick={() => {
+                  const clientId =
+                    localStorage.getItem('lootify_google_client_id') ||
+                    '881444436109-t1v1a42d9l8v7ibnqplnebdkdlqp15v7.apps.googleusercontent.com';
+                  const win = window as any;
+                  if (win.google?.accounts?.oauth2) {
+                    const tokenClient = win.google.accounts.oauth2.initTokenClient({
+                      client_id: clientId.trim(),
+                      scope: 'openid email profile',
+                      callback: async (tokenResponse: any) => {
+                        if (tokenResponse?.access_token) {
+                          try {
+                            const profileRes = await fetch(
+                              'https://www.googleapis.com/oauth2/v3/userinfo',
+                              {
+                                headers: {
+                                  Authorization: `Bearer ${tokenResponse.access_token}`,
+                                },
+                              }
+                            );
+                            const profile = await profileRes.json();
+                            if (profile?.email) {
+                              await handleGoogleAuth({
+                                name:
+                                  profile.name ||
+                                  profile.given_name ||
+                                  profile.email.split('@')[0],
+                                email: profile.email,
+                                referralCodeInput: regReferral,
+                              });
+                            }
+                          } catch {
+                            notify('Could not fetch Google profile.', 'error');
+                          }
+                        }
+                      },
+                    });
+                    tokenClient.requestAccessToken({ prompt: 'select_account' });
+                    return;
+                  }
+                  if (win.google?.accounts?.id) {
+                    win.google.accounts.id.initialize({
+                      client_id: clientId.trim(),
+                      callback: async (response: any) => {
+                        if (response?.credential) {
+                          await handleGoogleAuth({
+                            name: '',
+                            email: '',
+                            referralCodeInput: regReferral,
+                            credential: response.credential,
+                          });
+                        }
+                      },
+                    });
+                    win.google.accounts.id.prompt();
+                    return;
+                  }
+                  setAuthModalOpen(false);
+                  navigateToPage('home');
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 transition-colors shadow-2xs"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#EA4335"
+                    d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"
+                  />
+                  <path
+                    fill="#4285F4"
+                    d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.8C3.5 21.4 7.4 24 12 24z"
+                  />
+                </svg>
+                <span>Continue with Google (+200 Bonus Coins)</span>
+              </button>
+            )}
+
             {authTab === 'login' && (
               <form onSubmit={handleLoginUser} className="space-y-3.5 text-xs">
                 <div>

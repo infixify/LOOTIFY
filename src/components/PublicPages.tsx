@@ -78,14 +78,16 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
   const [loginSubmitting, setLoginSubmitting] = useState(false);
 
   // Google Sign-In Account Picker & Client ID Setup State
+  const DEFAULT_GOOGLE_CLIENT_ID =
+    '881444436109-t1v1a42d9l8v7ibnqplnebdkdlqp15v7.apps.googleusercontent.com';
   const [googleChooserOpen, setGoogleChooserOpen] = useState(false);
   const [customGoogleName, setCustomGoogleName] = useState('');
   const [customGoogleEmail, setCustomGoogleEmail] = useState('');
   const [googleClientId, setGoogleClientId] = useState<string>(() => {
     try {
-      return localStorage.getItem('lootify_google_client_id') || '';
+      return localStorage.getItem('lootify_google_client_id') || DEFAULT_GOOGLE_CLIENT_ID;
     } catch {
-      return '';
+      return DEFAULT_GOOGLE_CLIENT_ID;
     }
   });
 
@@ -159,8 +161,43 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
   };
 
   const triggerGoogleSignIn = () => {
-    const cleanClientId = googleClientId.trim();
+    const cleanClientId = (googleClientId || DEFAULT_GOOGLE_CLIENT_ID).trim();
     const win = window as any;
+
+    // 1. Prefer Google Identity Services OAuth2 Token Popup (opens real Google account selector popup on every click)
+    if (cleanClientId && win.google?.accounts?.oauth2) {
+      try {
+        const tokenClient = win.google.accounts.oauth2.initTokenClient({
+          client_id: cleanClientId,
+          scope: 'openid email profile',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.access_token && onGoogleAuth) {
+              try {
+                const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                const profile = await profileRes.json();
+                if (profile?.email) {
+                  await onGoogleAuth({
+                    name: profile.name || profile.given_name || profile.email.split('@')[0],
+                    email: profile.email,
+                    referralCodeInput: regRefCode,
+                  });
+                }
+              } catch {
+                notify('Could not fetch Google profile details.', 'error');
+              }
+            }
+          },
+        });
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        return;
+      } catch {
+        // Fallback to One-Tap or Account Chooser modal below
+      }
+    }
+
+    // 2. Fallback to Google One-Tap Credential prompt
     if (cleanClientId && win.google?.accounts?.id) {
       win.google.accounts.id.initialize({
         client_id: cleanClientId,
@@ -178,7 +215,8 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
       win.google.accounts.id.prompt();
       return;
     }
-    // Open interactive Google Account Chooser modal (works immediately with 0 setup!)
+
+    // 3. Fallback interactive Google Account Chooser modal
     setGoogleChooserOpen(true);
   };
 
