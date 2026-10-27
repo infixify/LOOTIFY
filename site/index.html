@@ -36,9 +36,346 @@
   }
 </script>
 
-<style>:root{--bg:#05080f;--bg2:#090d19;--bg3:#0e1423;--border:#1c2640;--border2:#243050;--txt:#e4ebf8;--txt2:#7a88a4;--green:#00e89a;--green2:#10b981;--green-dim:#00e89a14;--green-glow:#00e89a2e;--gold:#ffb400;--gold-dim:#ffb40014;--violet:#9b6eff;--violet-dim:#9b6eff14;--red:#f56;--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px)}[data-theme=light]{--bg:#f0f5ff;--bg2:#e6edfa;--bg3:#fff;--border:#c8d4ec;--border2:#a8b8d8;--txt:#0a0e1a;--txt2:#4a5878;--green-dim:#00e89a14;--green-glow:#10b9811f;--gold-dim:#ffb4000f;--violet-dim:#9b6eff0f}*,:before,:after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth;scroll-padding-top:calc(64px + var(--safe-top))}body{background:var(--bg);color:var(--txt);-webkit-tap-highlight-color:transparent;padding-top:var(--safe-top);padding-bottom:var(--safe-bottom);font-family:Inter,sans-serif;overflow-x:hidden}body:before{content:"";height:var(--safe-top);z-index:60;background:#05080ff5;position:fixed;inset:0 0 auto}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}.grid-bg{background-image:linear-gradient(#00e89a06 1px,#0000 1px),linear-gradient(90deg,#00e89a06 1px,#0000 1px);background-size:48px 48px}.font-display{font-family:Chakra Petch,sans-serif}.font-mono{font-family:JetBrains Mono,monospace}.glow-green{box-shadow:0 0 24px var(--green-glow), 0 0 48px #00e89a0f}.glow-gold{box-shadow:0 0 24px #ffb40033}.text-green{color:var(--green)}.text-gold{color:var(--gold)}.text-violet{color:var(--violet)}.text-muted{color:var(--txt2)}.card{background:var(--bg3);border:1px solid var(--border);border-radius:16px;transition:border-color .2s,box-shadow .2s}.card:hover{border-color:var(--green2)}.card-glow{box-shadow:0 0 0 1px #00e89a33,0 8px 40px #0006}.btn{cursor:pointer;letter-spacing:.03em;white-space:nowrap;border:none;border-radius:10px;justify-content:center;align-items:center;gap:8px;font-family:Chakra Petch,sans-serif;font-weight:600;text-decoration:none;transition:all .2s;display:inline-flex}.btn-primary{background:linear-gradient(135deg, var(--green), #00c280);color:#03100a;padding:12px 24px;font-size:14px}.btn-primary:hover{transform:translateY(-1px);box-shadow:0 0 24px #00e89a66}.btn-primary:active{transform:translateY(0)}.btn-outline{color:var(--green);border:1.5px solid var(--green2);background:0 0;padding:11px 22px;font-size:13px}.btn-outline:hover{background:var(--green-dim)}.btn-ghost{background:var(--bg3);color:var(--txt);border:1px solid var(--border);padding:10px 18px;font-size:13px}.btn-ghost:hover{border-color:var(--border2)}.btn-sm{padding:8px 16px;font-size:12px}.btn-lg{padding:16px 32px;font-size:16px}.btn-full{width:100%}.badge{border-radius:6px;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;display:inline-flex}.badge-green{color:var(--green);background:#00e89a1a;border:1px solid #00e89a40}.badge-gold{color:var(--gold);background:#ffb4001a;border:1px solid #ffb40040}.badge-violet{color:var(--violet);background:#9b6eff1a;border:1px solid #9b6eff40}.badge-red{color:var(--red);background:#ff55661a;border:1px solid #ff556640}.pill{background:var(--bg3);border:1px solid var(--border);color:var(--txt2);cursor:default;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;transition:all .2s}.pill:hover{border-color:var(--green2);color:var(--txt)}.live-dot{background:var(--green);border-radius:50%;flex-shrink:0;width:7px;height:7px;animation:2s infinite pulse}@keyframes pulse{0%,to{box-shadow:0 0 #00e89a80}50%{box-shadow:0 0 0 5px #00e89a00}}#navbar{top:var(--safe-top);z-index:50;-webkit-backdrop-filter:blur(20px)saturate(180%);border-bottom:1px solid var(--border);background:#05080fe0;height:64px;transition:background .3s;position:sticky}.hero-gradient{background:radial-gradient(80% 60% at 50% 0,#00e89a12 0%,#0000 70%)}.step-line{background:linear-gradient(90deg, var(--green), #9b6eff4d);width:calc(100% - 64px);height:1px;position:absolute;top:32px;left:calc(50% + 32px)}.faq-body{max-height:0;transition:max-height .3s;overflow:hidden}.faq-body.open{max-height:400px}.faq-chevron{color:var(--green);flex-shrink:0;font-size:18px;transition:transform .3s}.faq-chevron.open{transform:rotate(180deg)}input[type=range]{-webkit-appearance:none;background:var(--border2);border-radius:2px;outline:none;width:100%;height:4px}input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;background:var(--green);cursor:pointer;border-radius:50%;width:20px;height:20px;box-shadow:0 0 10px #00e89a80}input[type=range]::-moz-range-thumb{background:var(--green);cursor:pointer;border:none;border-radius:50%;width:20px;height:20px}#mmenu{display:none}#mmenu.open{display:flex}.wrap{max-width:1200px;margin:0 auto;padding:0 20px}.section{padding:80px 20px}.section-sm{padding:48px 20px}@media (width<=768px){.hide-mob{display:none!important}#hamburger{display:flex!important}.section{padding:56px 16px}.section-sm{padding:32px 16px}.wrap{padding:0 16px}}@media (width<=480px){.section{padding:48px 16px}}.qcard{cursor:pointer;transition:transform .25s,box-shadow .25s,border-color .25s}.qcard:hover{border-color:var(--green);transform:translateY(-4px);box-shadow:0 12px 40px #00e89a1a}@media (width<=768px){.qcard:hover{transform:none}}.google-btn{color:#1f1f1f;cursor:pointer;background:#fff;border:1.5px solid #e0e0e0;border-radius:12px;justify-content:center;align-items:center;gap:12px;width:100%;padding:15px 20px;font-family:Chakra Petch,sans-serif;font-size:15px;font-weight:700;transition:all .25s;display:flex;box-shadow:0 2px 8px #0000001a}.google-btn:hover{border-color:var(--green);box-shadow:0 4px 20px #00e89a40}@media (width<=900px){.hero-grid{grid-template-columns:1fr!important}.auth-card{margin:0 auto;max-width:100%!important}}.bento{grid-template-columns:repeat(3,1fr);gap:16px;display:grid}.span2{grid-column:span 2}@media (width<=900px){.bento{grid-template-columns:1fr 1fr}.span2{grid-column:span 2}}@media (width<=560px){.bento{grid-template-columns:1fr}.span2{grid-column:span 1}}.stats-grid{grid-template-columns:repeat(4,1fr);gap:16px;display:grid}@media (width<=768px){.stats-grid{grid-template-columns:repeat(2,1fr)}}@media (width<=360px){.stats-grid{grid-template-columns:1fr 1fr}}.steps-grid{grid-template-columns:repeat(4,1fr);gap:20px;display:grid;position:relative}@media (width<=768px){.steps-grid{grid-template-columns:repeat(2,1fr)}.step-line{display:none}}@media (width<=480px){.steps-grid{grid-template-columns:1fr}}.cashout-grid{grid-template-columns:repeat(3,1fr);gap:16px;max-width:700px;margin:0 auto;display:grid}@media (width<=560px){.cashout-grid{grid-template-columns:1fr}}.wallet-grid{grid-template-columns:1fr 1fr;gap:16px;display:grid}@media (width<=480px){.wallet-grid{grid-template-columns:1fr}}.calc-grid{grid-template-columns:1fr 1fr;gap:16px;display:grid}@media (width<=480px){.calc-grid{grid-template-columns:1fr}}.footer-grid{grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;display:grid}@media (width<=900px){.footer-grid{grid-template-columns:1fr 1fr}}@media (width<=480px){.footer-grid{grid-template-columns:1fr;gap:32px}}.tier-grid{grid-template-columns:repeat(3,1fr);gap:12px;display:grid}@media (width<=480px){.tier-grid{grid-template-columns:1fr}}[data-theme=light] .card{background:#fff}[data-theme=light] .btn-ghost{color:var(--txt);border-color:var(--border);background:#f0f5ff}[data-theme=light] .google-btn{background:#fff}[data-theme=light] #navbar{background:#f0f5ffe6}[data-theme=light] body:before{background:#f0f5fff2}[data-theme=light] .grid-bg{background-image:linear-gradient(#00e89a0a 1px,#0000 1px),linear-gradient(90deg,#00e89a0a 1px,#0000 1px);background-size:48px 48px}.coin-badge{color:var(--gold);background:#ffb4001a;border:1px solid #ffb40040;border-radius:6px;padding:3px 9px;font-family:JetBrains Mono,monospace;font-size:11px;font-weight:600}.hero-num{color:var(--green);text-shadow:0 0 40px #00e89a66;font-family:JetBrains Mono,monospace;font-size:clamp(52px,10vw,90px);font-weight:600;line-height:1}.stat-big{font-family:JetBrains Mono,monospace;font-size:clamp(28px,5vw,40px);font-weight:600}body.on-landing-home #root{display:none!important}body.on-landing-home #lootify-v2-landing{display:block!important}body.on-app-route #lootify-v2-landing{display:none!important}body.on-app-route #root{display:block!important}@media (prefers-reduced-motion:reduce){*,:before,:after{transition-duration:.001ms!important;animation-duration:.001ms!important}}</style>
-  <script type="module" crossorigin src="./assets/lootify.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/lootify.css">
+<style>
+:root {
+  --bg: #05080F;
+  --bg2: #090D19;
+  --bg3: #0E1423;
+  --border: #1C2640;
+  --border2: #243050;
+  --txt: #E4EBF8;
+  --txt2: #7A88A4;
+  --green: #00E89A;
+  --green2: #10B981;
+  --green-dim: rgba(0,232,154,0.08);
+  --green-glow: rgba(0,232,154,0.18);
+  --gold: #FFB400;
+  --gold-dim: rgba(255,180,0,0.08);
+  --violet: #9B6EFF;
+  --violet-dim: rgba(155,110,255,0.08);
+  --red: #FF5566;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+[data-theme="light"] {
+  --bg: #F0F5FF;
+  --bg2: #E6EDFA;
+  --bg3: #FFFFFF;
+  --border: #C8D4EC;
+  --border2: #A8B8D8;
+  --txt: #0A0E1A;
+  --txt2: #4A5878;
+  --green-dim: rgba(0,232,154,0.08);
+  --green-glow: rgba(16,185,129,0.12);
+  --gold-dim: rgba(255,180,0,0.06);
+  --violet-dim: rgba(155,110,255,0.06);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(64px + var(--safe-top));
+}
+
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--safe-top);
+  background: rgba(5,8,15,0.96);
+  z-index: 60;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── GRID BG ── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0,232,154,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,232,154,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ── TYPOGRAPHY ── */
+.font-display { font-family: 'Chakra Petch', sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── GLOW ── */
+.glow-green { box-shadow: 0 0 24px var(--green-glow), 0 0 48px rgba(0,232,154,0.06); }
+.glow-gold { box-shadow: 0 0 24px rgba(255,180,0,0.2); }
+.text-green { color: var(--green); }
+.text-gold { color: var(--gold); }
+.text-violet { color: var(--violet); }
+.text-muted { color: var(--txt2); }
+
+/* ── CARD ── */
+.card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.card:hover { border-color: var(--green2); }
+.card-glow { box-shadow: 0 0 0 1px rgba(0,232,154,0.2), 0 8px 40px rgba(0,0,0,0.4); }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; border: none; cursor: pointer;
+  font-family: 'Chakra Petch', sans-serif; font-weight: 600;
+  letter-spacing: 0.03em; border-radius: 10px;
+  transition: all 0.2s; text-decoration: none; white-space: nowrap;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--green), #00C280);
+  color: #03100A; padding: 12px 24px; font-size: 14px;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgba(0,232,154,0.4); }
+.btn-primary:active { transform: translateY(0); }
+.btn-outline {
+  background: transparent; color: var(--green);
+  border: 1.5px solid var(--green2); padding: 11px 22px; font-size: 13px;
+}
+.btn-outline:hover { background: var(--green-dim); }
+.btn-ghost {
+  background: var(--bg3); color: var(--txt);
+  border: 1px solid var(--border); padding: 10px 18px; font-size: 13px;
+}
+.btn-ghost:hover { border-color: var(--border2); }
+.btn-sm { padding: 8px 16px; font-size: 12px; }
+.btn-lg { padding: 16px 32px; font-size: 16px; }
+.btn-full { width: 100%; }
+
+/* ── BADGE ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+}
+.badge-green { background: rgba(0,232,154,0.1); border: 1px solid rgba(0,232,154,0.25); color: var(--green); }
+.badge-gold { background: rgba(255,180,0,0.1); border: 1px solid rgba(255,180,0,0.25); color: var(--gold); }
+.badge-violet { background: rgba(155,110,255,0.1); border: 1px solid rgba(155,110,255,0.25); color: var(--violet); }
+.badge-red { background: rgba(255,85,102,0.1); border: 1px solid rgba(255,85,102,0.25); color: var(--red); }
+
+/* ── PILL PARTNER ── */
+.pill {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 14px;
+  font-size: 13px; font-weight: 600; color: var(--txt2);
+  transition: all 0.2s; cursor: default;
+}
+.pill:hover { border-color: var(--green2); color: var(--txt); }
+
+/* ── LIVE DOT ── */
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,232,154,0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(0,232,154,0); }
+}
+
+/* ── NAVBAR ── */
+#navbar {
+  position: sticky; top: var(--safe-top); z-index: 50;
+  background: rgba(5,8,15,0.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.3s;
+  height: 64px;
+}
+
+/* ── HERO ── */
+.hero-gradient {
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,232,154,0.07) 0%, transparent 70%);
+}
+
+/* ── STEP CONNECTOR ── */
+.step-line {
+  position: absolute; top: 32px; left: calc(50% + 32px);
+  width: calc(100% - 64px); height: 1px;
+  background: linear-gradient(90deg, var(--green), rgba(155,110,255,0.3));
+}
+
+/* ── FAQ ── */
+.faq-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+.faq-body.open { max-height: 400px; }
+.faq-chevron { transition: transform 0.3s; font-size: 18px; color: var(--green); flex-shrink: 0; }
+.faq-chevron.open { transform: rotate(180deg); }
+
+/* ── SLIDER ── */
+input[type=range] {
+  -webkit-appearance: none; width: 100%; height: 4px;
+  border-radius: 2px; background: var(--border2); outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 10px rgba(0,232,154,0.5); cursor: pointer;
+}
+input[type=range]::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%; border: none;
+  background: var(--green); cursor: pointer;
+}
+
+/* ── MOBILE MENU ── */
+#mmenu { display: none; }
+#mmenu.open { display: flex; }
+
+/* ── CONTAINER ── */
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.section { padding: 80px 20px; }
+.section-sm { padding: 48px 20px; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .hide-mob { display: none !important; }
+  #hamburger { display: flex !important; }
+  .section { padding: 56px 16px; }
+  .section-sm { padding: 32px 16px; }
+  .wrap { padding: 0 16px; }
+}
+@media (max-width: 480px) {
+  .section { padding: 48px 16px; }
+}
+
+/* ── QUEST CARD ── */
+.qcard { transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s; cursor: pointer; }
+.qcard:hover { transform: translateY(-4px); border-color: var(--green); box-shadow: 0 12px 40px rgba(0,232,154,0.1); }
+@media (max-width: 768px) { .qcard:hover { transform: none; } }
+
+/* ── GOOGLE BTN ── */
+.google-btn {
+  width: 100%; padding: 15px 20px; border-radius: 12px;
+  background: #fff; border: 1.5px solid #E0E0E0;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 15px;
+  color: #1F1F1F; cursor: pointer;
+  transition: all 0.25s; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.google-btn:hover { box-shadow: 0 4px 20px rgba(0,232,154,0.25); border-color: var(--green); }
+
+/* ── AUTH CARD MOBILE ── */
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr !important; }
+  .auth-card { max-width: 100% !important; margin: 0 auto; }
+}
+
+/* ── BENTO GRID ── */
+.bento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.span2 { grid-column: span 2; }
+@media (max-width: 900px) {
+  .bento { grid-template-columns: 1fr 1fr; }
+  .span2 { grid-column: span 2; }
+}
+@media (max-width: 560px) {
+  .bento { grid-template-columns: 1fr; }
+  .span2 { grid-column: span 1; }
+}
+
+/* ── STATS GRID ── */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 360px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+
+/* ── STEPS GRID ── */
+.steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; position: relative; }
+@media (max-width: 768px) {
+  .steps-grid { grid-template-columns: repeat(2, 1fr); }
+  .step-line { display: none; }
+}
+@media (max-width: 480px) { .steps-grid { grid-template-columns: 1fr; } }
+.cashout-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; max-width:700px; margin:0 auto; }
+@media (max-width: 560px) { .cashout-grid { grid-template-columns: 1fr; } }
+
+/* ── WALLET GRID ── */
+.wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 480px) { .wallet-grid { grid-template-columns: 1fr; } }
+
+/* ── CALC RESULT ── */
+.calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 480px) { .calc-grid { grid-template-columns: 1fr; } }
+
+/* ── FOOTER GRID ── */
+.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+@media (max-width: 900px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; gap: 32px; } }
+
+/* ── REFERRAL TIERS ── */
+.tier-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 480px) { .tier-grid { grid-template-columns: 1fr; } }
+
+/* ── LIGHT MODE ── */
+[data-theme="light"] .card { background: #fff; }
+[data-theme="light"] .btn-ghost { background: #F0F5FF; color: var(--txt); border-color: var(--border); }
+[data-theme="light"] .google-btn { background: #fff; }
+[data-theme="light"] #navbar { background: rgba(240,245,255,0.9); }
+[data-theme="light"] body::before { background: rgba(240,245,255,0.95); }
+[data-theme="light"] .grid-bg {
+  background-image: linear-gradient(rgba(0,232,154,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,232,154,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ── COIN TICKER ── */
+.coin-badge {
+  background: rgba(255,180,0,0.1); border: 1px solid rgba(255,180,0,0.25);
+  border-radius: 6px; padding: 3px 9px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--gold);
+}
+
+/* ── HERO BIG NUMBER ── */
+.hero-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(52px, 10vw, 90px);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--green);
+  text-shadow: 0 0 40px rgba(0,232,154,0.4);
+}
+
+/* ── COUNTER ── */
+.stat-big {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 600;
+}
+
+/* Prevent any old cached #root bundle from covering #lootify-v2-landing when on the home route */
+body.on-landing-home #root {
+  display: none !important;
+}
+body.on-landing-home #lootify-v2-landing {
+  display: block !important;
+}
+body.on-app-route #lootify-v2-landing {
+  display: none !important;
+}
+body.on-app-route #root {
+  display: block !important;
+}
+
+/* No motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+</style>
 </head>
 
 <body class="grid-bg on-landing-home">
@@ -78,7 +415,8 @@
       <button onclick="toggleTheme()" style="width:36px;height:36px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;" title="Toggle theme">
         <span id="theme-icon">🌙</span>
       </button>
-      <a href="#hero-auth" id="nav-cta-btn" class="btn btn-primary btn-sm" style="padding:9px 16px;" onclick="handleNavCta(event)">Sign Up Free</a>
+      <a href="#hero-auth" id="nav-login-btn" class="btn btn-ghost btn-sm hide-mob" style="padding:9px 14px;" onclick="handleNavAuth(event, 'login')">Log In</a>
+      <a href="#hero-auth" id="nav-cta-btn" class="btn btn-primary btn-sm" style="padding:9px 16px;" onclick="handleNavAuth(event, 'signup')">Sign Up Free</a>
       <button id="hamburger" onclick="toggleMenu()" style="display:none;width:36px;height:36px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);align-items:center;justify-content:center;cursor:pointer;color:var(--txt);font-size:18px;">☰</button>
     </div>
   </div>
@@ -89,7 +427,10 @@
     <a href="#calculator" onclick="toggleMenu()" style="padding:12px 8px;font-size:14px;font-weight:600;color:var(--txt);text-decoration:none;border-bottom:1px solid var(--border);display:block;">🧮 Calculator</a>
     <a href="#how-it-works" onclick="toggleMenu()" style="padding:12px 8px;font-size:14px;font-weight:600;color:var(--txt);text-decoration:none;border-bottom:1px solid var(--border);display:block;">⚙️ How It Works</a>
     <a href="#faq" onclick="toggleMenu()" style="padding:12px 8px;font-size:14px;font-weight:600;color:var(--txt);text-decoration:none;display:block;">❓ FAQ</a>
-    <a href="#hero-auth" onclick="toggleMenu();handleNavCta(event);" class="btn btn-primary btn-full" style="margin-top:12px;">🚀 Start Earning Free</a>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <a href="#hero-auth" onclick="toggleMenu();handleNavAuth(event, 'login');" class="btn btn-ghost" style="flex:1;">Log In</a>
+      <a href="#hero-auth" onclick="toggleMenu();handleNavAuth(event, 'signup');" class="btn btn-primary" style="flex:1;">🚀 Sign Up</a>
+    </div>
   </div>
 </nav>
 
@@ -124,24 +465,75 @@
 
       <!-- Right: Auth Card -->
       <div id="hero-auth">
-        <div class="card card-glow auth-card" style="padding:clamp(24px,5vw,40px);max-width:440px;width:100%;">
-          <div style="text-align:center;margin-bottom:24px;">
-            <div style="font-size:28px;margin-bottom:10px;">🎮</div>
-            <h2 class="font-display" style="font-size:22px;font-weight:700;color:var(--txt);margin-bottom:6px;">Start Earning Now</h2>
-            <p style="font-size:13px;color:var(--txt2);">Sign up with your Google account to start earning</p>
+        <div class="card card-glow auth-card" style="padding:clamp(22px,4vw,34px);max-width:440px;width:100%;">
+          <!-- Sign Up / Log In Mode Tabs -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--bg2);padding:5px;border-radius:10px;border:1px solid var(--border);margin-bottom:20px;">
+            <button type="button" id="tab-signup-btn" onclick="setAuthMode('signup')" class="font-display" style="padding:9px 12px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),#00C280);color:#03100A;transition:all .2s;">
+              Sign Up
+            </button>
+            <button type="button" id="tab-login-btn" onclick="setAuthMode('login')" class="font-display" style="padding:9px 12px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:transparent;color:var(--txt2);transition:all .2s;">
+              Log In
+            </button>
           </div>
 
+          <div style="text-align:center;margin-bottom:18px;">
+            <h2 id="auth-card-title" class="font-display" style="font-size:21px;font-weight:700;color:var(--txt);margin-bottom:4px;">Create Player Account</h2>
+            <p id="auth-card-subtitle" style="font-size:12px;color:var(--txt2);">Sign up with Google or Email to access your Dashboard</p>
+          </div>
+
+          <!-- Google OAuth Button -->
           <button class="google-btn" id="btn-google-signin" type="button">
             <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
             <span id="google-btn-text">Continue with Google</span>
           </button>
 
-          <button id="btn-open-hub" type="button" onclick="openAppRoute('dashboard')" class="btn btn-primary btn-full" style="display:none;margin-top:12px;">
-            ⚡ Open Player Hub Dashboard →
+          <!-- Divider -->
+          <div style="display:flex;align-items:center;gap:10px;margin:16px 0;">
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+            <span class="font-mono" style="font-size:10px;color:var(--txt2);letter-spacing:.08em;">OR WITH EMAIL</span>
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+          </div>
+
+          <!-- Email / Password Auth Form -->
+          <form id="email-auth-form" onsubmit="handleEmailAuthSubmit(event)" style="display:flex;flex-direction:column;gap:10px;">
+            <div id="field-name-wrap">
+              <input
+                type="text"
+                id="auth-name"
+                placeholder="Player Name (e.g. Aryan)"
+                style="width:100%;padding:11px 14px;border-radius:10px;background:var(--bg2);border:1px solid var(--border2);color:var(--txt);font-size:13px;outline:none;"
+              />
+            </div>
+            <div>
+              <input
+                type="email"
+                id="auth-email"
+                required
+                placeholder="Email address (you@gmail.com)"
+                style="width:100%;padding:11px 14px;border-radius:10px;background:var(--bg2);border:1px solid var(--border2);color:var(--txt);font-size:13px;outline:none;"
+              />
+            </div>
+            <div>
+              <input
+                type="password"
+                id="auth-password"
+                required
+                minlength="4"
+                placeholder="Password"
+                style="width:100%;padding:11px 14px;border-radius:10px;background:var(--bg2);border:1px solid var(--border2);color:var(--txt);font-size:13px;outline:none;"
+              />
+            </div>
+            <button type="submit" id="email-submit-btn" class="btn btn-primary btn-full" style="margin-top:4px;padding:12px 20px;">
+              Sign Up &amp; Open Dashboard →
+            </button>
+          </form>
+
+          <button id="btn-open-hub" type="button" onclick="openAppRoute('dashboard')" class="btn btn-outline btn-full" style="display:none;margin-top:10px;">
+            ⚡ Open Player Dashboard →
           </button>
 
-          <p id="auth-status-msg" style="text-align:center;font-size:11px;color:var(--txt2);margin-top:16px;">
-            🔒 Secure &nbsp;•&nbsp; No password needed &nbsp;•&nbsp; Free forever
+          <p id="auth-status-msg" style="text-align:center;font-size:11px;color:var(--txt2);margin-top:14px;">
+            🔒 Secure &nbsp;•&nbsp; Instant Dashboard Access &nbsp;•&nbsp; Free forever
           </p>
         </div>
       </div>
@@ -410,18 +802,18 @@
       <div>
         <h4 class="font-display" style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:14px;letter-spacing:.04em;">BUSINESS</h4>
         <div style="display:flex;flex-direction:column;gap:10px;">
-          <a href="#/contact" onclick="event.preventDefault();openAppRoute('contact')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Advertise With Us</a>
+          <a href="#hero-auth" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Advertise With Us</a>
           <a href="#quest-modes" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Affiliate Program</a>
-          <a href="#/contact" onclick="event.preventDefault();openAppRoute('contact')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Support / Help</a>
+          <a href="#faq" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Support / Help</a>
         </div>
       </div>
 
       <div>
         <h4 class="font-display" style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:14px;letter-spacing:.04em;">LEGAL</h4>
         <div style="display:flex;flex-direction:column;gap:10px;">
-          <a href="#/terms" onclick="event.preventDefault();openAppRoute('terms')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Terms of Service</a>
-          <a href="#/privacy" onclick="event.preventDefault();openAppRoute('privacy')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Privacy Policy</a>
-          <a href="#/terms" onclick="event.preventDefault();openAppRoute('terms')" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Disclaimer</a>
+          <a href="#faq" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Terms of Service</a>
+          <a href="#faq" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Privacy Policy</a>
+          <a href="#faq" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Disclaimer</a>
         </div>
       </div>
     </div>
@@ -439,35 +831,48 @@
 </div>
 <!-- END #lootify-v2-landing -->
 
-<!-- React Player Hub Root (Only shown on #/dashboard, #/offerwalls, #/shortlinks, etc.) -->
+<!-- React Simple Dashboard Root -->
 <div id="root"></div>
 
 <!-- ════════════════════════════════════════
-  LOOTIFY V2 INTERACTIVE + GOOGLE OAUTH SCRIPT
+  LOOTIFY V2 INTERACTIVE + AUTH WIRING SCRIPT
 ════════════════════════════════════════ -->
 <script>
 var GOOGLE_CLIENT_ID = '881444436109-t1v1a42d9l8v7ibnqplnebdkdlqp15v7.apps.googleusercontent.com';
-var WORKER_API_URL = 'https://lootify-worker-api.eternant.c0m.to';
+var STORAGE_USER_KEY = 'lootify_player_user';
+var STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
+var currentAuthMode = 'signup';
 
 var APP_HASH_ROUTES = [
   'dashboard',
+  'quests',
   'offerwalls',
   'shortlinks',
   'tasks',
   'referrals',
-  'wallet',
-  'leaderboard',
-  'payout-proofs',
-  'terms',
-  'privacy',
-  'contact'
+  'wallet'
 ];
 
 function isAppRouteActive() {
-  var path = (window.location.pathname || '').toLowerCase();
-  if (path.indexOf('admin') !== -1) return true;
-  var rawHash = (window.location.hash || '').replace(/^#\/?/, '').replace(/\.html$/, '');
+  var rawHash = (window.location.hash || '').replace(/^#\/?/, '').replace(/\.html$/, '').toLowerCase();
   return APP_HASH_ROUTES.indexOf(rawHash) !== -1;
+}
+
+function getSavedPlayerUser() {
+  try {
+    var raw = localStorage.getItem(STORAGE_USER_KEY);
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    if (!parsed || !parsed.id || !parsed.email) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function getSavedUserId() {
+  var u = getSavedPlayerUser();
+  return u ? u.id : '';
 }
 
 function syncLandingAndAppVisibility() {
@@ -482,28 +887,60 @@ function syncLandingAndAppVisibility() {
   refreshLoggedInButtons();
 }
 
-function getSavedUserId() {
-  try {
-    var uid = localStorage.getItem('lootify_user_id') || '';
-    if (uid === 'usr_earner_1' || uid === 'usr_earner_2' || uid === 'usr_earner_4' || uid === 'guest') {
-      return '';
-    }
-    return uid;
-  } catch (e) {
-    return '';
-  }
-}
-
 function refreshLoggedInButtons() {
   var uid = getSavedUserId();
   var openHubBtn = document.getElementById('btn-open-hub');
   var navCtaBtn = document.getElementById('nav-cta-btn');
+  var navLoginBtn = document.getElementById('nav-login-btn');
   if (uid) {
     if (openHubBtn) openHubBtn.style.display = 'inline-flex';
-    if (navCtaBtn) navCtaBtn.textContent = 'Player Hub →';
+    if (navCtaBtn) navCtaBtn.textContent = 'Dashboard →';
+    if (navLoginBtn) navLoginBtn.style.display = 'none';
   } else {
     if (openHubBtn) openHubBtn.style.display = 'none';
     if (navCtaBtn) navCtaBtn.textContent = 'Sign Up Free';
+    if (navLoginBtn) navLoginBtn.style.display = '';
+  }
+}
+
+function setAuthMode(mode) {
+  currentAuthMode = mode === 'login' ? 'login' : 'signup';
+  var tabSignup = document.getElementById('tab-signup-btn');
+  var tabLogin = document.getElementById('tab-login-btn');
+  var titleEl = document.getElementById('auth-card-title');
+  var subEl = document.getElementById('auth-card-subtitle');
+  var nameWrap = document.getElementById('field-name-wrap');
+  var submitBtn = document.getElementById('email-submit-btn');
+  var googleBtnText = document.getElementById('google-btn-text');
+
+  if (currentAuthMode === 'login') {
+    if (tabLogin) {
+      tabLogin.style.background = 'linear-gradient(135deg,var(--green),#00C280)';
+      tabLogin.style.color = '#03100A';
+    }
+    if (tabSignup) {
+      tabSignup.style.background = 'transparent';
+      tabSignup.style.color = 'var(--txt2)';
+    }
+    if (titleEl) titleEl.textContent = 'Welcome Back, Player';
+    if (subEl) subEl.textContent = 'Log in with Google or Email to open your Dashboard';
+    if (nameWrap) nameWrap.style.display = 'none';
+    if (submitBtn) submitBtn.textContent = 'Log In to Dashboard →';
+    if (googleBtnText) googleBtnText.textContent = 'Log In with Google';
+  } else {
+    if (tabSignup) {
+      tabSignup.style.background = 'linear-gradient(135deg,var(--green),#00C280)';
+      tabSignup.style.color = '#03100A';
+    }
+    if (tabLogin) {
+      tabLogin.style.background = 'transparent';
+      tabLogin.style.color = 'var(--txt2)';
+    }
+    if (titleEl) titleEl.textContent = 'Create Player Account';
+    if (subEl) subEl.textContent = 'Sign up with Google or Email to access your Dashboard';
+    if (nameWrap) nameWrap.style.display = 'block';
+    if (submitBtn) submitBtn.textContent = 'Sign Up & Open Dashboard →';
+    if (googleBtnText) googleBtnText.textContent = 'Sign Up with Google';
   }
 }
 
@@ -514,25 +951,31 @@ function openAppRoute(route) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function handleNavCta(e) {
+function handleNavAuth(e, mode) {
   if (e) e.preventDefault();
   if (getSavedUserId()) {
     openAppRoute('dashboard');
   } else {
+    setAuthMode(mode || 'signup');
     var el = document.getElementById('hero-auth');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   }
+}
+
+function handleNavCta(e) {
+  handleNavAuth(e, 'signup');
 }
 
 function launchQuestMode(route) {
   if (getSavedUserId()) {
     openAppRoute(route);
   } else {
+    setAuthMode('signup');
     var el = document.getElementById('hero-auth');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
     var statusEl = document.getElementById('auth-status-msg');
     if (statusEl) {
-      statusEl.innerHTML = '⚡ <strong style="color:var(--green);">Sign in with Google above</strong> to launch this Quest Mode!';
+      statusEl.innerHTML = '⚡ <strong style="color:var(--green);">Sign up or log in above</strong> to open your Dashboard!';
     }
   }
 }
@@ -582,69 +1025,104 @@ window.addEventListener('scroll', function() {
     : (document.documentElement.getAttribute('data-theme')==='light' ? 'rgba(240,245,255,0.9)' : 'rgba(5,8,15,0.88)');
 }, {passive:true});
 
-// Complete Google Sign-In & Redirect to Dashboard
-async function completeGoogleSignIn(payload) {
-  var btnText = document.getElementById('google-btn-text');
-  var statusEl = document.getElementById('auth-status-msg');
-  if (btnText) btnText.textContent = 'Signing in to Player Hub...';
-
-  var apiBase = WORKER_API_URL;
+function buildOrLoadPlayerAccount(emailRaw, nameRaw, provider, passwordRaw) {
+  var email = (emailRaw || '').trim().toLowerCase();
+  var accounts = {};
   try {
-    var savedUrl = localStorage.getItem('lootify_worker_api_url');
-    if (savedUrl && savedUrl.indexOf('sarthaksinghyadav1') === -1) {
-      apiBase = savedUrl.replace(/\/+$/, '');
-    } else {
-      localStorage.setItem('lootify_worker_api_url', WORKER_API_URL);
-    }
+    var raw = localStorage.getItem(STORAGE_ACCOUNTS_KEY);
+    if (raw) accounts = JSON.parse(raw) || {};
   } catch (e) {}
 
-  var syncedUser = null;
-  try {
-    var res = await fetch(apiBase + '/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) {
-      var data = await res.json();
-      syncedUser = data.currentUser || data.user || null;
+  var existing = accounts[email];
+  if (existing && existing.user) {
+    if (provider === 'email' && currentAuthMode === 'login' && existing.password && passwordRaw && existing.password !== passwordRaw) {
+      return { error: 'Incorrect password for this email account.' };
     }
-  } catch (e) {}
-
-  if (!syncedUser) {
-    var email = (payload.email || 'player@gmail.com').toLowerCase();
-    var name = payload.name || email.split('@')[0] || 'Lootify Player';
-    var uid = 'usr_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12).toLowerCase();
-    syncedUser = {
-      id: uid,
-      name: name,
-      email: email,
-      role: 'earner',
-      referralCode: (name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5) || 'LOOT') + '100',
-      referredBy: null,
-      availableCoins: 200,
-      pendingCoins: 0,
-      lifetimeEarnedCoins: 200,
-      withdrawnCoins: 0,
-      streakDays: 1,
-      kycVerified: true,
-      joinedAt: new Date().toISOString().slice(0, 10),
-      ipHash: 'web_google_oauth',
-      status: 'active'
-    };
+    return { user: existing.user };
   }
 
+  var cleanName = (nameRaw || '').trim() || email.split('@')[0] || 'Player';
+  var uid = 'plr_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toLowerCase();
+  var refPrefix = cleanName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5) || 'LOOT';
+  var refCode = refPrefix + Math.floor(100 + Math.random() * 900);
+
+  var urlParams = new URLSearchParams(window.location.search);
+  var referredBy = urlParams.get('ref') || null;
+
+  var newUser = {
+    id: uid,
+    name: cleanName,
+    email: email,
+    authProvider: provider,
+    referralCode: refCode,
+    referredBy: referredBy,
+    availableCoins: 0,
+    pendingCoins: 0,
+    questsCompleted: 0,
+    referralsCount: 0,
+    joinedAt: new Date().toISOString().slice(0, 10),
+    withdrawals: []
+  };
+
+  accounts[email] = {
+    password: passwordRaw || '',
+    user: newUser
+  };
+
   try {
-    localStorage.setItem('lootify_user_id', syncedUser.id);
-    window.dispatchEvent(new CustomEvent('lootify-auth-changed', { detail: { user: syncedUser } }));
+    localStorage.setItem(STORAGE_ACCOUNTS_KEY, JSON.stringify(accounts));
   } catch (e) {}
 
-  if (btnText) btnText.textContent = 'Continue with Google';
+  return { user: newUser };
+}
+
+function finalizeLoginAndOpenDashboard(userObj) {
+  try {
+    localStorage.removeItem('lootify_client_db_v1');
+    localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(userObj));
+    localStorage.setItem('lootify_user_id', userObj.id);
+    window.dispatchEvent(new CustomEvent('lootify-auth-changed', { detail: { user: userObj } }));
+  } catch (e) {}
+
+  var statusEl = document.getElementById('auth-status-msg');
   if (statusEl) {
-    statusEl.innerHTML = '✅ Signed in as <strong style="color:var(--green);">' + (syncedUser.name || syncedUser.email) + '</strong>!';
+    statusEl.innerHTML = '✅ Signed in as <strong style="color:var(--green);">' + (userObj.name || userObj.email) + '</strong>!';
   }
 
   openAppRoute('dashboard');
+}
+
+function handleEmailAuthSubmit(e) {
+  if (e) e.preventDefault();
+  var nameInput = document.getElementById('auth-name');
+  var emailInput = document.getElementById('auth-email');
+  var passInput = document.getElementById('auth-password');
+  var statusEl = document.getElementById('auth-status-msg');
+
+  var email = emailInput ? emailInput.value.trim() : '';
+  var password = passInput ? passInput.value : '';
+  var name = nameInput ? nameInput.value.trim() : '';
+
+  if (!email) {
+    if (statusEl) statusEl.innerHTML = '⚠️ <span style="color:var(--red);">Please enter your email address.</span>';
+    return;
+  }
+
+  var result = buildOrLoadPlayerAccount(email, name, 'email', password);
+  if (result.error) {
+    if (statusEl) statusEl.innerHTML = '⚠️ <span style="color:var(--red);">' + result.error + '</span>';
+    return;
+  }
+
+  finalizeLoginAndOpenDashboard(result.user);
+}
+
+// Complete Google Sign-In & Redirect to Dashboard
+async function completeGoogleSignIn(payload) {
+  var email = (payload.email || '').trim().toLowerCase();
+  var name = (payload.name || '').trim() || email.split('@')[0] || 'Player';
+  var result = buildOrLoadPlayerAccount(email, name, 'google', '');
+  finalizeLoginAndOpenDashboard(result.user);
 }
 
 // Wire Google Sign-In button
@@ -655,53 +1133,51 @@ document.getElementById('btn-google-signin').addEventListener('click', function(
   } catch (e) {}
 
   if (window.google && window.google.accounts && window.google.accounts.oauth2) {
-    var tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId.trim(),
-      scope: 'openid email profile',
-      callback: async function(tokenResponse) {
-        if (tokenResponse && tokenResponse.access_token) {
-          try {
-            var profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
-            });
-            var profile = await profileRes.json();
-            if (profile && profile.email) {
-              await completeGoogleSignIn({
-                name: profile.name || profile.given_name || profile.email.split('@')[0],
-                email: profile.email
+    try {
+      var tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId.trim(),
+        scope: 'openid email profile',
+        callback: async function(tokenResponse) {
+          if (tokenResponse && tokenResponse.access_token) {
+            try {
+              var profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
               });
+              var profile = await profileRes.json();
+              if (profile && profile.email) {
+                await completeGoogleSignIn({
+                  name: profile.name || profile.given_name || profile.email.split('@')[0],
+                  email: profile.email
+                });
+              }
+            } catch (err) {
+              var statusEl = document.getElementById('auth-status-msg');
+              if (statusEl) statusEl.innerHTML = '⚠️ Could not verify Google token. Use Email form below.';
             }
-          } catch (err) {
-            alert('Could not verify Google account. Please try again.');
           }
         }
-      }
-    });
-    tokenClient.requestAccessToken({ prompt: 'select_account' });
-    return;
+      });
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+      return;
+    } catch (err) {}
   }
 
-  if (window.google && window.google.accounts && window.google.accounts.id) {
-    window.google.accounts.id.initialize({
-      client_id: clientId.trim(),
-      callback: async function(response) {
-        if (response && response.credential) {
-          await completeGoogleSignIn({
-            name: '',
-            email: '',
-            credential: response.credential
-          });
-        }
-      }
+  // Fallback if Google popup is blocked or SDK still loading: focus email input or use typed email
+  var emailInput = document.getElementById('auth-email');
+  var nameInput = document.getElementById('auth-name');
+  if (emailInput && emailInput.value.trim()) {
+    completeGoogleSignIn({
+      email: emailInput.value.trim(),
+      name: nameInput && nameInput.value.trim() ? nameInput.value.trim() : emailInput.value.trim().split('@')[0]
     });
-    window.google.accounts.id.prompt();
     return;
   }
 
   var statusEl = document.getElementById('auth-status-msg');
   if (statusEl) {
-    statusEl.innerHTML = '⏳ Loading Google Sign-In SDK... Please tap again in a moment.';
+    statusEl.innerHTML = '⚡ Enter your Gmail below and click <strong style="color:var(--green);">Continue with Google</strong> or Submit!';
   }
+  if (emailInput) emailInput.focus();
 });
 
 // Calculator
@@ -764,12 +1240,12 @@ function ensureStaticBundleLoaded() {
     window.__LOOTIFY_STATIC_LOADED__ = true;
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = './assets/lootify.css?v=20261027v4';
+    link.href = './assets/lootify.css?v=20261027v6';
     document.head.appendChild(link);
 
     var s = document.createElement('script');
     s.type = 'module';
-    s.src = './assets/lootify.js?v=20261027v4';
+    s.src = './assets/lootify.js?v=20261027v6';
     document.body.appendChild(s);
   }
 }
@@ -778,5 +1254,6 @@ window.addEventListener('hashchange', syncLandingAndAppVisibility);
 window.addEventListener('popstate', syncLandingAndAppVisibility);
 syncLandingAndAppVisibility();
 </script>
+<script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

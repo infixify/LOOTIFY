@@ -1,1020 +1,1136 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+import React, { useEffect, useState } from 'react';
+import { DashboardTab, PayoutChannel, PlayerUser, ThemeMode, WithdrawalRecord } from './types.ts';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  LogOut,
-  Menu,
-  Moon,
-  Sun,
-  Users,
-  X,
-} from 'lucide-react';
-import { BootstrapPayload, PageRoute, ThemeMode } from './types.ts';
-import { PublicPages } from './components/PublicPages.tsx';
-import { EarnerViews } from './components/EarnerViews.tsx';
-import {
-  getClientBootstrap,
-  handleClientApiAction,
-  syncExternalUserToClientDb,
-} from './lib/standaloneWebEngine.ts';
+const STORAGE_USER_KEY = 'lootify_player_user';
+const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
 
-const VALID_ROUTES: PageRoute[] = [
-  'home',
-  'dashboard',
-  'offerwalls',
-  'shortlinks',
-  'tasks',
-  'referrals',
-  'wallet',
-  'leaderboard',
-  'payout-proofs',
-  'terms',
-  'privacy',
-  'contact',
-];
+function loadCurrentUser(): PlayerUser | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.id || !parsed.email) return null;
+    return {
+      id: String(parsed.id),
+      name: String(parsed.name || parsed.email.split('@')[0]),
+      email: String(parsed.email),
+      authProvider: parsed.authProvider === 'email' ? 'email' : 'google',
+      referralCode: String(parsed.referralCode || 'LOOT100'),
+      referredBy: parsed.referredBy || null,
+      availableCoins: Number(parsed.availableCoins) || 0,
+      pendingCoins: Number(parsed.pendingCoins) || 0,
+      questsCompleted: Number(parsed.questsCompleted) || 0,
+      referralsCount: Number(parsed.referralsCount) || 0,
+      joinedAt: String(parsed.joinedAt || new Date().toISOString().slice(0, 10)),
+      withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
+    };
+  } catch {
+    return null;
+  }
+}
 
-function getInitialRouteFromUrl(): PageRoute {
-  const hashClean = window.location.hash.replace(/^#\/?/, '').replace(/\.html$/, '') as PageRoute;
-  if (hashClean && VALID_ROUTES.includes(hashClean)) return hashClean;
-  return 'home';
+function saveCurrentUser(user: PlayerUser | null) {
+  try {
+    if (!user) {
+      localStorage.removeItem(STORAGE_USER_KEY);
+      localStorage.removeItem('lootify_user_id');
+      return;
+    }
+    localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(user));
+    localStorage.setItem('lootify_user_id', user.id);
+
+    // Also update in registered accounts map so balances persist across logins
+    const accountsRaw = localStorage.getItem(STORAGE_ACCOUNTS_KEY);
+    const accounts: Record<string, any> = accountsRaw ? JSON.parse(accountsRaw) : {};
+    const key = user.email.toLowerCase();
+    accounts[key] = {
+      ...(accounts[key] || {}),
+      user,
+    };
+    localStorage.setItem(STORAGE_ACCOUNTS_KEY, JSON.stringify(accounts));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getTabFromHash(): DashboardTab {
+  const hash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+  if (hash === 'quests' || hash === 'offerwalls' || hash === 'shortlinks' || hash === 'tasks') {
+    return 'quests';
+  }
+  if (hash === 'referrals') return 'referrals';
+  if (hash === 'wallet') return 'wallet';
+  return 'overview';
 }
 
 export default function App() {
-  const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('lootify_user_id') || '';
-      // Drop legacy fake demo user IDs
-      if (saved === 'usr_earner_1' || saved === 'usr_earner_2' || saved === 'usr_earner_4') {
-        localStorage.removeItem('lootify_user_id');
-        return '';
-      }
-      return saved;
-    } catch {
-      return '';
-    }
-  });
-  const [data, setData] = useState<BootstrapPayload>(() =>
-    getClientBootstrap(currentUserId)
-  );
-  const [activePage, setActivePage] = useState<PageRoute>(getInitialRouteFromUrl);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<PlayerUser | null>(() => loadCurrentUser());
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTabFromHash());
   const [theme, setTheme] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem('lootify_theme');
-    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+    const attr = document.documentElement.getAttribute('data-theme');
+    return attr === 'light' ? 'light' : 'dark';
   });
-  const [toast, setToast] = useState<{
-    message: string;
-    type: 'success' | 'error' | 'info';
-  } | null>(null);
+  const [copiedRef, setCopiedRef] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Auth & Cloudflare Worker Connection Modal State
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authTab, setAuthTab] = useState<'login' | 'register' | 'database'>('login');
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regReferral, setRegReferral] = useState('');
-  const [workerApiUrl, setWorkerApiUrl] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('lootify_worker_api_url') || '';
-      if (!saved || saved.includes('sarthaksinghyadav1.workers.dev')) {
-        return 'https://lootify-worker-api.eternant.c0m.to';
-      }
-      return saved;
-    } catch {
-      return 'https://lootify-worker-api.eternant.c0m.to';
-    }
-  });
-
-  // Navigate to a website page and update browser URL / hash cleanly
-  const navigateToPage = useCallback((page: PageRoute) => {
-    setActivePage(page);
-    setMobileMenuOpen(false);
-    try {
-      window.location.hash = page === 'home' ? '' : `#/${page}`;
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch {
-      // Fallback if inside sandboxed iframe
-    }
-  }, []);
+  // Cashout form state
+  const [payoutChannel, setPayoutChannel] = useState<PayoutChannel>('upi');
+  const [payoutDestination, setPayoutDestination] = useState('');
+  const [payoutCoins, setPayoutCoins] = useState('100');
+  const [payoutMessage, setPayoutMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   useEffect(() => {
-    const handleRouteSync = () => {
-      setActivePage(getInitialRouteFromUrl());
+    // Clear legacy fake keys from earlier versions
+    try {
+      localStorage.removeItem('lootify_client_db_v1');
+    } catch {}
+
+    const syncFromEvents = () => {
+      setUser(loadCurrentUser());
+      setActiveTab(getTabFromHash());
+      const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      setTheme(currentTheme);
     };
-    const handleAuthSync = (e: Event) => {
-      const customEvt = e as CustomEvent;
-      if (customEvt.detail?.user && customEvt.detail.user.id) {
-        const synced = syncExternalUserToClientDb(customEvt.detail.user);
-        setCurrentUserId(customEvt.detail.user.id);
-        setData(synced);
-      } else {
-        const savedId = localStorage.getItem('lootify_user_id') || '';
-        setCurrentUserId(savedId);
-        setData(getClientBootstrap(savedId));
-      }
-      setActivePage(getInitialRouteFromUrl());
-    };
-    window.addEventListener('popstate', handleRouteSync);
-    window.addEventListener('hashchange', handleRouteSync);
-    window.addEventListener('lootify-auth-changed', handleAuthSync);
+
+    window.addEventListener('lootify-auth-changed', syncFromEvents);
+    window.addEventListener('hashchange', syncFromEvents);
+    window.addEventListener('popstate', syncFromEvents);
     return () => {
-      window.removeEventListener('popstate', handleRouteSync);
-      window.removeEventListener('hashchange', handleRouteSync);
-      window.removeEventListener('lootify-auth-changed', handleAuthSync);
+      window.removeEventListener('lootify-auth-changed', syncFromEvents);
+      window.removeEventListener('hashchange', syncFromEvents);
+      window.removeEventListener('popstate', syncFromEvents);
     };
   }, []);
 
-  const notify = useCallback(
-    (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-      setToast({ message, type });
-      setTimeout(() => {
-        setToast((prev) => (prev?.message === message ? null : prev));
-      }, 3600);
-    },
-    []
-  );
+  const switchTab = (tab: DashboardTab) => {
+    setActiveTab(tab);
+    setMobileNavOpen(false);
+    setPayoutMessage(null);
+    const hashTarget = tab === 'overview' ? '#/dashboard' : `#/${tab}`;
+    if (window.location.hash !== hashTarget) {
+      window.location.hash = hashTarget;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-  // Sync Dark / Light Theme class on <html>
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
+  const handleToggleTheme = () => {
+    if (typeof (window as any).toggleTheme === 'function') {
+      (window as any).toggleTheme();
+      const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      setTheme(next);
     } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('lootify_theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
-
-  const resolveApiUrl = useCallback(
-    (endpoint: string) => {
-      const cleanBase = workerApiUrl.trim().replace(/\/+$/, '');
-      if (cleanBase && endpoint.startsWith('/api/')) {
-        return `${cleanBase}${endpoint}`;
-      }
-      return endpoint;
-    },
-    [workerApiUrl]
-  );
-
-  const fetchBootstrap = useCallback(
-    async (uid = currentUserId) => {
-      try {
-        const res = await fetch(`/api/bootstrap?userId=${encodeURIComponent(uid)}`, {
-          headers: { 'x-user-id': uid },
-        });
-        const contentType = res.headers.get('content-type') || '';
-        if (!res.ok || !contentType.includes('application/json')) {
-          throw new Error('Static GitHub Pages host detected');
-        }
-        const payload: BootstrapPayload = await res.json();
-        if (!payload || !payload.currentUser || !payload.settings) {
-          throw new Error('Incomplete bootstrap payload');
-        }
-        setData(payload);
-      } catch {
-        // Automatic fallback when hosted as static website on GitHub Pages
-        setData(getClientBootstrap(uid));
-      }
-    },
-    [currentUserId]
-  );
-
-  useEffect(() => {
-    fetchBootstrap(currentUserId);
-  }, [currentUserId, fetchBootstrap]);
-
-  const apiPost = async (endpoint: string, body: any = {}) => {
-    try {
-      const targetUrl =
-        endpoint.startsWith('/api/auth/') || endpoint.startsWith('/api/postback/')
-          ? resolveApiUrl(endpoint)
-          : endpoint;
-
-      const res = await fetch(targetUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUserId,
-        },
-        body: JSON.stringify(body),
-      });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json') && !endpoint.startsWith('/api/postback/')) {
-        throw new Error('USE_CLIENT_ENGINE');
-      }
-      if (endpoint.startsWith('/api/postback/')) {
-        if (!res.ok) throw new Error('USE_CLIENT_ENGINE');
-        const fallbackPayload = handleClientApiAction('POST', endpoint, currentUserId, body);
-        if (fallbackPayload?.currentUser && fallbackPayload?.settings) {
-          setData(fallbackPayload);
-        }
-        return { ok: true };
-      }
-      const json = await res.json();
-      if (!res.ok) {
-        if (String(json.error || '').includes("reading 'prepare'")) {
-          throw new Error('USE_CLIENT_ENGINE');
-        }
-        throw new Error(json.error || 'Operation failed');
-      }
-      if (json.bootstrap && json.bootstrap.currentUser && json.bootstrap.settings) {
-        setData(json.bootstrap);
-      } else if (json.settings && json.currentUser) {
-        setData(json);
-      } else if (json.user && json.user.id) {
-        // Sync real Cloudflare Worker D1 user response into local state
-        const syncedPayload = syncExternalUserToClientDb(json.user);
-        setData(syncedPayload);
-        return syncedPayload;
-      } else {
-        throw new Error('USE_CLIENT_ENGINE');
-      }
-      return json;
-    } catch (err: any) {
-      if (
-        err.message === 'USE_CLIENT_ENGINE' ||
-        err instanceof TypeError ||
-        err instanceof SyntaxError
-      ) {
-        const result = handleClientApiAction('POST', endpoint, currentUserId, body);
-        if (result?.bootstrap?.currentUser) {
-          setData(result.bootstrap);
-        } else if (result?.settings && result?.currentUser) {
-          setData(result);
-        }
-        return result;
-      }
-      throw err;
+      const next: ThemeMode = theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      setTheme(next);
     }
   };
 
-  const handleRegisterUser = async (
-    name: string,
-    email: string,
-    referralCodeInput: string,
-    password = 'user123'
-  ) => {
-    try {
-      const json = await apiPost('/api/auth/register', {
-        name,
-        email,
-        password,
-        referralCodeInput,
-      });
-      const targetUser = json.currentUser || json.user;
-      if (targetUser && targetUser.id !== 'guest') {
-        setCurrentUserId(targetUser.id);
-        localStorage.setItem('lootify_user_id', targetUser.id);
-      }
-      if (json.settings && json.currentUser) {
-        setData(json);
-      }
-      setAuthModalOpen(false);
-      navigateToPage('dashboard');
-      notify(
-        `Welcome to Lootify.in, ${targetUser?.name || name}! +200 Bonus Coins added to your wallet.`,
-        'success'
-      );
-    } catch (err: any) {
-      notify(err.message || 'Registration failed', 'error');
+  const handleLogout = () => {
+    saveCurrentUser(null);
+    setUser(null);
+    window.dispatchEvent(new CustomEvent('lootify-auth-changed', { detail: { user: null } }));
+    window.location.hash = '';
+    if (typeof (window as any).syncLandingAndAppVisibility === 'function') {
+      (window as any).syncLandingAndAppVisibility();
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDirectLogin = async (emailInput: string, passwordInput: string) => {
-    try {
-      const json = await apiPost('/api/auth/login', {
-        email: emailInput,
-        password: passwordInput,
-      });
-      const targetUser = json.currentUser || json.user;
-      if (targetUser && targetUser.id !== 'guest') {
-        setCurrentUserId(targetUser.id);
-        localStorage.setItem('lootify_user_id', targetUser.id);
-      }
-      if (json.settings && json.currentUser) {
-        setData(json);
-      }
-      setAuthModalOpen(false);
-      navigateToPage('dashboard');
-      notify(`Signed in as ${targetUser?.name || emailInput}`, 'success');
-    } catch (err: any) {
-      notify(err.message || 'Invalid login credentials', 'error');
+  const goBackToLanding = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    window.location.hash = '';
+    if (typeof (window as any).syncLandingAndAppVisibility === 'function') {
+      (window as any).syncLandingAndAppVisibility();
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLoginUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await handleDirectLogin(loginEmail, loginPassword);
-  };
-
-  const handleGoogleAuth = async (params: {
-    name: string;
-    email: string;
-    referralCodeInput?: string;
-    credential?: string;
-  }) => {
-    try {
-      const json = await apiPost('/api/auth/google', params);
-      const targetUser = json.currentUser || json.user;
-      if (targetUser && targetUser.id !== 'guest') {
-        setCurrentUserId(targetUser.id);
-        localStorage.setItem('lootify_user_id', targetUser.id);
-      }
-      if (json.settings && json.currentUser) {
-        setData(json);
-      }
-      setAuthModalOpen(false);
-      navigateToPage('dashboard');
-      notify(
-        `Signed in with Google as ${targetUser?.name || params.name || params.email}!`,
-        'success'
-      );
-    } catch (err: any) {
-      notify(err.message || 'Google Sign-In failed', 'error');
-    }
-  };
-
-  const handleLogoutUser = () => {
-    setCurrentUserId('');
-    localStorage.removeItem('lootify_user_id');
-    setData(getClientBootstrap(''));
-    navigateToPage('home');
-    notify('You have been signed out.', 'info');
-  };
-
-  if (!data || !data.currentUser || !data.settings) {
+  if (!user) {
     return (
-      <div className="min-h-screen bg-[#06080E] text-slate-100 flex items-center justify-center p-6">
-        <div className="text-center space-y-2">
-          <div className="text-xl font-bold font-display uppercase tracking-wider text-emerald-400">
-            Loading Lootify Gaming Arena...
+      <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+        <div className="card card-glow" style={{ maxWidth: 420, width: '100%', padding: '32px', textAlign: 'center' }}>
+          <div style={{ width: 48, height: 48, background: 'linear-gradient(135deg,var(--green),#00A870)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 22, color: '#03100A', margin: '0 auto 16px', boxShadow: '0 0 16px rgba(0,232,154,0.35)' }}>
+            L
           </div>
-          <p className="text-xs text-slate-500 font-mono">
-            Initializing Quest Engine & Escrow Loot Vault
+          <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
+            Player Session Required
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.6, marginBottom: 24 }}>
+            Please sign in or create your account on the Lootify home page to access your Player Dashboard.
           </p>
+          <button type="button" onClick={goBackToLanding} className="btn btn-primary btn-full">
+            Go to Sign Up / Login →
+          </button>
         </div>
       </div>
     );
   }
 
-  const { settings, currentUser } = data;
-  const isLoggedIn = Boolean(currentUserId && currentUser.id !== 'guest');
-  const availableInr = currentUser.availableCoins / settings.coinsPerInr;
-  const headerAd = data.adPlacements.find((a) => a.slotKey === 'header_banner' && a.enabled);
+  const inrBalance = (user.availableCoins / 10).toFixed(2);
+  const pendingInr = (user.pendingCoins / 10).toFixed(2);
+  const referralLink = `${window.location.origin}${window.location.pathname}?ref=${user.referralCode}`;
 
-  const websitePages: Array<{
-    id: PageRoute;
-    label: string;
-    path: string;
-  }> = [
-    { id: 'home', label: 'Gaming Home', path: '/' },
-    { id: 'dashboard', label: 'Player Hub', path: '/dashboard' },
-    { id: 'offerwalls', label: 'Game Offerwalls', path: '/offerwalls' },
-    { id: 'shortlinks', label: 'Speed Shortlinks', path: '/shortlinks' },
-    { id: 'tasks', label: 'Quests & Trivia', path: '/tasks' },
-    { id: 'referrals', label: 'Clan Referrals', path: '/referrals' },
-    { id: 'wallet', label: 'Loot Cashout', path: '/wallet' },
-    { id: 'payout-proofs', label: 'Live Drops', path: '/payout-proofs' },
-    { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
-  ];
+  const copyReferral = () => {
+    navigator.clipboard?.writeText(referralLink).catch(() => {});
+    setCopiedRef(true);
+    setTimeout(() => setCopiedRef(false), 2200);
+  };
+
+  const handleWithdrawSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPayoutMessage(null);
+
+    const coinsNum = Math.floor(Number(payoutCoins) || 0);
+    if (coinsNum < 100) {
+      setPayoutMessage({ type: 'error', text: 'Minimum withdrawal is 100 Coins (₹10).' });
+      return;
+    }
+    if (coinsNum > user.availableCoins) {
+      setPayoutMessage({
+        type: 'error',
+        text: `Insufficient balance. You currently have ${user.availableCoins} available coins.`,
+      });
+      return;
+    }
+    if (!payoutDestination.trim()) {
+      setPayoutMessage({ type: 'error', text: 'Please enter your payout destination details.' });
+      return;
+    }
+
+    const channelLabels: Record<PayoutChannel, string> = {
+      upi: 'UPI Direct Transfer',
+      bank: 'Bank Transfer (IMPS)',
+      gift_card: 'Gift Card Voucher',
+      crypto: 'Crypto (USDT / BTC)',
+    };
+
+    const newRecord: WithdrawalRecord = {
+      id: 'wd_' + Date.now().toString(36),
+      method: payoutChannel,
+      methodLabel: channelLabels[payoutChannel],
+      destination: payoutDestination.trim(),
+      coins: coinsNum,
+      amountInr: Number((coinsNum / 10).toFixed(2)),
+      status: 'pending',
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+
+    const updatedUser: PlayerUser = {
+      ...user,
+      availableCoins: user.availableCoins - coinsNum,
+      withdrawals: [newRecord, ...user.withdrawals],
+    };
+
+    saveCurrentUser(updatedUser);
+    setUser(updatedUser);
+    setPayoutDestination('');
+    setPayoutMessage({
+      type: 'success',
+      text: `Withdrawal request for ₹${newRecord.amountInr} (${coinsNum} Coins) submitted!`,
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#06080E] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150">
-      {activePage === 'home' ? (
-        <PublicPages
-          data={data}
-          activePage="home"
-          onNavigate={navigateToPage}
-          onRegisterUser={handleRegisterUser}
-          onLoginUser={handleDirectLogin}
-          onGoogleAuth={handleGoogleAuth}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          notify={notify}
-        />
-      ) : (
-        <>
-          {/* Top 3-Zone Website Header Bar (Shown only inside the App / Member Pages) */}
-          <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 px-6 py-4">
-            <div className="max-w-7xl mx-auto flex items-center justify-between gap-8">
-              {/* Zone 1: Single Website Brand Wordmark */}
-              <a
-                href="/"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigateToPage('home');
-                }}
-                className="text-xl font-extrabold tracking-tight font-display uppercase text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0"
-              >
-                {settings.siteName}.in
-              </a>
-
-              {/* Zone 2: 5 Primary Website Navigation Links */}
-              <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300">
-                <a
-                  href="/"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigateToPage('home');
-                  }}
-                  className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0"
-                >
-                  Gaming Home
-                </a>
-                <a
-                  href="/offerwalls"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigateToPage('offerwalls');
-                  }}
-                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                    activePage === 'offerwalls'
-                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                      : ''
-                  }`}
-                >
-                  Offerwalls
-                </a>
-                <a
-                  href="/shortlinks"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigateToPage('shortlinks');
-                  }}
-                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                    activePage === 'shortlinks'
-                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                      : ''
-                  }`}
-                >
-                  Shortlinks
-                </a>
-                <a
-                  href="/referrals"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigateToPage('referrals');
-                  }}
-                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                    activePage === 'referrals'
-                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                      : ''
-                  }`}
-                >
-                  Clan Referrals
-                </a>
-                <a
-                  href="/payout-proofs"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigateToPage('payout-proofs');
-                  }}
-                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                    activePage === 'payout-proofs'
-                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                      : ''
-                  }`}
-                >
-                  Live Drops
-                </a>
-              </nav>
-
-              {/* Zone 3: 1 Primary Action Button */}
-              <div className="flex items-center gap-3 shrink-0">
-                <button
-                  onClick={() => {
-                    if (!isLoggedIn) {
-                      setAuthTab('login');
-                      setAuthModalOpen(true);
-                    } else {
-                      navigateToPage('wallet');
-                    }
-                  }}
-                  className="px-4 py-2 text-xs font-mono font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap shrink-0"
-                >
-                  {isLoggedIn
-                    ? `Cashout: ₹${availableInr.toFixed(2)} (${currentUser.availableCoins.toLocaleString()} Coins)`
-                    : 'Sign In to Earn & Withdraw'}
-                </button>
-                <button
-                  onClick={() => setMobileMenuOpen((v) => !v)}
-                  className="md:hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700"
-                  aria-label="Open Website Menu"
-                >
-                  {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-                </button>
-              </div>
+    <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* ── TOP NAVBAR (Same theme as Landing Page) ── */}
+      <nav id="navbar">
+        <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
+          {/* Brand */}
+          <a
+            href="#/dashboard"
+            onClick={(e) => {
+              e.preventDefault();
+              switchTab('overview');
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', flexShrink: 0 }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                background: 'linear-gradient(135deg,var(--green),#00A870)',
+                borderRadius: 9,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: "'Chakra Petch',sans-serif",
+                fontWeight: 700,
+                fontSize: 18,
+                color: '#03100A',
+                boxShadow: '0 0 14px rgba(0,232,154,0.4)',
+              }}
+            >
+              L
             </div>
-          </header>
+            <span className="font-display" style={{ fontSize: 19, fontWeight: 700, color: 'var(--txt)' }}>
+              LOOTIFY<span style={{ color: 'var(--green)' }}>.</span>
+            </span>
+          </a>
 
-          {/* Secondary Multi-Page Website Navigation Bar + Theme Switch */}
-          <div className="bg-slate-100/90 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 px-6 py-2.5">
-            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-              {/* All Website Page Links */}
-              <div className="flex items-center gap-1 overflow-x-auto py-0.5">
-                {websitePages.map((pg) => {
-                  const isCurrent = activePage === pg.id;
-                  return (
-                    <a
-                      key={pg.id}
-                      href={pg.path}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        navigateToPage(pg.id);
-                      }}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
-                        isCurrent
-                          ? 'bg-emerald-600 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      {pg.label}
-                    </a>
-                  );
-                })}
-              </div>
-
-              {/* Right Controls: Sign In / Account + Logout + Theme Switch */}
-              <div className="flex items-center gap-2 ml-auto shrink-0">
+          {/* Desktop Tabs */}
+          <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {(
+              [
+                { id: 'overview', label: 'Overview' },
+                { id: 'quests', label: 'Quest Modes' },
+                { id: 'referrals', label: 'Refer & Earn' },
+                { id: 'wallet', label: 'Cashout' },
+              ] as { id: DashboardTab; label: string }[]
+            ).map((tab) => {
+              const active = activeTab === tab.id;
+              return (
                 <button
-                  onClick={() => {
-                    setAuthTab(isLoggedIn ? 'login' : 'register');
-                    setAuthModalOpen(true);
+                  key={tab.id}
+                  type="button"
+                  onClick={() => switchTab(tab.id)}
+                  className="font-display"
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    border: active ? '1px solid rgba(0,232,154,0.35)' : '1px solid transparent',
+                    background: active ? 'rgba(0,232,154,0.1)' : 'transparent',
+                    color: active ? 'var(--green)' : 'var(--txt2)',
+                    transition: 'all 0.2s',
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
                 >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>
-                    {isLoggedIn
-                      ? `${currentUser.name} (${currentUser.availableCoins.toLocaleString()} Coins)`
-                      : 'Sign In / Create Account'}
-                  </span>
+                  {tab.label}
                 </button>
-
-                {isLoggedIn && (
-                  <button
-                    onClick={handleLogoutUser}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
-                    title="Sign Out"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Logout</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={toggleTheme}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
-                >
-                  {theme === 'dark' ? (
-                    <>
-                      <Sun className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Light</span>
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="w-3.5 h-3.5 text-slate-700" />
-                      <span>Dark</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Mobile Dropdown Menu */}
-            {mobileMenuOpen && (
-              <div className="md:hidden pt-3 mt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-1.5">
-                {websitePages.map((pg) => (
-                  <button
-                    key={pg.id}
-                    onClick={() => navigateToPage(pg.id)}
-                    className={`text-left px-3 py-2 text-xs font-medium rounded-lg ${
-                      activePage === pg.id
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200'
-                    }`}
-                  >
-                    {pg.label}
-                  </button>
-                ))}
-              </div>
-            )}
+              );
+            })}
           </div>
 
-          {/* Live Website Announcement Strip */}
-          {settings.announcementActive && (
-            <div className="bg-emerald-600/10 border-b border-emerald-500/20 px-6 py-2">
-              <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 text-xs">
-                <p className="text-slate-700 dark:text-slate-200">
-                  <strong className="text-emerald-600 dark:text-emerald-400">
-                    {settings.siteName}.in Official Notice:
-                  </strong>{' '}
-                  {settings.announcementText}
-                </p>
-                <span className="font-mono text-[11px] text-slate-500 shrink-0 hidden sm:inline">
-                  Pending Hold: {currentUser.pendingCoins.toLocaleString()} Coins (₹
-                  {(currentUser.pendingCoins / settings.coinsPerInr).toFixed(2)})
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Full-Width Website Page Container */}
-          <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 md:py-10 space-y-8">
-            {/* Top Website Leaderboard Ad Banner (Monetag / Adsterra) */}
-            {headerAd && (
-              <div className="px-5 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 text-xs">
-                <div>
-                  <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 mr-2">
-                    [Sponsored · {headerAd.network}]
-                  </span>
-                  <span className="text-slate-600 dark:text-slate-300">{headerAd.title}</span>
-                </div>
-                <button
-                  onClick={() => navigateToPage('offerwalls')}
-                  className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline whitespace-nowrap shrink-0"
-                >
-                  Explore Partner Offers →
-                </button>
-              </div>
-            )}
-
-            {/* Prompt Guest Visitors to Sign In when viewing Earner pages */}
-            {!isLoggedIn &&
-              ['dashboard', 'offerwalls', 'shortlinks', 'tasks', 'referrals', 'wallet'].includes(
-                activePage
-              ) && (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
-                  <div>
-                    <strong className="text-amber-600 dark:text-amber-400">
-                      You are browsing as a Guest Player:
-                    </strong>{' '}
-                    <span className="text-slate-700 dark:text-slate-200">
-                      Sign in with Google or create your free Player ID to claim your +200 Welcome Loot Coins and save your quest earnings.
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setAuthTab('register');
-                      setAuthModalOpen(true);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shrink-0"
-                  >
-                    Sign In / Join Free (+200 Coins) →
-                  </button>
-                </div>
-              )}
-
-            {/* Active Website Page Content */}
-            {[
-              'payout-proofs',
-              'leaderboard',
-              'deploy-guide',
-              'terms',
-              'privacy',
-              'contact',
-            ].includes(activePage) ? (
-              <PublicPages
-                data={data}
-                activePage={activePage}
-                onNavigate={navigateToPage}
-                onRegisterUser={handleRegisterUser}
-                onLoginUser={handleDirectLogin}
-                onGoogleAuth={handleGoogleAuth}
-                theme={theme}
-                onToggleTheme={toggleTheme}
-                notify={notify}
-              />
-            ) : (
-              <EarnerViews
-                data={data}
-                activePage={activePage}
-                onNavigate={navigateToPage}
-                apiPost={apiPost}
-                refreshData={() => fetchBootstrap(currentUserId)}
-                notify={notify}
-              />
-            )}
-          </main>
-        </>
-      )}
-
-      {/* Sign In / Create Account & Cloudflare D1 Database Connection Modal */}
-      {authModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-extrabold font-display text-slate-900 dark:text-white">
-                  {settings.siteName}.in Account & Database
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Powered by Cloudflare D1 SQL (Unlimited Users · Real Accounts)
-                </p>
-              </div>
-              <button
-                onClick={() => setAuthModalOpen(false)}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {/* Right Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <div
+              onClick={() => switchTab('wallet')}
+              style={{
+                background: 'rgba(255,180,0,0.1)',
+                border: '1px solid rgba(255,180,0,0.28)',
+                borderRadius: 8,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+              title="Available Balance"
+            >
+              <span className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>
+                {user.availableCoins.toLocaleString('en-IN')} Coins
+              </span>
+              <span className="hide-mob font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                (₹{inrBalance})
+              </span>
             </div>
 
-            {/* Modal Tabs */}
-            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
-              <button
-                onClick={() => setAuthTab('login')}
-                className={`py-2 rounded-lg transition-colors ${
-                  authTab === 'login'
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => setAuthTab('register')}
-                className={`py-2 rounded-lg transition-colors ${
-                  authTab === 'register'
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                Create Account
-              </button>
-              <button
-                onClick={() => setAuthTab('database')}
-                className={`py-2 rounded-lg transition-colors ${
-                  authTab === 'database'
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                Connect DB
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+              title="Toggle theme"
+            >
+              <span>{theme === 'light' ? '☀️' : '🌙'}</span>
+            </button>
 
-            {(authTab === 'login' || authTab === 'register') && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="btn btn-ghost btn-sm hide-mob"
+              style={{ padding: '8px 14px', fontSize: 12 }}
+            >
+              Logout
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen((prev) => !prev)}
+              style={{
+                display: 'none',
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--txt)',
+                fontSize: 18,
+              }}
+              id="hamburger"
+            >
+              ☰
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Drawer */}
+        {mobileNavOpen && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg2)',
+              borderTop: '1px solid var(--border)',
+              padding: '16px 20px',
+              gap: 6,
+            }}
+          >
+            {(
+              [
+                { id: 'overview', label: '⚡ Overview' },
+                { id: 'quests', label: '🎮 Quest Modes' },
+                { id: 'referrals', label: '👥 Refer & Earn' },
+                { id: 'wallet', label: '🏦 Cashout Wallet' },
+              ] as { id: DashboardTab; label: string }[]
+            ).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => switchTab(t.id)}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 10px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: activeTab === t.id ? 'var(--green)' : 'var(--txt)',
+                  background: activeTab === t.id ? 'rgba(0,232,154,0.08)' : 'transparent',
+                  border: 'none',
+                  borderBottom: '1px solid var(--border)',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button type="button" onClick={goBackToLanding} className="btn btn-ghost btn-sm" style={{ flex: 1 }}>
+                Home Page
+              </button>
               <button
                 type="button"
-                onClick={() => {
-                  const clientId =
-                    localStorage.getItem('lootify_google_client_id') ||
-                    '881444436109-t1v1a42d9l8v7ibnqplnebdkdlqp15v7.apps.googleusercontent.com';
-                  const win = window as any;
-                  if (win.google?.accounts?.oauth2) {
-                    const tokenClient = win.google.accounts.oauth2.initTokenClient({
-                      client_id: clientId.trim(),
-                      scope: 'openid email profile',
-                      callback: async (tokenResponse: any) => {
-                        if (tokenResponse?.access_token) {
-                          try {
-                            const profileRes = await fetch(
-                              'https://www.googleapis.com/oauth2/v3/userinfo',
-                              {
-                                headers: {
-                                  Authorization: `Bearer ${tokenResponse.access_token}`,
-                                },
-                              }
-                            );
-                            const profile = await profileRes.json();
-                            if (profile?.email) {
-                              await handleGoogleAuth({
-                                name:
-                                  profile.name ||
-                                  profile.given_name ||
-                                  profile.email.split('@')[0],
-                                email: profile.email,
-                                referralCodeInput: regReferral,
-                              });
-                            }
-                          } catch {
-                            notify('Could not fetch Google profile.', 'error');
-                          }
-                        }
-                      },
-                    });
-                    tokenClient.requestAccessToken({ prompt: 'select_account' });
-                    return;
-                  }
-                  if (win.google?.accounts?.id) {
-                    win.google.accounts.id.initialize({
-                      client_id: clientId.trim(),
-                      callback: async (response: any) => {
-                        if (response?.credential) {
-                          await handleGoogleAuth({
-                            name: '',
-                            email: '',
-                            referralCodeInput: regReferral,
-                            credential: response.credential,
-                          });
-                        }
-                      },
-                    });
-                    win.google.accounts.id.prompt();
-                    return;
-                  }
-                  setAuthModalOpen(false);
-                  navigateToPage('home');
-                }}
-                className="w-full py-2.5 px-4 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 transition-colors shadow-2xs"
+                onClick={handleLogout}
+                className="btn btn-outline btn-sm"
+                style={{ flex: 1, color: 'var(--red)', borderColor: 'var(--red)' }}
               >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#EA4335"
-                    d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"
-                  />
-                  <path
-                    fill="#4285F4"
-                    d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.8C3.5 21.4 7.4 24 12 24z"
-                  />
-                </svg>
-                <span>Continue with Google (+200 Bonus Coins)</span>
+                Logout
               </button>
-            )}
+            </div>
+          </div>
+        )}
+      </nav>
 
-            {authTab === 'login' && (
-              <form onSubmit={handleLoginUser} className="space-y-3.5 text-xs">
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="you@gmail.com"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
+      {/* ── MAIN CONTENT ── */}
+      <main className="wrap" style={{ flex: 1, width: '100%', padding: '36px 20px 64px' }}>
+        {/* Player Header Bar */}
+        <div
+          className="card"
+          style={{
+            padding: '24px 28px',
+            marginBottom: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16,
+            background: 'linear-gradient(135deg, rgba(0,232,154,0.06), rgba(155,110,255,0.04))',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, var(--green), #00A870)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: "'Chakra Petch', sans-serif",
+                fontWeight: 700,
+                fontSize: 22,
+                color: '#03100A',
+                flexShrink: 0,
+              }}
+            >
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h1 className="font-display" style={{ fontSize: 'clamp(18px, 3vw, 24px)', fontWeight: 700, color: 'var(--txt)' }}>
+                  {user.name}
+                </h1>
+                <span
+                  className="font-mono"
+                  style={{
+                    fontSize: 11,
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    background: 'rgba(0,232,154,0.1)',
+                    border: '1px solid rgba(0,232,154,0.25)',
+                    color: 'var(--green)',
+                    fontWeight: 600,
+                  }}
                 >
-                  Sign In to Account →
-                </button>
-              </form>
-            )}
-
-            {authTab === 'register' && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleRegisterUser(regName, regEmail, regReferral, regPassword);
-                }}
-                className="space-y-3 text-xs"
-              >
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Your Full Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                    placeholder="Enter your full name"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="you@gmail.com"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Create Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Min 6 characters"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Referral Code (Optional — Get +200 Bonus Coins)
-                  </label>
-                  <input
-                    type="text"
-                    value={regReferral}
-                    onChange={(e) => setRegReferral(e.target.value.toUpperCase())}
-                    placeholder="Optional invite code"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
-                >
-                  Create Free Account (+200 Coins) →
-                </button>
-              </form>
-            )}
-
-            {authTab === 'database' && (
-              <div className="space-y-3.5 text-xs">
-                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Paste your <strong>Cloudflare Worker URL</strong> below after setting up Cloudflare
-                  D1 (`functions/schema.sql` + `functions/worker.js`).
-                </p>
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Cloudflare Worker Backend URL
-                  </label>
-                  <input
-                    type="url"
-                    value={workerApiUrl}
-                    onChange={(e) => setWorkerApiUrl(e.target.value)}
-                    placeholder="https://lootify-api.sarthaksinghyadav1.workers.dev"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono text-[11px]"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      localStorage.setItem('lootify_worker_api_url', workerApiUrl.trim());
-                      notify(
-                        workerApiUrl.trim()
-                          ? `Connected to Cloudflare Worker: ${workerApiUrl.trim()}`
-                          : 'Using Standalone Browser Database Mode',
-                        'success'
-                      );
-                      setAuthModalOpen(false);
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
-                  >
-                    Save Database URL
-                  </button>
-                </div>
+                  PLAYER ID: {user.id.toUpperCase().slice(0, 10)}
+                </span>
               </div>
-            )}
+              <p style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 4 }}>
+                {user.email} &nbsp;•&nbsp; Joined {user.joinedAt}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" onClick={goBackToLanding} className="btn btn-ghost btn-sm">
+              ← Landing Page
+            </button>
+            <button type="button" onClick={() => switchTab('wallet')} className="btn btn-primary btn-sm">
+              🏦 Cashout ₹ INR
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-5 right-5 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 flex items-center gap-3 text-xs font-medium">
-          <span
-            className={
-              toast.type === 'error'
-                ? 'text-red-500 font-bold'
-                : toast.type === 'success'
-                ? 'text-emerald-500 font-bold'
-                : 'text-amber-500 font-bold'
-            }
-          >
-            {toast.type === 'error' ? 'Alert' : toast.type === 'success' ? 'Success' : 'Info'}
+        {/* ── TAB 1: OVERVIEW ── */}
+        {activeTab === 'overview' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* 4 Real Stat Cards */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 16,
+              }}
+            >
+              <div className="card" style={{ padding: 22 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  AVAILABLE COINS
+                </div>
+                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--green)' }}>
+                  {user.availableCoins.toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                  Cash Value: <strong style={{ color: 'var(--txt)' }}>₹{inrBalance}</strong> (10 Coins = ₹1)
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 22 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  PENDING ESCROW
+                </div>
+                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--gold)' }}>
+                  {user.pendingCoins.toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                  ₹{pendingInr} in 3–5 day verification hold
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 22 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  QUESTS COMPLETED
+                </div>
+                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--violet)' }}>
+                  {user.questsCompleted}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                  Offerwalls, shortlinks &amp; micro-tasks
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 22 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  REFERRED PLAYERS
+                </div>
+                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--txt)' }}>
+                  {user.referralsCount}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 6 }}>
+                  Lifetime commission active
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Action Bento */}
+            <div className="bento">
+              <div className="card qcard span2" style={{ padding: 26 }} onClick={() => switchTab('quests')}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+                  <div
+                    style={{
+                      width: 46,
+                      height: 46,
+                      background: 'linear-gradient(135deg,var(--green),#065F46)',
+                      borderRadius: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 22,
+                    }}
+                  >
+                    🎮
+                  </div>
+                  <div>
+                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                      Explore Quest Modes
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                      Gaming Offerwalls, Paid Shortlinks &amp; Social Micro-Tasks
+                    </p>
+                  </div>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.7, marginBottom: 18 }}>
+                  Complete game quests, surveys, shortlinks, and micro-tasks to earn Lootify Coins directly into your wallet.
+                </p>
+                <button type="button" className="btn btn-primary btn-sm">
+                  🚀 Open Quest Modes →
+                </button>
+              </div>
+
+              <div className="card qcard" style={{ padding: 26 }} onClick={() => switchTab('referrals')}>
+                <div style={{ fontSize: 26, marginBottom: 10 }}>👥</div>
+                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
+                  Refer &amp; Earn
+                </h3>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 16 }}>
+                  Share your code <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 600 }}>{user.referralCode}</span> with friends and earn lifetime commission.
+                </p>
+                <button type="button" className="btn btn-outline btn-sm btn-full">
+                  Get Referral Link
+                </button>
+              </div>
+            </div>
+
+            {/* Recent Activity / Withdrawals */}
+            <div className="card" style={{ padding: 26 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                  Recent Account Activity
+                </h3>
+                <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                  REAL-TIME LEDGER
+                </span>
+              </div>
+
+              {user.withdrawals.length === 0 ? (
+                <div
+                  style={{
+                    padding: '32px 20px',
+                    textAlign: 'center',
+                    background: 'var(--bg2)',
+                    border: '1px dashed var(--border2)',
+                    borderRadius: 12,
+                  }}
+                >
+                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
+                    No transactions yet
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                    Your completed quests, referral commissions, and cashout requests will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {user.withdrawals.map((w) => (
+                    <div
+                      key={w.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        flexWrap: 'wrap',
+                        gap: 10,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
+                          {w.methodLabel} — ₹{w.amountInr}
+                        </div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                          {w.destination} • {w.createdAt}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="font-mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)' }}>
+                          -{w.coins} Coins
+                        </span>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 10,
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(255,180,0,0.1)',
+                            border: '1px solid rgba(255,180,0,0.25)',
+                            color: 'var(--gold)',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {w.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 2: QUEST MODES ── */}
+        {activeTab === 'quests' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div>
+              <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                Quest Modes
+              </h2>
+              <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
+                Select a quest category below. All earnings are verified via real S2S postbacks.
+              </p>
+            </div>
+
+            <div className="bento">
+              {/* Offerwalls */}
+              <div className="card span2" style={{ padding: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      background: 'linear-gradient(135deg,var(--green),#065F46)',
+                      borderRadius: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 22,
+                    }}
+                  >
+                    🎮
+                  </div>
+                  <div>
+                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                      Gaming &amp; CPI Offerwalls
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                      S2S Postback Verified • 3–5 Day Anti-Fraud Escrow
+                    </p>
+                  </div>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.7, marginBottom: 16 }}>
+                  Download mobile or PC games, complete in-game milestones, and finish surveys from verified offerwall partners.
+                </p>
+                <div
+                  style={{
+                    padding: '16px',
+                    borderRadius: 10,
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border)',
+                    fontSize: 13,
+                    color: 'var(--txt2)',
+                  }}
+                >
+                  ⚡ Partner offerwall SDKs are linked to your Player ID (<span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>). Live campaigns will appear here automatically once enabled for your region.
+                </div>
+              </div>
+
+              {/* Shortlinks */}
+              <div className="card" style={{ padding: 24 }}>
+                <div style={{ fontSize: 26, marginBottom: 10 }}>🔗</div>
+                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
+                  Paid Shortlinks Arena
+                </h3>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 14 }}>
+                  Complete daily shortlinks with 24-hour auto-reset cooldowns and instant S2S credit.
+                </p>
+                <div
+                  className="font-mono"
+                  style={{
+                    padding: '12px',
+                    borderRadius: 8,
+                    background: 'rgba(255,180,0,0.06)',
+                    border: '1px solid rgba(255,180,0,0.2)',
+                    fontSize: 12,
+                    color: 'var(--gold)',
+                    textAlign: 'center',
+                  }}
+                >
+                  0 Active Links Available Right Now
+                </div>
+              </div>
+
+              {/* Micro-tasks */}
+              <div className="card" style={{ padding: 24 }}>
+                <div style={{ fontSize: 26, marginBottom: 10 }}>📋</div>
+                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
+                  Micro-Tasks &amp; Social
+                </h3>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 14 }}>
+                  Social quests, app reviews, and community tasks with proof verification.
+                </p>
+                <div
+                  className="font-mono"
+                  style={{
+                    padding: '12px',
+                    borderRadius: 8,
+                    background: 'rgba(155,110,255,0.06)',
+                    border: '1px solid rgba(155,110,255,0.2)',
+                    fontSize: 12,
+                    color: 'var(--violet)',
+                    textAlign: 'center',
+                  }}
+                >
+                  No Active Micro-Tasks Queued
+                </div>
+              </div>
+
+              {/* Refer & Earn */}
+              <div className="card span2" style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>
+                    👥 Want to earn passively?
+                  </h3>
+                  <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
+                    Invite your squad with your referral link and earn lifetime commission on every quest they complete.
+                  </p>
+                </div>
+                <button type="button" onClick={() => switchTab('referrals')} className="btn btn-primary btn-sm">
+                  Open Refer &amp; Earn →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 3: REFER & EARN ── */}
+        {activeTab === 'referrals' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="card card-glow" style={{ padding: 'clamp(22px, 4vw, 36px)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                <div
+                  style={{
+                    width: 50,
+                    height: 50,
+                    background: 'linear-gradient(135deg,var(--violet),#6D28D9)',
+                    borderRadius: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 22,
+                  }}
+                >
+                  👥
+                </div>
+                <div>
+                  <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>
+                    Refer &amp; Earn Lifetime Commission
+                  </h2>
+                  <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
+                    Share your unique link. Earn 10% lifetime commission on your friends&apos; quest rewards.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: 'var(--bg2)',
+                  border: '1px solid var(--border2)',
+                  borderRadius: 12,
+                  padding: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  marginTop: 20,
+                }}
+              >
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600, marginBottom: 4 }}>
+                    YOUR PERSONAL REFERRAL LINK
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 13, color: 'var(--green)', wordBreak: 'break-all' }}>
+                    {referralLink}
+                  </div>
+                </div>
+                <button type="button" onClick={copyReferral} className="btn btn-primary btn-sm">
+                  {copiedRef ? '✅ Copied!' : '📋 Copy Link'}
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginTop: 20 }}>
+                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>YOUR REFERRAL CODE</div>
+                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginTop: 6 }}>
+                    {user.referralCode}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>TOTAL REFERRED FRIENDS</div>
+                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--green)', marginTop: 6 }}>
+                    {user.referralsCount}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>COMMISSION RATE</div>
+                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--violet)', marginTop: 6 }}>
+                    10% Lifetime
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 4: CASHOUT WALLET ── */}
+        {activeTab === 'wallet' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
+            {/* Left: Cashout Form */}
+            <div className="card card-glow" style={{ padding: 28 }}>
+              <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
+                Instant Cashout Request
+              </h2>
+              <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 20 }}>
+                Available Balance:{' '}
+                <strong className="font-mono" style={{ color: 'var(--green)' }}>
+                  {user.availableCoins} Coins (₹{inrBalance})
+                </strong>
+              </p>
+
+              <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--txt2)', marginBottom: 8 }}>
+                    SELECT CASHOUT CHANNEL
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {(
+                      [
+                        { id: 'upi', label: '🏦 UPI Transfer' },
+                        { id: 'bank', label: '🏛️ Bank IMPS' },
+                        { id: 'gift_card', label: '🛒 Gift Cards' },
+                        { id: 'crypto', label: '💰 USDT / BTC' },
+                      ] as { id: PayoutChannel; label: string }[]
+                    ).map((ch) => (
+                      <button
+                        key={ch.id}
+                        type="button"
+                        onClick={() => setPayoutChannel(ch.id)}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          background: payoutChannel === ch.id ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
+                          border: payoutChannel === ch.id ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: payoutChannel === ch.id ? 'var(--green)' : 'var(--txt)',
+                        }}
+                      >
+                        {ch.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                    {payoutChannel === 'upi' && 'ENTER UPI ID (e.g. name@okaxis)'}
+                    {payoutChannel === 'bank' && 'ENTER ACCOUNT NO & IFSC CODE'}
+                    {payoutChannel === 'gift_card' && 'ENTER EMAIL FOR VOUCHER DELIVERY'}
+                    {payoutChannel === 'crypto' && 'ENTER USDT (TRC20/BEP20) OR BTC ADDRESS'}
+                  </label>
+                  <input
+                    type="text"
+                    value={payoutDestination}
+                    onChange={(e) => setPayoutDestination(e.target.value)}
+                    placeholder={
+                      payoutChannel === 'upi'
+                        ? 'player@upi'
+                        : payoutChannel === 'bank'
+                        ? 'A/C Number + IFSC'
+                        : payoutChannel === 'gift_card'
+                        ? user.email
+                        : '0x... or T...'
+                    }
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      background: 'var(--bg2)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 14,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                    COINS TO WITHDRAW (MIN 100 COINS = ₹10)
+                  </label>
+                  <input
+                    type="number"
+                    min={100}
+                    step={10}
+                    value={payoutCoins}
+                    onChange={(e) => setPayoutCoins(e.target.value)}
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      background: 'var(--bg2)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--gold)',
+                      fontSize: 15,
+                      fontWeight: 600,
+                      outline: 'none',
+                    }}
+                  />
+                  <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                    You will receive:{' '}
+                    <strong className="font-mono" style={{ color: 'var(--green)' }}>
+                      ₹{((Math.max(0, Number(payoutCoins) || 0)) / 10).toFixed(2)} INR
+                    </strong>
+                  </div>
+                </div>
+
+                {payoutMessage && (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      background:
+                        payoutMessage.type === 'success' ? 'rgba(0,232,154,0.1)' : 'rgba(255,85,102,0.1)',
+                      border:
+                        payoutMessage.type === 'success'
+                          ? '1px solid rgba(0,232,154,0.3)'
+                          : '1px solid rgba(255,85,102,0.3)',
+                      color: payoutMessage.type === 'success' ? 'var(--green)' : 'var(--red)',
+                    }}
+                  >
+                    {payoutMessage.text}
+                  </div>
+                )}
+
+                <button type="submit" className="btn btn-primary btn-full">
+                  🚀 Submit Cashout Request
+                </button>
+              </form>
+            </div>
+
+            {/* Right: Withdrawal History */}
+            <div className="card" style={{ padding: 28 }}>
+              <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', marginBottom: 16 }}>
+                Your Cashout History
+              </h3>
+
+              {user.withdrawals.length === 0 ? (
+                <div
+                  style={{
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    background: 'var(--bg2)',
+                    border: '1px dashed var(--border2)',
+                    borderRadius: 12,
+                  }}
+                >
+                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
+                    No cashouts yet
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                    Once you earn at least 100 Coins (₹10), you can request an instant payout here.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {user.withdrawals.map((w) => (
+                    <div
+                      key={w.id}
+                      style={{
+                        padding: '14px 16px',
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
+                          ₹{w.amountInr} via {w.methodLabel}
+                        </div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                          {w.destination} • {w.createdAt}
+                        </div>
+                      </div>
+                      <span
+                        className="font-mono"
+                        style={{
+                          fontSize: 11,
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: 'rgba(255,180,0,0.1)',
+                          border: '1px solid rgba(255,180,0,0.25)',
+                          color: 'var(--gold)',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {w.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* ── SIMPLE FOOTER ── */}
+      <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--bg2)', padding: '20px' }}>
+        <div
+          className="wrap"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <span style={{ fontSize: 12, color: 'var(--txt2)' }}>
+            © 2026 Lootify.in — Player Dashboard
           </span>
-          <span className="text-slate-800 dark:text-slate-100">{toast.message}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="live-dot" style={{ width: 6, height: 6 }}></div>
+            <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+              Connected as {user.email}
+            </span>
+          </div>
         </div>
-      )}
+      </footer>
     </div>
   );
 }
