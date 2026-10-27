@@ -50,10 +50,12 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
 }) => {
   const { settings, publicPayoutProofs, leaderboard } = data;
 
-  // Interactive Calculator State
-  const [calcOffersPerDay, setCalcOffersPerDay] = useState(2);
-  const [calcShortlinksPerDay, setCalcShortlinksPerDay] = useState(4);
-  const [calcActiveReferrals, setCalcActiveReferrals] = useState(10);
+  // Interactive Calculator State (Lootify v2)
+  const [calcOffersPerDay, setCalcOffersPerDay] = useState(5);
+  const [calcShortlinksPerDay, setCalcShortlinksPerDay] = useState(10);
+  const [calcActiveReferrals, setCalcActiveReferrals] = useState(3);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   // Landing Page Hero Auth Card State ('register' | 'login')
   const [heroAuthMode, setHeroAuthMode] = useState<'register' | 'login'>('register');
@@ -756,733 +758,1859 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
     );
   }
 
-  // Default: HOME / LANDING PAGE ('home')
+  // Default: LOOTIFY V2 GAMING REWARDS LANDING PAGE ('home')
+  const v2MonthlyCoins = Math.round(
+    calcOffersPerDay * 4 * 1200 +
+      calcShortlinksPerDay * 20 * 30 +
+      calcActiveReferrals * 50 +
+      calcActiveReferrals * 500 * 0.1
+  );
+  const v2MonthlyInr = Math.round(v2MonthlyCoins / 10);
+
+  const v2Faqs = [
+    {
+      q: 'Is Lootify legit? Will I actually get paid?',
+      a: 'Yes! Lootify is a real GPT (Get-Paid-To) platform operating with transparent coin economics. We use S2S postback verification with all offerwall partners. Withdrawals are processed via verified UPI, bank transfer, and voucher codes.',
+    },
+    {
+      q: 'Why are some earnings in "Pending Hold"?',
+      a: 'Offerwall and advertiser rewards go through a mandatory 3–5 day anti-fraud escrow period. This protects both players and advertisers from fraudulent chargebacks. After verification, coins auto-release into your Available Balance.',
+    },
+    {
+      q: 'What cashout methods are supported?',
+      a: 'Direct Transfer: UPI and Bank. Gift Cards: Amazon, PhonePe, and Google Play. Online Wallets: BTC, USDT, Faucet, and WebMoney WMZ.',
+    },
+    {
+      q: 'How does the Refer & Earn system work?',
+      a: 'Share your custom referral link with friends. Every time your referred friend earns on Lootify, you receive a lifetime commission on their earnings — forever, with no cap.',
+    },
+    {
+      q: 'What are the shortlink daily limits?',
+      a: 'You can complete up to 40 shortlinks per day. The cooldown resets automatically every 24 hours with instant S2S postback credit.',
+    },
+    {
+      q: 'Is there a minimum age requirement?',
+      a: 'Players must be 18 years or older to participate and withdraw earnings. All accounts go through email verification, and payout identity checks may apply for large withdrawals.',
+    },
+  ];
+
+  const scrollToSection = (id: string) => {
+    setMobileMenuOpen(false);
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <div className="space-y-14">
-      {/* Top Landing Page Welcome Bar with Theme Toggle & Live Status */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 shadow-xs">
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono font-bold">
-            LIVE · INDIA & GLOBAL
-          </span>
-          <span className="text-slate-600 dark:text-slate-300 font-medium">
-            First UPI / Paytm / Gift Card Withdrawal starts at just{' '}
-            <strong className="text-emerald-600 dark:text-emerald-400">
-              ₹{settings.starterPayoutInr} ({settings.starterPayoutInr * settings.coinsPerInr} Coins)
-            </strong>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3 ml-auto">
-          {onToggleTheme && (
-            <button
-              type="button"
-              onClick={onToggleTheme}
-              className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-emerald-500 transition-colors"
-            >
-              {theme === 'dark' ? '☀ Switch to Light Theme' : '🌙 Switch to Dark Theme'}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => onNavigate('dashboard')}
-            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+    <div className="lootify-v2 grid-bg" data-theme={theme}>
+      {/* ════════════════════════════════════════
+        NAVBAR
+      ════════════════════════════════════════ */}
+      <nav id="navbar">
+        <div
+          className="wrap"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            height: '64px',
+          }}
+        >
+          {/* Logo */}
+          <a
+            href="#hero"
+            onClick={(e) => {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
           >
-            Enter Member Dashboard →
-          </button>
-        </div>
-      </div>
-
-      {/* Hero Split Section: Value Proposition (Left) + Google Sign-In & Login/Signup Card (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-        <div className="lg:col-span-7 flex flex-col justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-9 space-y-6 shadow-xs">
-          <div className="space-y-4">
-            <div className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-              {settings.siteName}.in · Official Multi-Earning & Rewards Website
-            </div>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
-              Turn Your Daily Free Time Into Instant UPI, Bank & Gift Card Cashouts.
-            </h1>
-            <p className="text-base text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
-              Complete verified offers on <strong>Notik.me & Lootably</strong>, solve daily{' '}
-              <strong>ShrinkMe & GPLinks</strong> shortlinks, play timed trivia quizzes, and earn{' '}
-              <strong>{settings.referralCommissionPercent}% lifetime passive commission</strong> from
-              every friend you invite.
-            </p>
-          </div>
-
-          {/* 3 Key Highlights */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2">
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-              <div className="text-xs text-slate-500 dark:text-slate-400">Starter Cashout</div>
-              <div className="text-lg font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                ₹{settings.starterPayoutInr}.00 Minimum
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Instant UPI & Gift Cards</div>
-            </div>
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-              <div className="text-xs text-slate-500 dark:text-slate-400">Welcome Bonus</div>
-              <div className="text-lg font-extrabold font-mono text-amber-600 dark:text-amber-400 mt-0.5">
-                +{settings.referralWelcomeBonusCoins} Coins
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Credited on Google Sign-In</div>
-            </div>
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-              <div className="text-xs text-slate-500 dark:text-slate-400">Refer & Earn</div>
-              <div className="text-lg font-extrabold font-mono text-slate-900 dark:text-white mt-0.5">
-                ₹5 + {settings.referralCommissionPercent}% Life
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">3-Layer Viral Commission</div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <button
-              type="button"
-              onClick={triggerGoogleSignIn}
-              className="inline-flex items-center gap-2.5 px-5 py-3 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors whitespace-nowrap shrink-0 shadow-xs"
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                background: 'linear-gradient(135deg,var(--green),#00A870)',
+                borderRadius: '9px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: "'Chakra Petch',sans-serif",
+                fontWeight: 700,
+                fontSize: '18px',
+                color: '#03100A',
+                boxShadow: '0 0 14px rgba(0,232,154,0.4)',
+              }}
             >
-              <span>Continue with Google (+200 Coins)</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('payout-proofs')}
-              className="inline-flex items-center gap-2 px-4 py-3 text-xs font-semibold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors whitespace-nowrap shrink-0"
-            >
-              View Live Payment Proofs
-            </button>
-          </div>
-
-          {/* Partner Network Strip */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
-            <span>Official Ad & Payout Partners:</span>
-            <div className="flex flex-wrap items-center gap-3 font-mono font-semibold text-slate-700 dark:text-slate-300">
-              <span>Notik.me</span>
-              <span>·</span>
-              <span>Lootably</span>
-              <span>·</span>
-              <span>ShrinkMe.io</span>
-              <span>·</span>
-              <span>GPLinks</span>
-              <span>·</span>
-              <span>Monetag</span>
-              <span>·</span>
-              <span>UPI / Paytm / USDT</span>
+              L
             </div>
-          </div>
-        </div>
+            <span
+              className="font-display"
+              style={{ fontSize: '19px', fontWeight: 700, color: 'var(--txt)' }}
+            >
+              LOOTIFY<span style={{ color: 'var(--green)' }}>.</span>
+            </span>
+          </a>
 
-        {/* Right Column: Embedded Google Sign-In + Email Sign-Up / Login Card */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 flex flex-col justify-between space-y-5 shadow-xs">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-mono font-semibold text-amber-600 dark:text-amber-400">
-                INSTANT BONUS · +{settings.referralWelcomeBonusCoins} COINS
+          {/* Center nav desktop */}
+          <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+            <a
+              href="#quest-modes"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('quest-modes');
+              }}
+              className="nav-link"
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--txt2)',
+                textDecoration: 'none',
+                transition: 'color .2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.color = 'var(--green)')}
+              onMouseOut={(e) => (e.currentTarget.style.color = 'var(--txt2)')}
+            >
+              Quest Modes
+            </a>
+            <a
+              href="#calculator"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('calculator');
+              }}
+              className="nav-link"
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--txt2)',
+                textDecoration: 'none',
+                transition: 'color .2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.color = 'var(--green)')}
+              onMouseOut={(e) => (e.currentTarget.style.color = 'var(--txt2)')}
+            >
+              Calculator
+            </a>
+            <a
+              href="#how-it-works"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('how-it-works');
+              }}
+              className="nav-link"
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--txt2)',
+                textDecoration: 'none',
+                transition: 'color .2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.color = 'var(--green)')}
+              onMouseOut={(e) => (e.currentTarget.style.color = 'var(--txt2)')}
+            >
+              How It Works
+            </a>
+            <a
+              href="#faq"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('faq');
+              }}
+              className="nav-link"
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--txt2)',
+                textDecoration: 'none',
+                transition: 'color .2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.color = 'var(--green)')}
+              onMouseOut={(e) => (e.currentTarget.style.color = 'var(--txt2)')}
+            >
+              FAQ
+            </a>
+          </div>
+
+          {/* Right actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div className="live-dot" />
+              <span
+                className="font-mono"
+                style={{ fontSize: '10px', fontWeight: 600, color: 'var(--green)' }}
+              >
+                LIVE
               </span>
-              <span className="text-[11px] font-mono text-slate-500">100 Coins = ₹1.00</span>
             </div>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {heroAuthMode === 'register'
-                ? 'Join Lootify.in for Free'
-                : 'Sign In to Your Lootify Wallet'}
-            </h2>
-
-            {/* 1-Click Official Google Sign-In Button */}
             <button
               type="button"
-              onClick={triggerGoogleSignIn}
-              className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-900 dark:text-white text-sm font-bold flex items-center justify-center gap-3 transition-colors shadow-2xs"
+              onClick={() => onToggleTheme && onToggleTheme()}
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all .2s',
+              }}
+              title="Toggle theme"
             >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path
-                  fill="#EA4335"
-                  d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"
-                />
-                <path
-                  fill="#4285F4"
-                  d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.8C3.5 21.4 7.4 24 12 24z"
-                />
-              </svg>
-              <span>Continue with Google</span>
+              <span id="theme-icon">{theme === 'light' ? '☀️' : '🌙'}</span>
             </button>
-
-            <div className="flex items-center gap-3 text-[11px] text-slate-400">
-              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-              <span>OR USE EMAIL ACCOUNT</span>
-              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-            </div>
-
-            {/* Mode Switcher: Create Account vs Sign In */}
-            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setHeroAuthMode('register')}
-                className={`py-2 rounded-lg transition-colors ${
-                  heroAuthMode === 'register'
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                Create Account
-              </button>
-              <button
-                type="button"
-                onClick={() => setHeroAuthMode('login')}
-                className={`py-2 rounded-lg transition-colors ${
-                  heroAuthMode === 'login'
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                Sign In (Login)
-              </button>
-            </div>
+            <a
+              href="#hero-auth"
+              className="btn btn-primary btn-sm"
+              style={{ padding: '9px 16px' }}
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('hero-auth');
+              }}
+            >
+              Sign Up Free
+            </a>
+            <button
+              type="button"
+              id="hamburger"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              style={{
+                display: 'none',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--txt)',
+                fontSize: '18px',
+              }}
+            >
+              ☰
+            </button>
           </div>
+        </div>
 
-          {heroAuthMode === 'register' ? (
-            <form onSubmit={handleRegisterSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
-                  placeholder="Enter your full name"
-                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="you@gmail.com"
-                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Min 6 chars"
-                    className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Referral Code (Optional)</label>
-                  <input
-                    type="text"
-                    value={regRefCode}
-                    onChange={(e) => setRegRefCode(e.target.value.toUpperCase())}
-                    placeholder="Optional"
-                    className="w-full px-3.5 py-2 text-sm font-mono uppercase rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={regSubmitting}
-                className="w-full py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors"
-              >
-                {regSubmitting
-                  ? 'Creating Account...'
-                  : `Create Free Account (+${settings.referralWelcomeBonusCoins} Coins)`}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleHeroLoginSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">Registered Email</label>
-                <input
-                  type="email"
-                  required
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="you@gmail.com"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Password</label>
-                <input
-                  type="password"
-                  required
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loginSubmitting}
-                className="w-full py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors"
-              >
-                {loginSubmitting ? 'Signing In...' : 'Sign In to Dashboard →'}
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
-
-      {/* Full-Width 4-Column KPI Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">First Payout Threshold</p>
-          <p className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">
-            ₹{settings.starterPayoutInr}.00
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Just {(settings.starterPayoutInr * settings.coinsPerInr).toLocaleString()} Coins to
-            unlock
-          </p>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Lifetime Referral Commission</p>
-          <p className="text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400 mt-1">
-            {settings.referralCommissionPercent}% Forever
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            + ₹{(settings.referralFlatBonusCoins / settings.coinsPerInr).toFixed(0)} Flat Activation
-            Bonus
-          </p>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Supported Payout Rails</p>
-          <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white mt-1">
-            5 Instant Rails
-          </p>
-          <p className="text-xs text-slate-500 mt-1">UPI · Bank · Gift Cards · Paytm · USDT</p>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Registered Accounts (Live DB)</p>
-          <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white mt-1">
-            {data.allUsersCount.toLocaleString()}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Protected by {settings.pendingHoldDays}-Day Escrow Guard
-          </p>
-        </div>
-      </div>
-
-      {/* Section: 6 Ways to Earn Real Cash Daily */}
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400 uppercase">
-              6 Verified Earning Engines
-            </p>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white mt-1">
-              Everything You Can Do to Earn Daily on {settings.siteName}.in
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('offerwalls')}
-            className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div
+            id="mmenu"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg2)',
+              borderTop: '1px solid var(--border)',
+              padding: '16px 20px',
+              gap: '4px',
+            }}
           >
-            View All Live Offers & Tasks →
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                01 · OFFERWALLS ({data.offerwalls.length} ACTIVE)
-              </span>
-              <span className="text-xs font-mono font-semibold text-slate-500">
-                500 – 25,000 Coins
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Notik.me, Lootably & Monetag Offers
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Complete verified web offers, app trials, and market surveys. Server-to-Server
-              (S2S) postbacks credit coins automatically into your wallet.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
-                02 · PAID SHORTLINKS ({data.shortlinks.length} ACTIVE)
-              </span>
-              <span className="text-xs font-mono font-semibold text-slate-500">
-                70 – 100 Coins / Link
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              ShrinkMe.io & GPLinks Daily Links
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Solve high-CPM Indian shortlinks in 10–15 seconds. Protected by a 24-hour per-IP cooldown
-              so CPM rates stay high and payouts remain instant.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                03 · 3-LAYER REFER & EARN
-              </span>
-              <span className="text-xs font-mono font-semibold text-slate-500">
-                {settings.referralFlatBonusCoins} Coins + {settings.referralCommissionPercent}% Life
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Passive Lifetime Referral Income
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Your friend gets +{settings.referralWelcomeBonusCoins} Coins on signup, you get +{settings.referralFlatBonusCoins} Coins (₹{(settings.referralFlatBonusCoins / settings.coinsPerInr).toFixed(0)}) on their first offer, plus
-              {settings.referralCommissionPercent}% lifetime commission on everything they earn forever.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
-                04 · SOCIAL MICRO-TASKS ({data.tasks.length} ACTIVE)
-              </span>
-              <span className="text-xs font-mono font-semibold text-slate-500">
-                150 – 350 Coins
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Telegram, YouTube & Social Tasks
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Join official channels, watch tutorial videos, or share posts. Submit your
-              username or proof link for rapid Admin verification.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                05 · QUIZZES & ARTICLES ({data.quizzes.length + data.articles.length} ACTIVE)
-              </span>
-              <span className="text-xs font-mono font-semibold text-slate-500">
-                60 – 150 Coins
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Timed Trivia & Read-to-Earn Guides
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Answer 3-question general knowledge & fintech quizzes or read sponsored finance articles for
-              10 seconds to claim instant available coins.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
-                06 · STREAKS, SPIN & LIFAFA
-              </span>
-              <span className="text-xs font-mono font-semibold text-slate-500">
-                Daily Free Coins
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              7-Day Check-In, Lucky Wheel & Codes
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Maintain your 7-day login streak, spin the daily wheel for guaranteed coins, and redeem
-              limited-claim Lifafa promo codes dropped by Admin.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Section: 3-Step How It Works */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 space-y-6">
-        <div>
-          <p className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400 uppercase">
-            Simple 3-Step Workflow
-          </p>
-          <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
-            How Sign-In, Pending Escrow & Instant UPI Withdrawals Work
-          </h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
-          <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
-            <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-              STEP 01 · GOOGLE OR EMAIL LOGIN
-            </div>
-            <div className="text-base font-bold text-slate-900 dark:text-white">
-              Sign In & Get +{settings.referralWelcomeBonusCoins} Welcome Coins
-            </div>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Click <strong>Continue with Google</strong> or create an email account above. Your
-              account is stored in our Cloudflare D1 SQL database with +{settings.referralWelcomeBonusCoins} bonus coins.
-            </p>
-          </div>
-          <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
-            <div className="font-mono font-bold text-amber-600 dark:text-amber-400">
-              STEP 02 · COMPLETE OFFERS & LINKS
-            </div>
-            <div className="text-base font-bold text-slate-900 dark:text-white">
-              Earn Available & Escrow Coins
-            </div>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Quizzes, streaks, and promo codes credit directly to <strong>Available Coins</strong>.
-              High-paying Offerwalls clear automatically after our {settings.pendingHoldDays}-day anti-fraud hold.
-            </p>
-          </div>
-          <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
-            <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-              STEP 03 · WITHDRAW REAL CASH
-            </div>
-            <div className="text-base font-bold text-slate-900 dark:text-white">
-              Cashout from ₹{settings.starterPayoutInr} via UPI / Crypto
-            </div>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Unlock your starter withdrawal at just ₹{settings.starterPayoutInr} (1,000 Coins) via
-              UPI ID, Bank IMPS, Google Play / Amazon Gift Cards, Paytm, or USDT (TRC20/BEP20).
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Interactive Daily & Monthly Earning Potential Calculator */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-7 space-y-6">
-            <div>
-              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                Transparent Unit Economics
-              </p>
-              <h2 className="text-xl md:text-2xl font-bold mt-1">
-                Calculate Your Monthly Earning Potential
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Adjust the sliders below to estimate how much you can earn combining Offerwalls,
-                Shortlinks, and Referrals.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-xs font-medium mb-1.5">
-                  <span>Offerwall Tasks Completed Per Day (Notik.me / Lootably)</span>
-                  <span className="font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
-                    {calcOffersPerDay} offers/day (~{dailyOfferCoins} Coins)
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={10}
-                  value={calcOffersPerDay}
-                  onChange={(e) => setCalcOffersPerDay(Number(e.target.value))}
-                  className="w-full accent-emerald-500"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-medium mb-1.5">
-                  <span>Paid Shortlinks Solved Per Day (ShrinkMe / GPLinks)</span>
-                  <span className="font-mono tabular-nums font-bold text-amber-600 dark:text-amber-400">
-                    {calcShortlinksPerDay} links/day (~{dailyShortlinkCoins} Coins)
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={10}
-                  value={calcShortlinksPerDay}
-                  onChange={(e) => setCalcShortlinksPerDay(Number(e.target.value))}
-                  className="w-full accent-amber-500"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-medium mb-1.5">
-                  <span>
-                    Active Referred Friends ({settings.referralCommissionPercent}% Lifetime Passive
-                    Commission)
-                  </span>
-                  <span className="font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
-                    {calcActiveReferrals} active friends (+{dailyRefCommissionCoins} Coins/day)
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={calcActiveReferrals}
-                  onChange={(e) => setCalcActiveReferrals(Number(e.target.value))}
-                  className="w-full accent-emerald-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-4">
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Estimated Daily Income</p>
-                <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white mt-0.5">
-                  ₹{totalDailyInr.toFixed(2)} / day
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-500 dark:text-slate-400">Daily Coins</p>
-                <p className="text-sm font-mono tabular-nums font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
-                  +{totalDailyCoins.toLocaleString()} Coins
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Estimated 30-Day Monthly Payout
-              </p>
-              <p className="text-3xl md:text-4xl font-extrabold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">
-                ₹{totalMonthlyInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} / month
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                Withdrawable directly to UPI ID, Bank Account, Amazon/Google Play Gift Cards, Paytm,
-                or USDT Wallet.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={triggerGoogleSignIn}
-              className="w-full py-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+            <a
+              href="#quest-modes"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('quest-modes');
+              }}
+              style={{
+                padding: '12px 8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--txt)',
+                textDecoration: 'none',
+                borderBottom: '1px solid var(--border)',
+                display: 'block',
+              }}
             >
-              Sign In with Google & Start Earning Now →
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Live Recent Payout Proofs Preview */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-              LIVE VERIFIED WITHDRAWALS
-            </p>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">
-              Recent UPI, Bank & Gift Card Payouts
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('payout-proofs')}
-            className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
-          >
-            See Full Public Ledger →
-          </button>
-        </div>
-
-        {publicPayoutProofs.length === 0 ? (
-          <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-center space-y-1.5">
-            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              Live Public Ledger Ready — Zero Fake Payouts
-            </div>
-            <p className="text-xs text-slate-500">
-              Every real withdrawal requested by members will appear here live with its verified UTR / voucher reference.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                  <th className="py-2.5 pr-4">Member</th>
-                  <th className="py-2.5 px-4">Method</th>
-                  <th className="py-2.5 px-4">Amount</th>
-                  <th className="py-2.5 px-4">UTR / Voucher Reference</th>
-                  <th className="py-2.5 pl-4 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {publicPayoutProofs.slice(0, 5).map((w) => (
-                  <tr key={w.id}>
-                    <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
-                      {w.userName}
-                    </td>
-                    <td className="py-3 px-4 uppercase font-mono text-slate-500">
-                      {w.method.replace('_', ' ')}
-                    </td>
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      ₹{w.amountInr.toFixed(2)}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-500">
-                      {w.utrOrVoucher || 'Verified Queue'}
-                    </td>
-                    <td className="py-3 pl-4 text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                      {w.status === 'approved' ? 'Paid ✓' : 'Processing'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              🎮 Quest Modes
+            </a>
+            <a
+              href="#calculator"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('calculator');
+              }}
+              style={{
+                padding: '12px 8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--txt)',
+                textDecoration: 'none',
+                borderBottom: '1px solid var(--border)',
+                display: 'block',
+              }}
+            >
+              🧮 Calculator
+            </a>
+            <a
+              href="#how-it-works"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('how-it-works');
+              }}
+              style={{
+                padding: '12px 8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--txt)',
+                textDecoration: 'none',
+                borderBottom: '1px solid var(--border)',
+                display: 'block',
+              }}
+            >
+              ⚙️ How It Works
+            </a>
+            <a
+              href="#faq"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('faq');
+              }}
+              style={{
+                padding: '12px 8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--txt)',
+                textDecoration: 'none',
+                display: 'block',
+              }}
+            >
+              ❓ FAQ
+            </a>
+            <a
+              href="#hero-auth"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('hero-auth');
+              }}
+              className="btn btn-primary btn-full"
+              style={{ marginTop: '12px' }}
+            >
+              🚀 Start Earning Free
+            </a>
           </div>
         )}
-      </div>
+      </nav>
 
-      {/* FAQ Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            1. Minimum withdrawal kitna hai?
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Naye users ke liye pehla Starter Withdrawal sirf <strong>₹{settings.starterPayoutInr} (1,000 Coins)</strong> par unlock ho jata hai. Uske baad aap ₹50, ₹100, aur ₹500 tiers me unlimited baar UPI, Bank, Gift Card, ya USDT me withdraw kar sakte hain.
+      {/* ════════════════════════════════════════
+        HERO
+      ════════════════════════════════════════ */}
+      <section
+        id="hero"
+        className="hero-gradient"
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          overflow: 'hidden',
+          padding: '48px 20px',
+        }}
+      >
+        {/* BG orbs */}
+        <div
+          style={{
+            position: 'absolute',
+            width: '400px',
+            height: '400px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle,rgba(0,232,154,0.08),transparent)',
+            top: '-100px',
+            left: '-100px',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            width: '350px',
+            height: '350px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle,rgba(155,110,255,0.07),transparent)',
+            bottom: '-80px',
+            right: '-80px',
+            pointerEvents: 'none',
+          }}
+        />
+
+        <div className="wrap" style={{ width: '100%', position: 'relative', zIndex: 1 }}>
+          <div
+            className="hero-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '48px',
+              alignItems: 'center',
+            }}
+          >
+            {/* Left: Copy */}
+            <div>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(0,232,154,0.07)',
+                  border: '1px solid rgba(0,232,154,0.2)',
+                  borderRadius: '100px',
+                  padding: '6px 14px',
+                  marginBottom: '28px',
+                }}
+              >
+                <div className="live-dot" style={{ width: '6px', height: '6px' }} />
+                <span
+                  className="font-mono"
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--green)',
+                    letterSpacing: '.06em',
+                  }}
+                >
+                  INDIA&apos;S #1 GAMING REWARDS PLATFORM
+                </span>
+              </div>
+
+              <h1
+                className="font-display"
+                style={{
+                  fontSize: 'clamp(36px,6vw,64px)',
+                  fontWeight: 700,
+                  lineHeight: 1.08,
+                  marginBottom: '20px',
+                  color: 'var(--txt)',
+                }}
+              >
+                Play Games.
+                <br />
+                <span style={{ color: 'var(--green)', textShadow: '0 0 30px rgba(0,232,154,0.35)' }}>
+                  Cash Out
+                </span>
+                <br />
+                Real{' '}
+                <span style={{ color: 'var(--gold)', textShadow: '0 0 25px rgba(255,180,0,0.35)' }}>
+                  ₹ INR.
+                </span>
+              </h1>
+
+              <p
+                style={{
+                  fontSize: '16px',
+                  lineHeight: 1.75,
+                  color: 'var(--txt2)',
+                  marginBottom: '28px',
+                  maxWidth: '440px',
+                }}
+              >
+                Complete game quests, offerwalls, shortlinks &amp; micro-tasks.. Withdraw to UPI,
+                Google Play, Amazon Pay, or Crypto — instantly.
+              </p>
+            </div>
+
+            {/* Right: Auth Card */}
+            <div id="hero-auth">
+              <div
+                className="card card-glow auth-card"
+                style={{ padding: 'clamp(24px,5vw,40px)', maxWidth: '440px', width: '100%' }}
+              >
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <div style={{ fontSize: '28px', marginBottom: '10px' }}>🎮</div>
+                  <h2
+                    className="font-display"
+                    style={{
+                      fontSize: '22px',
+                      fontWeight: 700,
+                      color: 'var(--txt)',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Start Earning Now
+                  </h2>
+                  <p style={{ fontSize: '13px', color: 'var(--txt2)' }}>
+                    Sign up with your Google account to start earning
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="google-btn"
+                  id="btn-google-signin"
+                  onClick={triggerGoogleSignIn}
+                >
+                  <svg width="20" height="20" viewBox="0 0 48 48">
+                    <path
+                      fill="#FFC107"
+                      d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"
+                    />
+                    <path
+                      fill="#FF3D00"
+                      d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"
+                    />
+                    <path
+                      fill="#4CAF50"
+                      d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"
+                    />
+                    <path
+                      fill="#1976D2"
+                      d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"
+                    />
+                  </svg>
+                  Continue with Google
+                </button>
+
+                <p
+                  style={{
+                    textAlign: 'center',
+                    fontSize: '11px',
+                    color: 'var(--txt2)',
+                    marginTop: '16px',
+                  }}
+                >
+                  🔒 Secure &nbsp;•&nbsp; No password needed &nbsp;•&nbsp; Free forever
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════
+        PARTNERS STRIP
+      ════════════════════════════════════════ */}
+      <section
+        className="section-sm"
+        style={{
+          borderTop: '1px solid var(--border)',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg2)',
+        }}
+      >
+        <div className="wrap">
+          <p
+            className="font-mono"
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--txt2)',
+              letterSpacing: '.08em',
+              textAlign: 'center',
+              marginBottom: '20px',
+            }}
+          >
+            CASHOUT CHANNELS
+          </p>
+          <div className="cashout-grid">
+            {/* Direct Transfer */}
+            <div
+              style={{
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                borderRadius: '12px',
+                padding: '16px',
+              }}
+            >
+              <p
+                className="font-mono"
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: 'var(--green)',
+                  letterSpacing: '.07em',
+                  marginBottom: '12px',
+                }}
+              >
+                DIRECT TRANSFER
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="pill">🏦 UPI</div>
+                <div className="pill">🏛️ Bank</div>
+              </div>
+            </div>
+
+            {/* Gift Cards */}
+            <div
+              style={{
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                borderRadius: '12px',
+                padding: '16px',
+              }}
+            >
+              <p
+                className="font-mono"
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: 'var(--gold)',
+                  letterSpacing: '.07em',
+                  marginBottom: '12px',
+                }}
+              >
+                GIFT CARDS
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="pill">🛒 Amazon</div>
+                <div className="pill">📱 PhonePe</div>
+                <div className="pill">🎮 Google Play</div>
+              </div>
+            </div>
+
+            {/* Online Wallets */}
+            <div
+              style={{
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                borderRadius: '12px',
+                padding: '16px',
+              }}
+            >
+              <p
+                className="font-mono"
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: 'var(--violet)',
+                  letterSpacing: '.07em',
+                  marginBottom: '12px',
+                }}
+              >
+                ONLINE WALLETS
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="pill">₿ BTC</div>
+                <div className="pill">💰 USDT</div>
+                <div className="pill">🚰 Faucet</div>
+                <div className="pill">💼 WebMoney WMZ</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════
+        HOW IT WORKS
+      ════════════════════════════════════════ */}
+      <section id="how-it-works" className="section">
+        <div className="wrap">
+          <div style={{ textAlign: 'center', marginBottom: '56px' }}>
+            <h2
+              className="font-display"
+              style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 700, color: 'var(--txt)' }}
+            >
+              How Lootify Works
+            </h2>
+            <p style={{ fontSize: '15px', color: 'var(--txt2)', marginTop: '10px' }}>
+              4 steps from zero to cash in your UPI wallet
+            </p>
+          </div>
+
+          <div className="steps-grid">
+            <div className="card" style={{ padding: '28px', textAlign: 'center', position: 'relative' }}>
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  background: 'linear-gradient(135deg,var(--green),#00A870)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                  fontFamily: "'Chakra Petch',sans-serif",
+                  fontWeight: 700,
+                  fontSize: '20px',
+                  color: '#03100A',
+                  boxShadow: '0 0 20px rgba(0,232,154,0.35)',
+                }}
+              >
+                1
+              </div>
+              <div className="step-line" />
+              <h3
+                className="font-display"
+                style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)', marginBottom: '10px' }}
+              >
+                Create Player ID
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--txt2)', lineHeight: 1.7 }}>
+                Sign up with Google and start completing quests immediately.
+              </p>
+            </div>
+
+            <div className="card" style={{ padding: '28px', textAlign: 'center' }}>
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  background: 'linear-gradient(135deg,var(--gold),#D97706)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                  fontFamily: "'Chakra Petch',sans-serif",
+                  fontWeight: 700,
+                  fontSize: '20px',
+                  color: '#1A0A00',
+                  boxShadow: '0 0 20px rgba(255,180,0,0.35)',
+                }}
+              >
+                2
+              </div>
+              <h3
+                className="font-display"
+                style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)', marginBottom: '10px' }}
+              >
+                Complete Quests
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--txt2)', lineHeight: 1.7 }}>
+                Play games, complete offerwalls, smash shortlinks, micro-tasks &amp; refer your
+                squad.
+              </p>
+            </div>
+
+            <div className="card" style={{ padding: '28px', textAlign: 'center' }}>
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  background: 'linear-gradient(135deg,var(--violet),#6D28D9)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                  fontFamily: "'Chakra Petch',sans-serif",
+                  fontWeight: 700,
+                  fontSize: '20px',
+                  color: 'white',
+                  boxShadow: '0 0 20px rgba(155,110,255,0.35)',
+                }}
+              >
+                3
+              </div>
+              <h3
+                className="font-display"
+                style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)', marginBottom: '10px' }}
+              >
+                3–5 Day Escrow
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--txt2)', lineHeight: 1.7 }}>
+                Offerwall rewards go through transparent 3–5 day anti-fraud verification, then
+                auto-release.
+              </p>
+            </div>
+
+            <div className="card" style={{ padding: '28px', textAlign: 'center' }}>
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  background: 'linear-gradient(135deg,var(--green),var(--violet))',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                  fontFamily: "'Chakra Petch',sans-serif",
+                  fontWeight: 700,
+                  fontSize: '20px',
+                  color: 'white',
+                  boxShadow: '0 0 20px rgba(0,232,154,0.25)',
+                }}
+              >
+                4
+              </div>
+              <h3
+                className="font-display"
+                style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)', marginBottom: '10px' }}
+              >
+                Instant Cashout
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--txt2)', lineHeight: 1.7 }}>
+                Withdraw to UPI, Bank, Google Play, Amazon Pay, or USDT crypto — whenever
+                you&apos;re ready.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════
+        6 QUEST MODES BENTO GRID
+      ════════════════════════════════════════ */}
+      <section id="quest-modes" className="section" style={{ background: 'var(--bg2)' }}>
+        <div className="wrap">
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <h2
+              className="font-display"
+              style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 700, color: 'var(--txt)' }}
+            >
+              6 Ways to Earn Loot
+            </h2>
+            <p style={{ fontSize: '15px', color: 'var(--txt2)', marginTop: '10px' }}>
+              Pick your zone — every grind is rewarded
+            </p>
+          </div>
+
+          <div className="bento">
+            {/* 1: Gaming Offerwalls (span 2) */}
+            <div
+              className="card qcard span2"
+              style={{ padding: '28px' }}
+              onClick={() => onNavigate('offerwalls')}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  marginBottom: '18px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div
+                    style={{
+                      width: '50px',
+                      height: '50px',
+                      background: 'linear-gradient(135deg,var(--green),#065F46)',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '22px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    🎮
+                  </div>
+                  <div>
+                    <h3
+                      className="font-display"
+                      style={{ fontSize: '17px', fontWeight: 700, color: 'var(--txt)' }}
+                    >
+                      Gaming &amp; CPI Offerwalls
+                    </h3>
+                    <p style={{ fontSize: '12px', color: 'var(--txt2)' }}>
+                      Multiple Premium Offerwall Partners
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--txt2)',
+                  lineHeight: 1.7,
+                  marginBottom: '18px',
+                }}
+              >
+                Download mobile/PC games, reach in-game milestones, or complete high-paying surveys
+                across multiple premium offerwall partners.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate('offerwalls');
+                }}
+              >
+                🚀 Launch Mode
+              </button>
+            </div>
+
+            {/* 2: Shortlinks */}
+            <div
+              className="card qcard"
+              style={{ padding: '24px' }}
+              onClick={() => onNavigate('shortlinks')}
+            >
+              <div style={{ fontSize: '26px', marginBottom: '12px' }}>🔗</div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  marginBottom: '10px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <h3
+                  className="font-display"
+                  style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)' }}
+                >
+                  Paid Shortlinks Arena
+                </h3>
+              </div>
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--txt2)',
+                  lineHeight: 1.7,
+                  marginBottom: '14px',
+                }}
+              >
+                15–25 Coins per link. Up to 40 daily shortlinks. S2S instant postbacks. Auto 24h
+                reset.
+              </p>
+              <div
+                className="font-mono"
+                style={{
+                  background: 'rgba(255,180,0,0.05)',
+                  border: '1px solid rgba(255,180,0,0.15)',
+                  borderRadius: '8px',
+                  padding: '9px 12px',
+                  marginBottom: '14px',
+                  fontSize: '12px',
+                  color: 'var(--gold)',
+                }}
+              >
+                ⏱ 24h Cooldown Auto-Reset
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate('shortlinks');
+                }}
+              >
+                Launch Mode
+              </button>
+            </div>
+
+            {/* 3: Micro-Tasks */}
+            <div
+              className="card qcard"
+              style={{ padding: '24px' }}
+              onClick={() => onNavigate('tasks')}
+            >
+              <div style={{ fontSize: '26px', marginBottom: '12px' }}>📋</div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  marginBottom: '10px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <h3
+                  className="font-display"
+                  style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)' }}
+                >
+                  Micro-Tasks &amp; Social
+                </h3>
+              </div>
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--txt2)',
+                  lineHeight: 1.7,
+                  marginBottom: '14px',
+                }}
+              >
+                Subscribe YouTube, join Telegram squads, review apps. Screenshot proof upload for
+                instant credit.
+              </p>
+              <button
+                type="button"
+                className="btn btn-outline btn-full"
+                style={{ color: 'var(--violet)', borderColor: 'var(--violet)' }}
+                onMouseOver={(e) => (e.currentTarget.style.background = 'var(--violet-dim)')}
+                onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate('tasks');
+                }}
+              >
+                Launch Mode
+              </button>
+            </div>
+
+            {/* 4: Quiz + Spin */}
+            <div
+              className="card qcard"
+              style={{ padding: '24px' }}
+              onClick={() => onNavigate('quiz')}
+            >
+              <div style={{ fontSize: '26px', marginBottom: '12px' }}>🎰</div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  marginBottom: '10px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <h3
+                  className="font-display"
+                  style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)' }}
+                >
+                  Quiz, Spin &amp; 7-Day Streak
+                </h3>
+              </div>
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--txt2)',
+                  lineHeight: 1.7,
+                  marginBottom: '14px',
+                }}
+              >
+                Daily trivia, lucky wheel, and 7-day streak bonus loot chests. New questions every
+                day.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary btn-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate('quiz');
+                }}
+              >
+                Launch Mode
+              </button>
+            </div>
+
+            {/* 5: Refer (span 2) */}
+            <div
+              className="card qcard span2"
+              style={{
+                padding: '28px',
+                background: 'linear-gradient(135deg,rgba(155,110,255,0.06),rgba(0,232,154,0.04))',
+                borderColor: 'rgba(155,110,255,0.3)',
+              }}
+              onClick={() => onNavigate('referrals')}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '14px',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div
+                  style={{
+                    width: '50px',
+                    height: '50px',
+                    background: 'linear-gradient(135deg,var(--violet),#6D28D9)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '22px',
+                    flexShrink: 0,
+                  }}
+                >
+                  👥
+                </div>
+                <div>
+                  <h3
+                    className="font-display"
+                    style={{ fontSize: '17px', fontWeight: 700, color: 'var(--txt)' }}
+                  >
+                    Refer &amp; Earn
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--txt2)' }}>
+                    Apne dost ko invite karo, unki kamaai ka hissa pao
+                  </p>
+                </div>
+              </div>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--txt2)',
+                  lineHeight: 1.75,
+                  marginBottom: '20px',
+                }}
+              >
+                Apna referral link share karo. Jab bhi tumhara referred dost earn kare, tumhe{' '}
+                <span style={{ color: 'var(--green)', fontWeight: 600 }}>lifetime commission</span>{' '}
+                milti hai — koi cap nahi, hamesha ke liye.
+              </p>
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  background: 'linear-gradient(135deg,var(--violet),#6D28D9)',
+                  color: '#fff',
+                  padding: '10px 22px',
+                  fontSize: '13px',
+                  borderRadius: '10px',
+                  fontFamily: "'Chakra Petch',sans-serif",
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all .2s',
+                }}
+                onMouseOver={(e) =>
+                  (e.currentTarget.style.boxShadow = '0 0 24px rgba(155,110,255,0.4)')
+                }
+                onMouseOut={(e) => (e.currentTarget.style.boxShadow = 'none')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate('referrals');
+                }}
+              >
+                🔗 Referral Link Lo
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════
+        EARNING CALCULATOR
+      ════════════════════════════════════════ */}
+      <section id="calculator" className="section">
+        <div className="wrap">
+          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+              <h2
+                className="font-display"
+                style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 700, color: 'var(--txt)' }}
+              >
+                Earning Calculator
+              </h2>
+              <p style={{ fontSize: '15px', color: 'var(--txt2)', marginTop: '10px' }}>
+                Dekho apni grind se kitna kama sakte ho
+              </p>
+            </div>
+
+            <div className="card glow-green" style={{ padding: 'clamp(20px,5vw,40px)' }}>
+              <div style={{ display: 'grid', gap: '28px', marginBottom: '36px' }}>
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '10px',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)' }}>
+                      🎮 Game Offers &amp; Surveys per Week
+                    </label>
+                    <span
+                      id="v1"
+                      className="font-mono"
+                      style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green)' }}
+                    >
+                      {calcOffersPerDay} offers
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="s1"
+                    min={1}
+                    max={30}
+                    value={calcOffersPerDay}
+                    onChange={(e) => setCalcOffersPerDay(Number(e.target.value))}
+                    style={{ accentColor: 'var(--green)' }}
+                  />
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      color: 'var(--txt2)',
+                      marginTop: '4px',
+                    }}
+                  >
+                    <span>1</span>
+                    <span>30</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '10px',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)' }}>
+                      🔗 Paid Shortlinks per Day
+                    </label>
+                    <span
+                      id="v2"
+                      className="font-mono"
+                      style={{ fontSize: '14px', fontWeight: 600, color: 'var(--gold)' }}
+                    >
+                      {calcShortlinksPerDay} links
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="s2"
+                    min={0}
+                    max={40}
+                    value={calcShortlinksPerDay}
+                    onChange={(e) => setCalcShortlinksPerDay(Number(e.target.value))}
+                    style={{ accentColor: 'var(--gold)' }}
+                  />
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      color: 'var(--txt2)',
+                      marginTop: '4px',
+                    }}
+                  >
+                    <span>0</span>
+                    <span>40</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '10px',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)' }}>
+                      👥 Active Referrals
+                    </label>
+                    <span
+                      id="v3"
+                      className="font-mono"
+                      style={{ fontSize: '14px', fontWeight: 600, color: 'var(--violet)' }}
+                    >
+                      {calcActiveReferrals} friends
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="s3"
+                    min={0}
+                    max={50}
+                    value={calcActiveReferrals}
+                    onChange={(e) => setCalcActiveReferrals(Number(e.target.value))}
+                    style={{ accentColor: 'var(--violet)' }}
+                  />
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      color: 'var(--txt2)',
+                      marginTop: '4px',
+                    }}
+                  >
+                    <span>0</span>
+                    <span>50</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="calc-grid">
+                <div
+                  style={{
+                    background: 'rgba(0,232,154,0.07)',
+                    border: '1px solid rgba(0,232,154,0.2)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--green)',
+                      fontWeight: 600,
+                      letterSpacing: '.08em',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    EST. MONTHLY COINS
+                  </div>
+                  <div
+                    id="rc"
+                    className="font-mono"
+                    style={{
+                      fontSize: 'clamp(28px,5vw,38px)',
+                      fontWeight: 600,
+                      color: 'var(--green)',
+                      textShadow: '0 0 20px rgba(0,232,154,0.3)',
+                    }}
+                  >
+                    {v2MonthlyCoins.toLocaleString('en-IN')}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--txt2)', marginTop: '4px' }}>
+                    Lootify Coins
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: 'rgba(255,180,0,0.07)',
+                    border: '1px solid rgba(255,180,0,0.2)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--gold)',
+                      fontWeight: 600,
+                      letterSpacing: '.08em',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    EST. MONTHLY CASHOUT
+                  </div>
+                  <div
+                    id="ri"
+                    className="font-mono"
+                    style={{
+                      fontSize: 'clamp(28px,5vw,38px)',
+                      fontWeight: 600,
+                      color: 'var(--gold)',
+                      textShadow: '0 0 20px rgba(255,180,0,0.3)',
+                    }}
+                  >
+                    ₹{v2MonthlyInr.toLocaleString('en-IN')}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--txt2)', marginTop: '4px' }}>
+                    Indian Rupees
+                  </div>
+                </div>
+              </div>
+
+              <p
+                style={{
+                  textAlign: 'center',
+                  fontSize: '11px',
+                  color: 'var(--txt2)',
+                  marginTop: '16px',
+                }}
+              >
+                * Estimates based on average payouts. Actual earnings may vary.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════
+        FAQ
+      ════════════════════════════════════════ */}
+      <section id="faq" className="section">
+        <div className="wrap">
+          <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: '44px' }}>
+              <h2
+                className="font-display"
+                style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 700, color: 'var(--txt)' }}
+              >
+                Frequently Asked Questions
+              </h2>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} id="faq-list">
+              {v2Faqs.map((f, i) => {
+                const isOpen = openFaqIndex === i;
+                return (
+                  <div key={i} className="card" style={{ overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaqIndex(isOpen ? null : i)}
+                      style={{
+                        width: '100%',
+                        padding: '18px 20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '14px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        color: 'var(--txt)',
+                      }}
+                    >
+                      <span style={{ fontSize: '15px', fontWeight: 600 }}>{f.q}</span>
+                      <span
+                        className={`faq-chevron ${isOpen ? 'open' : ''}`}
+                        style={{ transform: isOpen ? 'rotate(180deg)' : undefined }}
+                      >
+                        ▼
+                      </span>
+                    </button>
+                    <div className={`faq-body ${isOpen ? 'open' : ''}`}>
+                      <div
+                        style={{
+                          padding: '14px 20px 18px',
+                          fontSize: '14px',
+                          color: 'var(--txt2)',
+                          lineHeight: 1.8,
+                          borderTop: '1px solid var(--border)',
+                        }}
+                      >
+                        {f.a}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════
+        CTA BANNER
+      ════════════════════════════════════════ */}
+      <section
+        style={{
+          padding: '64px 20px',
+          background: 'linear-gradient(135deg,rgba(0,232,154,0.06),rgba(155,110,255,0.05))',
+          borderTop: '1px solid var(--border)',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <div className="wrap" style={{ textAlign: 'center' }}>
+          <div
+            className="font-mono"
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--green)',
+              letterSpacing: '.08em',
+              marginBottom: '16px',
+            }}
+          >
+            READY TO EARN?
+          </div>
+          <h2
+            className="font-display"
+            style={{
+              fontSize: 'clamp(26px,4vw,48px)',
+              fontWeight: 700,
+              color: 'var(--txt)',
+              marginBottom: '16px',
+            }}
+          >
+            Join 2.4 Lakh+ Players
+            <br />
+            Earning Real Money
+          </h2>
+          <p
+            style={{
+              fontSize: '15px',
+              color: 'var(--txt2)',
+              marginBottom: '32px',
+              maxWidth: '480px',
+              marginLeft: 'auto',
+              marginRight: 'auto',
+            }}
+          >
+            Start for free. No investment needed. Your first ₹20 is waiting.
+          </p>
+          <a
+            href="#hero-auth"
+            className="btn btn-primary btn-lg"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollToSection('hero-auth');
+            }}
+          >
+            🚀 Start Earning Free Now
+          </a>
+          <p style={{ fontSize: '12px', color: 'var(--txt2)', marginTop: '16px' }}>
+            Free forever · No credit card · Instant payout
           </p>
         </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            2. Pending Balance Hold ({settings.pendingHoldDays} Days) kya hai?
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Offerwalls ke coins {settings.pendingHoldDays} din ke liye Pending Escrow me rehte hain taaki fake/VPN completions filter ho sakein. {settings.pendingHoldDays} din baad wo apne aap Available Balance me aa jate hain.
-          </p>
+      </section>
+
+      {/* ════════════════════════════════════════
+        FOOTER
+      ════════════════════════════════════════ */}
+      <footer
+        style={{
+          background: 'var(--bg2)',
+          borderTop: '1px solid var(--border)',
+          padding: '56px 20px 32px',
+        }}
+      >
+        <div className="wrap">
+          <div className="footer-grid" style={{ marginBottom: '44px' }}>
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginBottom: '14px',
+                }}
+              >
+                <div
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    background: 'linear-gradient(135deg,var(--green),#00A870)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontFamily: "'Chakra Petch',sans-serif",
+                    fontWeight: 700,
+                    fontSize: '16px',
+                    color: '#03100A',
+                  }}
+                >
+                  L
+                </div>
+                <span
+                  className="font-display"
+                  style={{ fontSize: '18px', fontWeight: 700, color: 'var(--txt)' }}
+                >
+                  LOOTIFY<span style={{ color: 'var(--green)' }}>.</span>
+                </span>
+              </div>
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--txt2)',
+                  lineHeight: 1.7,
+                  maxWidth: '260px',
+                  marginBottom: '20px',
+                }}
+              >
+                India&apos;s next-gen gaming rewards platform. Play games, complete quests, and cash
+                out real ₹ INR instantly.
+              </p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <a
+                  href="#hero-auth"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollToSection('hero-auth');
+                  }}
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textDecoration: 'none',
+                    fontSize: '15px',
+                    transition: 'border-color .2s',
+                  }}
+                >
+                  📱
+                </a>
+                <a
+                  href="#contact"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('contact');
+                  }}
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textDecoration: 'none',
+                    fontSize: '15px',
+                    transition: 'border-color .2s',
+                  }}
+                >
+                  💬
+                </a>
+                <a
+                  href="#referrals"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('referrals');
+                  }}
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textDecoration: 'none',
+                    fontSize: '15px',
+                    transition: 'border-color .2s',
+                  }}
+                >
+                  🐦
+                </a>
+              </div>
+            </div>
+
+            <div>
+              <h4
+                className="font-display"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--txt)',
+                  marginBottom: '14px',
+                  letterSpacing: '.04em',
+                }}
+              >
+                PLATFORM
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <a
+                  href="#quest-modes"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollToSection('quest-modes');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Quest Modes
+                </a>
+                <a
+                  href="#calculator"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollToSection('calculator');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Earning Calculator
+                </a>
+                <a
+                  href="#how-it-works"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollToSection('how-it-works');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  How It Works
+                </a>
+                <a
+                  href="#faq"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollToSection('faq');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  FAQ
+                </a>
+              </div>
+            </div>
+
+            <div>
+              <h4
+                className="font-display"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--txt)',
+                  marginBottom: '14px',
+                  letterSpacing: '.04em',
+                }}
+              >
+                BUSINESS
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <a
+                  href="#advertise"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('advertise');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Advertise With Us
+                </a>
+                <a
+                  href="#referrals"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('referrals');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Affiliate Program
+                </a>
+                <a
+                  href="#contact"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('contact');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Support / Help
+                </a>
+              </div>
+            </div>
+
+            <div>
+              <h4
+                className="font-display"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--txt)',
+                  marginBottom: '14px',
+                  letterSpacing: '.04em',
+                }}
+              >
+                LEGAL
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <a
+                  href="#terms"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('terms');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Terms of Service
+                </a>
+                <a
+                  href="#privacy"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('privacy');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Privacy Policy
+                </a>
+                <a
+                  href="#disclaimer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('disclaimer');
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--txt2)',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                >
+                  Disclaimer
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              borderTop: '1px solid var(--border)',
+              paddingTop: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '14px',
+            }}
+          >
+            <p style={{ fontSize: '12px', color: 'var(--txt2)' }}>
+              © 2026 Lootify.in — All rights reserved. Play smart, earn real.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="live-dot" style={{ width: '6px', height: '6px' }} />
+              <span className="font-mono" style={{ fontSize: '11px', color: 'var(--green)' }}>
+                All systems operational
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            3. Google Sign-In kaise kaam karta hai?
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Aap upar <strong>Continue with Google</strong> button daba kar 1-click me apna Gmail account connect kar sakte hain. Naye account par turant +{settings.referralWelcomeBonusCoins} Bonus Coins milte hain.
-          </p>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-2">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            4. Refer & Earn me kitna milta hai?
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Har dost ko invite karne par dost ko +{settings.referralWelcomeBonusCoins} Coins milte hain, aur jab wo apna pehla offer poora karta hai toh aapko <strong>+{settings.referralFlatBonusCoins} Coins (₹5) flat bonus + lifetime {settings.referralCommissionPercent}% commission</strong> milta hai!
-          </p>
-        </div>
-      </div>
+      </footer>
 
       {/* Real Google Account Sign-In Fallback Modal */}
       {googleChooserOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xl text-slate-900 dark:text-white">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-2.5">
                 <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -1537,7 +2665,8 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
               className="space-y-3 text-xs"
             >
               <div className="font-semibold text-slate-700 dark:text-slate-300">
-                Continue with your Gmail address (+{settings.referralWelcomeBonusCoins} Welcome Coins):
+                Continue with your Gmail address (+{settings.referralWelcomeBonusCoins} Welcome
+                Coins):
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
@@ -1545,7 +2674,7 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                   required
                   value={customGoogleName}
                   onChange={(e) => setCustomGoogleName(e.target.value)}
-                  placeholder="Your Full Name"
+                  placeholder="Your GamerTag / Name"
                   className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
                 />
                 <input
@@ -1564,35 +2693,11 @@ export const PublicPages: React.FC<PublicPagesProps> = ({
                 Continue with Google Account →
               </button>
             </form>
-
-            {/* Optional Real Google OAuth Client ID Config */}
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 text-[11px]">
-              <div className="text-slate-500">
-                <strong>Google OAuth Client ID:</strong>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={googleClientId}
-                  onChange={(e) => setGoogleClientId(e.target.value)}
-                  placeholder="881444436109-xxxx.apps.googleusercontent.com"
-                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.setItem('lootify_google_client_id', googleClientId.trim());
-                    notify('Google OAuth Client ID saved!', 'success');
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 font-semibold"
-                >
-                  Save ID
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
     </div>
   );
 };
+
+

@@ -38,15 +38,7 @@ const VALID_ROUTES: PageRoute[] = [
 
 function getInitialRouteFromUrl(): PageRoute {
   const hashClean = window.location.hash.replace(/^#\/?/, '').replace(/\.html$/, '') as PageRoute;
-  if (VALID_ROUTES.includes(hashClean)) return hashClean;
-
-  const segments = window.location.pathname
-    .split('/')
-    .filter(Boolean)
-    .map((s) => s.replace(/\.html$/, ''));
-  const lastSeg = (segments[segments.length - 1] || 'home') as PageRoute;
-  if (['index', 'lootify', 'LOOTIFY'].includes(lastSeg as any)) return 'home';
-  if (VALID_ROUTES.includes(lastSeg)) return lastSeg;
+  if (hashClean && VALID_ROUTES.includes(hashClean)) return hashClean;
   return 'home';
 }
 
@@ -342,11 +334,13 @@ export default function App() {
 
   if (!data || !data.currentUser || !data.settings) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-[#06080E] text-slate-100 flex items-center justify-center p-6">
         <div className="text-center space-y-2">
-          <div className="text-xl font-bold font-display">Loading Lootify.in Website...</div>
+          <div className="text-xl font-bold font-display uppercase tracking-wider text-emerald-400">
+            Loading Lootify Gaming Arena...
+          </div>
           <p className="text-xs text-slate-500 font-mono">
-            Connecting to Multi-Page Website & Escrow Wallet Engine
+            Initializing Quest Engine & Escrow Loot Vault
           </p>
         </div>
       </div>
@@ -363,22 +357,34 @@ export default function App() {
     label: string;
     path: string;
   }> = [
-    { id: 'home', label: 'Home', path: '/' },
-    { id: 'dashboard', label: 'My Account', path: '/dashboard' },
-    { id: 'offerwalls', label: 'Offerwalls', path: '/offerwalls' },
-    { id: 'shortlinks', label: 'Paid Shortlinks', path: '/shortlinks' },
-    { id: 'tasks', label: 'Tasks & Quizzes', path: '/tasks' },
-    { id: 'referrals', label: 'Refer & Earn', path: '/referrals' },
-    { id: 'wallet', label: 'Withdraw Cash', path: '/wallet' },
-    { id: 'payout-proofs', label: 'Payment Proofs', path: '/payout-proofs' },
+    { id: 'home', label: 'Gaming Home', path: '/' },
+    { id: 'dashboard', label: 'Player Hub', path: '/dashboard' },
+    { id: 'offerwalls', label: 'Game Offerwalls', path: '/offerwalls' },
+    { id: 'shortlinks', label: 'Speed Shortlinks', path: '/shortlinks' },
+    { id: 'tasks', label: 'Quests & Trivia', path: '/tasks' },
+    { id: 'referrals', label: 'Clan Referrals', path: '/referrals' },
+    { id: 'wallet', label: 'Loot Cashout', path: '/wallet' },
+    { id: 'payout-proofs', label: 'Live Drops', path: '/payout-proofs' },
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150">
-      {/* Top 3-Zone Website Header Bar (Hidden on Default Landing Page) */}
-      {activePage !== 'home' && (
+    <div className="min-h-screen bg-slate-50 dark:bg-[#06080E] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-150">
+      {activePage === 'home' ? (
+        <PublicPages
+          data={data}
+          activePage="home"
+          onNavigate={navigateToPage}
+          onRegisterUser={handleRegisterUser}
+          onLoginUser={handleDirectLogin}
+          onGoogleAuth={handleGoogleAuth}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          notify={notify}
+        />
+      ) : (
         <>
+          {/* Top 3-Zone Website Header Bar (Shown only inside the App / Member Pages) */}
           <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 px-6 py-4">
             <div className="max-w-7xl mx-auto flex items-center justify-between gap-8">
               {/* Zone 1: Single Website Brand Wordmark */}
@@ -388,7 +394,7 @@ export default function App() {
                   e.preventDefault();
                   navigateToPage('home');
                 }}
-                className="text-xl font-extrabold tracking-tight font-display text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0"
+                className="text-xl font-extrabold tracking-tight font-display uppercase text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0"
               >
                 {settings.siteName}.in
               </a>
@@ -401,13 +407,9 @@ export default function App() {
                     e.preventDefault();
                     navigateToPage('home');
                   }}
-                  className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 ${
-                    activePage === 'home'
-                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-8'
-                      : ''
-                  }`}
+                  className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0"
                 >
-                  Home
+                  Gaming Home
                 </a>
                 <a
                   href="/offerwalls"
@@ -449,7 +451,7 @@ export default function App() {
                       : ''
                   }`}
                 >
-                  Refer & Earn
+                  Clan Referrals
                 </a>
                 <a
                   href="/payout-proofs"
@@ -463,7 +465,7 @@ export default function App() {
                       : ''
                   }`}
                 >
-                  Payment Proofs
+                  Live Drops
                 </a>
               </nav>
 
@@ -481,7 +483,7 @@ export default function App() {
                   className="px-4 py-2 text-xs font-mono font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap shrink-0"
                 >
                   {isLoggedIn
-                    ? `Withdraw: ₹${availableInr.toFixed(2)} (${currentUser.availableCoins.toLocaleString()} Coins)`
+                    ? `Cashout: ₹${availableInr.toFixed(2)} (${currentUser.availableCoins.toLocaleString()} Coins)`
                     : 'Sign In to Earn & Withdraw'}
                 </button>
                 <button
@@ -588,105 +590,104 @@ export default function App() {
               </div>
             )}
           </div>
-        </>
-      )}
 
-      {/* Live Website Announcement Strip */}
-      {settings.announcementActive && activePage !== 'home' && (
-        <div className="bg-emerald-600/10 border-b border-emerald-500/20 px-6 py-2">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 text-xs">
-            <p className="text-slate-700 dark:text-slate-200">
-              <strong className="text-emerald-600 dark:text-emerald-400">
-                {settings.siteName}.in Official Notice:
-              </strong>{' '}
-              {settings.announcementText}
-            </p>
-            <span className="font-mono text-[11px] text-slate-500 shrink-0 hidden sm:inline">
-              Pending Hold: {currentUser.pendingCoins.toLocaleString()} Coins (₹
-              {(currentUser.pendingCoins / settings.coinsPerInr).toFixed(2)})
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Full-Width Website Page Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 md:py-10 space-y-8">
-        {/* Top Website Leaderboard Ad Banner (Monetag / Adsterra) */}
-        {headerAd && activePage !== 'home' && (
-          <div className="px-5 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 text-xs">
-            <div>
-              <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 mr-2">
-                [Sponsored · {headerAd.network}]
-              </span>
-              <span className="text-slate-600 dark:text-slate-300">{headerAd.title}</span>
-            </div>
-            <button
-              onClick={() => navigateToPage('offerwalls')}
-              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline whitespace-nowrap shrink-0"
-            >
-              Explore Partner Offers →
-            </button>
-          </div>
-        )}
-
-        {/* Prompt Guest Visitors to Sign In when viewing Earner pages */}
-        {!isLoggedIn &&
-          ['dashboard', 'offerwalls', 'shortlinks', 'tasks', 'referrals', 'wallet'].includes(
-            activePage
-          ) && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
-              <div>
-                <strong className="text-amber-600 dark:text-amber-400">
-                  You are browsing as a Guest Visitor:
-                </strong>{' '}
-                <span className="text-slate-700 dark:text-slate-200">
-                  Sign in with Google or create your free account to claim your +200 Welcome Bonus Coins and save your earnings.
+          {/* Live Website Announcement Strip */}
+          {settings.announcementActive && (
+            <div className="bg-emerald-600/10 border-b border-emerald-500/20 px-6 py-2">
+              <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 text-xs">
+                <p className="text-slate-700 dark:text-slate-200">
+                  <strong className="text-emerald-600 dark:text-emerald-400">
+                    {settings.siteName}.in Official Notice:
+                  </strong>{' '}
+                  {settings.announcementText}
+                </p>
+                <span className="font-mono text-[11px] text-slate-500 shrink-0 hidden sm:inline">
+                  Pending Hold: {currentUser.pendingCoins.toLocaleString()} Coins (₹
+                  {(currentUser.pendingCoins / settings.coinsPerInr).toFixed(2)})
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  setAuthTab('register');
-                  setAuthModalOpen(true);
-                }}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shrink-0"
-              >
-                Sign In / Join Free (+200 Coins) →
-              </button>
             </div>
           )}
 
-        {/* Active Website Page Content */}
-        {[
-          'home',
-          'payout-proofs',
-          'leaderboard',
-          'deploy-guide',
-          'terms',
-          'privacy',
-          'contact',
-        ].includes(activePage) ? (
-          <PublicPages
-            data={data}
-            activePage={activePage}
-            onNavigate={navigateToPage}
-            onRegisterUser={handleRegisterUser}
-            onLoginUser={handleDirectLogin}
-            onGoogleAuth={handleGoogleAuth}
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            notify={notify}
-          />
-        ) : (
-          <EarnerViews
-            data={data}
-            activePage={activePage}
-            onNavigate={navigateToPage}
-            apiPost={apiPost}
-            refreshData={() => fetchBootstrap(currentUserId)}
-            notify={notify}
-          />
-        )}
-      </main>
+          {/* Full-Width Website Page Container */}
+          <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 md:py-10 space-y-8">
+            {/* Top Website Leaderboard Ad Banner (Monetag / Adsterra) */}
+            {headerAd && (
+              <div className="px-5 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 text-xs">
+                <div>
+                  <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 mr-2">
+                    [Sponsored · {headerAd.network}]
+                  </span>
+                  <span className="text-slate-600 dark:text-slate-300">{headerAd.title}</span>
+                </div>
+                <button
+                  onClick={() => navigateToPage('offerwalls')}
+                  className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline whitespace-nowrap shrink-0"
+                >
+                  Explore Partner Offers →
+                </button>
+              </div>
+            )}
+
+            {/* Prompt Guest Visitors to Sign In when viewing Earner pages */}
+            {!isLoggedIn &&
+              ['dashboard', 'offerwalls', 'shortlinks', 'tasks', 'referrals', 'wallet'].includes(
+                activePage
+              ) && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
+                  <div>
+                    <strong className="text-amber-600 dark:text-amber-400">
+                      You are browsing as a Guest Player:
+                    </strong>{' '}
+                    <span className="text-slate-700 dark:text-slate-200">
+                      Sign in with Google or create your free Player ID to claim your +200 Welcome Loot Coins and save your quest earnings.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setAuthTab('register');
+                      setAuthModalOpen(true);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shrink-0"
+                  >
+                    Sign In / Join Free (+200 Coins) →
+                  </button>
+                </div>
+              )}
+
+            {/* Active Website Page Content */}
+            {[
+              'payout-proofs',
+              'leaderboard',
+              'deploy-guide',
+              'terms',
+              'privacy',
+              'contact',
+            ].includes(activePage) ? (
+              <PublicPages
+                data={data}
+                activePage={activePage}
+                onNavigate={navigateToPage}
+                onRegisterUser={handleRegisterUser}
+                onLoginUser={handleDirectLogin}
+                onGoogleAuth={handleGoogleAuth}
+                theme={theme}
+                onToggleTheme={toggleTheme}
+                notify={notify}
+              />
+            ) : (
+              <EarnerViews
+                data={data}
+                activePage={activePage}
+                onNavigate={navigateToPage}
+                apiPost={apiPost}
+                refreshData={() => fetchBootstrap(currentUserId)}
+                notify={notify}
+              />
+            )}
+          </main>
+        </>
+      )}
 
       {/* Full 4-Column Multi-Page Website Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-12 mt-16">

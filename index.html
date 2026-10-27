@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lootify — Multi-Earning & Rewards Website</title>
-    <meta name="description" content="Standalone multi-page earning and rewards website featuring Offerwalls, Paid Shortlinks with 24h cooldowns, Micro-Tasks, Quizzes, 3-Layer Refer & Earn, 3-to-5-Day Pending Hold Wallet, UPI/Bank/Gift Card/Crypto payouts, and a God-Mode Admin Panel." />
-    <meta property="og:title" content="Lootify — Multi-Earning & Rewards Website" />
-    <meta property="og:description" content="Standalone multi-page earning and rewards website featuring Offerwalls, Paid Shortlinks with 24h cooldowns, Micro-Tasks, Quizzes, 3-Layer Refer & Earn, 3-to-5-Day Pending Hold Wallet, UPI/Bank/Gift Card/Crypto payouts, and a God-Mode Admin Panel." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Lootify — Play Games. Cash Out Real ₹ INR Instantly.</title>
+    <meta name="description" content="Complete game quests, offerwalls, shortlinks & micro-tasks. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly." />
+    <meta property="og:title" content="Lootify — Play Games. Cash Out Real ₹ INR Instantly." />
+    <meta property="og:description" content="Complete game quests, offerwalls, shortlinks & micro-tasks. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
       // Restore clean multi-page URLs on GitHub Pages when redirected from 404.html
@@ -28,15 +28,71 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Pre-rendered Lootify v2 Gaming Rewards Landing Page (Hydrated automatically by React on load) -->
+      <div class="lootify-v2 grid-bg" data-theme="dark">
+        <nav id="navbar">
+          <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;height:64px;">
+            <a href="#" style="display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0;">
+              <div style="width:36px;height:36px;background:linear-gradient(135deg,#00E89A,#00A870);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:'Chakra Petch',sans-serif;font-weight:700;font-size:18px;color:#03100A;box-shadow:0 0 14px rgba(0,232,154,0.4);">L</div>
+              <span class="font-display" style="font-size:19px;font-weight:700;color:#E4EBF8;">LOOTIFY<span style="color:#00E89A;">.</span></span>
+            </a>
+            <div class="hide-mob" style="display:flex;align-items:center;gap:24px;">
+              <a href="#quest-modes" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">Quest Modes</a>
+              <a href="#calculator" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">Calculator</a>
+              <a href="#how-it-works" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">How It Works</a>
+              <a href="#faq" style="font-size:13px;font-weight:600;color:#7A88A4;text-decoration:none;">FAQ</a>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+              <a href="#hero-auth" class="btn btn-primary btn-sm" style="padding:9px 16px;">Sign Up Free</a>
+            </div>
+          </div>
+        </nav>
+
+        <section id="hero" class="hero-gradient" style="position:relative;display:flex;align-items:center;overflow:hidden;padding:48px 20px;">
+          <div class="wrap" style="width:100%;position:relative;z-index:1;">
+            <div class="hero-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;">
+              <div>
+                <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(0,232,154,0.07);border:1px solid rgba(0,232,154,0.2);border-radius:100px;padding:6px 14px;margin-bottom:28px;">
+                  <div class="live-dot" style="width:6px;height:6px;"></div>
+                  <span class="font-mono" style="font-size:11px;font-weight:600;color:#00E89A;letter-spacing:.06em;">INDIA'S #1 GAMING REWARDS PLATFORM</span>
+                </div>
+                <h1 class="font-display" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.08;margin-bottom:20px;color:#E4EBF8;">
+                  Play Games.<br>
+                  <span style="color:#00E89A;text-shadow:0 0 30px rgba(0,232,154,0.35);">Cash Out</span><br>
+                  Real <span style="color:#FFB400;text-shadow:0 0 25px rgba(255,180,0,0.35);">₹ INR.</span>
+                </h1>
+                <p style="font-size:16px;line-height:1.75;color:#7A88A4;margin-bottom:28px;max-width:440px;">
+                  Complete game quests, offerwalls, shortlinks &amp; micro-tasks.. Withdraw to UPI, Google Play, Amazon Pay, or Crypto — instantly.
+                </p>
+              </div>
+              <div id="hero-auth">
+                <div class="card card-glow auth-card" style="padding:clamp(24px,5vw,40px);max-width:440px;width:100%;">
+                  <div style="text-align:center;margin-bottom:24px;">
+                    <div style="font-size:28px;margin-bottom:10px;">🎮</div>
+                    <h2 class="font-display" style="font-size:22px;font-weight:700;color:#E4EBF8;margin-bottom:6px;">Start Earning Now</h2>
+                    <p style="font-size:13px;color:#7A88A4;">Sign up with your Google account to start earning</p>
+                  </div>
+                  <button class="google-btn" id="btn-google-signin">
+                    Continue with Google
+                  </button>
+                  <p style="text-align:center;font-size:11px;color:#7A88A4;margin-top:16px;">
+                    🔒 Secure &nbsp;•&nbsp; No password needed &nbsp;•&nbsp; Free forever
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Automatic loader for GitHub Pages static branch deployment (e.g. infixify.github.io/LOOTIFY/)
+      // Automatic loader for GitHub Pages static branch deployment (e.g. lootify.eternant.c0m.to)
       (function() {
         function loadStaticBundle() {
           if (window.__LOOTIFY_STATIC_LOADED__) return;
-          var root = document.getElementById('root');
-          if (root && root.children.length > 0) return;
+          if (window.__LOOTIFY_APP_MOUNTED__) return;
           window.__LOOTIFY_STATIC_LOADED__ = true;
 
           var link = document.createElement('link');
@@ -65,4 +121,3 @@
     </script>
   </body>
 </html>
-

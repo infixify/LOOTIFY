@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lootify — Multi-Earning & Rewards Website</title>
+    <meta name="description" content="Standalone multi-page earning and rewards website featuring Offerwalls, Paid Shortlinks with 24h cooldowns, Micro-Tasks, Quizzes, 3-Layer Refer & Earn, 3-to-5-Day Pending Hold Wallet, UPI/Bank/Gift Card/Crypto payouts, and a God-Mode Admin Panel." />
+    <meta property="og:title" content="Lootify — Multi-Earning & Rewards Website" />
+    <meta property="og:description" content="Standalone multi-page earning and rewards website featuring Offerwalls, Paid Shortlinks with 24h cooldowns, Micro-Tasks, Quizzes, 3-Layer Refer & Earn, 3-to-5-Day Pending Hold Wallet, UPI/Bank/Gift Card/Crypto payouts, and a God-Mode Admin Panel." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+      // Restore clean multi-page URLs on GitHub Pages when redirected from 404.html
+      (function(l) {
+        if (l.search[1] === '/' ) {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&')
+          }).join('?');
+          window.history.replaceState(null, null,
+              l.pathname.slice(0, -1) + decoded + l.hash
+          );
+        }
+      }(window.location))
+    </script>
+    <script type="module" crossorigin src="./assets/lootify.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/lootify.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Automatic loader for GitHub Pages static branch deployment (e.g. infixify.github.io/LOOTIFY/)
+      (function() {
+        function loadStaticBundle() {
+          if (window.__LOOTIFY_STATIC_LOADED__) return;
+          var root = document.getElementById('root');
+          if (root && root.children.length > 0) return;
+          window.__LOOTIFY_STATIC_LOADED__ = true;
+
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = './assets/lootify.css';
+          document.head.appendChild(link);
+
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.src = './assets/lootify.js';
+          document.body.appendChild(s);
+        }
+
+        if (
+          window.location.hostname.indexOf('github.io') !== -1 ||
+          window.location.hostname.indexOf('c0m.to') !== -1 ||
+          window.location.hostname.indexOf('lootify') !== -1
+        ) {
+          loadStaticBundle();
+        } else {
+          window.addEventListener('DOMContentLoaded', function() {
+            setTimeout(loadStaticBundle, 250);
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
+

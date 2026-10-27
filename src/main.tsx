@@ -45,4 +45,5 @@ function RootRouter() {
   return <App />;
 }
 
+(window as any).__LOOTIFY_APP_MOUNTED__ = true;
 createRoot(document.getElementById('root')!).render(<RootRouter />);
