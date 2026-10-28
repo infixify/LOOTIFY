@@ -15,6 +15,16 @@ export interface WithdrawalRecord {
   createdAt: string;
 }
 
+export interface HeldRewardRecord {
+  id: string;
+  title: string;
+  coins: number;
+  amountInr: number;
+  status: 'pending_hold' | 'credited' | 'reversed_chargeback';
+  createdAt: string;
+  unlocksAt?: string | null;
+}
+
 export interface PlayerUser {
   id: string;
   name: string;
@@ -28,6 +38,7 @@ export interface PlayerUser {
   referralsCount: number;
   joinedAt: string;
   withdrawals: WithdrawalRecord[];
+  heldRewards?: HeldRewardRecord[];
 }
 
 export interface OfferwallConfig {

@@ -39,7 +39,7 @@ const DEFAULT_OFFERWALLME_CONFIG: ServerOfferwallConfig = {
   app_id: 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd',
   iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
   secret_key: '',
-  hold_days: 0,
+  hold_days: 7,
   postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
 };
 
@@ -81,6 +81,7 @@ interface ServerPostbackLog {
   status: string;
   external_tx_id: string;
   created_at: string;
+  unlocks_at?: string | null;
 }
 
 interface ServerOfferwallConfig {
@@ -150,6 +151,27 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
       createdAt: w.created_at.slice(0, 10),
     }));
 
+  const heldRewards = db.postbacks
+    .filter(
+      (p) =>
+        p.user_id === u.id &&
+        p.source_type === 'offerwall' &&
+        (p.status === 'pending_hold' || p.status === 'credited')
+    )
+    .slice(0, 30)
+    .map((h) => {
+      const c = Math.max(0, Number(h.amount_coins) || 0);
+      return {
+        id: h.id,
+        title: h.title || 'Offerwall Task',
+        coins: c,
+        amountInr: Number((c / 100).toFixed(2)),
+        status: (h.status as 'pending_hold' | 'credited') || 'pending_hold',
+        createdAt: String(h.created_at || '').slice(0, 10),
+        unlocksAt: h.unlocks_at ? String(h.unlocks_at).slice(0, 10) : null,
+      };
+    });
+
   const refCount = db.users.filter(
     (other) => other.referredBy && other.referredBy.toUpperCase() === u.referralCode.toUpperCase()
   ).length;
@@ -158,6 +180,7 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
     ...u,
     referralsCount: Math.max(u.referralsCount || 0, refCount),
     withdrawals: userWithdrawals,
+    heldRewards,
   };
 }
 
@@ -485,12 +508,37 @@ async function startServer() {
       return;
     }
 
+    // Network Settlement Postback (status=3 / status=settled / status=paid) -> Auto-move Hold to Withdrawable!
+    const isSettlementEvent =
+      rawStatus === '3' ||
+      rawStatus === 'settled' ||
+      rawStatus === 'paid' ||
+      rawStatus === 'released' ||
+      merged.event === 'payout_settled';
+
+    if (isSettlementEvent) {
+      const heldEntry = db.postbacks.find(
+        (p) => p.external_tx_id === txId && p.status === 'pending_hold'
+      );
+      if (heldEntry) {
+        const releaseAmt = Math.max(0, Number(heldEntry.amount_coins) || coins);
+        heldEntry.status = 'credited';
+        user.pendingCoins = Math.max(0, user.pendingCoins - releaseAmt);
+        user.availableCoins += releaseAmt;
+        saveDB(db);
+      }
+      res.status(200).send('ok');
+      return;
+    }
+
     if (db.postbacks.some((p) => p.external_tx_id === txId)) {
-      res.status(200).send('OK_DUPLICATE_IGNORED');
+      res.status(200).send('DUP');
       return;
     }
 
     const holdDays = wallCfg ? Number(wallCfg.hold_days) || 0 : 0;
+    const unlocksAt =
+      holdDays > 0 ? new Date(Date.now() + holdDays * 86400000).toISOString() : null;
     if (holdDays > 0) {
       user.pendingCoins += coins;
     } else {
@@ -508,6 +556,7 @@ async function startServer() {
       status: holdDays > 0 ? 'pending_hold' : 'credited',
       external_tx_id: txId,
       created_at: new Date().toISOString(),
+      unlocks_at: unlocksAt,
     });
 
     if (user.referredBy) {
@@ -623,6 +672,50 @@ async function startServer() {
     db.offerwalls = db.offerwalls.filter((w) => w.provider_id !== providerId);
     saveDB(db);
     res.json({ ok: true, offerwalls: db.offerwalls });
+  });
+
+  // 1-Click Network Payout Settlement -> Auto-Release Held Coins to Withdrawable Balance
+  app.post('/api/admin/holds/release', (req, res) => {
+    const db = loadDB();
+    const body = req.body || {};
+    const ledgerId = String(body.ledgerId || '').trim();
+    const providerPrefix = String(body.providerId || '').trim().toLowerCase();
+    const releaseAll = Boolean(body.releaseAll);
+
+    let releasedCount = 0;
+    let releasedCoinsTotal = 0;
+
+    for (const p of db.postbacks) {
+      if (p.status !== 'pending_hold') continue;
+      const match =
+        (ledgerId && p.id === ledgerId) ||
+        (providerPrefix && p.external_tx_id.toLowerCase().startsWith(`${providerPrefix}_`)) ||
+        releaseAll;
+      if (match) {
+        const amt = Math.max(0, Number(p.amount_coins) || 0);
+        const usr = db.users.find((u) => u.id === p.user_id);
+        if (usr && amt > 0) {
+          usr.pendingCoins = Math.max(0, usr.pendingCoins - amt);
+          usr.availableCoins += amt;
+          releasedCoinsTotal += amt;
+          releasedCount += 1;
+        }
+        p.status = 'credited';
+      }
+    }
+
+    if (releaseAll) {
+      for (const u of db.users) {
+        if (u.pendingCoins > 0) {
+          releasedCoinsTotal += u.pendingCoins;
+          u.availableCoins += u.pendingCoins;
+          u.pendingCoins = 0;
+        }
+      }
+    }
+
+    saveDB(db);
+    res.json({ ok: true, releasedCount, releasedCoinsTotal });
   });
 
   if (process.env.NODE_ENV !== 'production') {

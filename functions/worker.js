@@ -114,7 +114,7 @@ async function ensureSchema(db) {
       )
       .run();
 
-    // Auto-seed approved Offerwall.me placement so it is immediately active on Player Dashboard
+    // Auto-seed approved Offerwall.me placement (default 7-day escrow hold until network settlement)
     await db
       .prepare(
         `INSERT OR IGNORE INTO offerwall_configs (
@@ -127,11 +127,25 @@ async function ensureSchema(db) {
           'PQhx5BxXulHlM6PxZx81pZgIs2nyRd',
           'https://offerwall.me/offerwall/{app_id}/{user_id}',
           '',
-          0,
+          7,
           '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}'
         )`
       )
       .run();
+
+    // One-time upgrade so existing offerwallme row defaults to 7-day hold if still at 0
+    try {
+      await db
+        .prepare("ALTER TABLE offerwall_configs ADD COLUMN hold_v2_migrated INTEGER DEFAULT 0")
+        .run();
+      await db
+        .prepare(
+          "UPDATE offerwall_configs SET hold_days = 7, hold_v2_migrated = 1 WHERE provider_id = 'offerwallme' AND hold_days = 0"
+        )
+        .run();
+    } catch {
+      // Column already exists, admin's custom hold_days setting is preserved
+    }
 
     schemaInitialized = true;
   } catch {
@@ -387,6 +401,26 @@ async function formatPlayerPayload(db, userRow) {
     createdAt: String(w.created_at || "").slice(0, 10),
   }));
 
+  const heldRes = await db
+    .prepare(
+      "SELECT id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status IN ('pending_hold', 'credited') ORDER BY created_at DESC LIMIT 30"
+    )
+    .bind(userRow.id)
+    .all();
+
+  const heldRewards = ((heldRes && heldRes.results) || []).map((h) => {
+    const c = Math.max(0, Number(h.amount_coins) || 0);
+    return {
+      id: h.id,
+      title: h.title || "Offerwall Task",
+      coins: c,
+      amountInr: Number((c / 100).toFixed(2)),
+      status: h.status || "pending_hold",
+      createdAt: String(h.created_at || "").slice(0, 10),
+      unlocksAt: h.unlocks_at ? String(h.unlocks_at).slice(0, 10) : null,
+    };
+  });
+
   const questsCompleted =
     (Number(freshUser.offerwalls_completed) || 0) +
     (Number(freshUser.shortlinks_completed) || 0) +
@@ -405,6 +439,7 @@ async function formatPlayerPayload(db, userRow) {
     referralsCount: Number(refCountRow && refCountRow.cnt) || 0,
     joinedAt: String(freshUser.created_at || new Date().toISOString()).slice(0, 10),
     withdrawals,
+    heldRewards,
   };
 }
 
@@ -989,6 +1024,34 @@ export default {
           return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
+        // Network Settlement Postback (status=3 / status=settled / status=paid) -> Auto-move Hold to Withdrawable!
+        const isSettlementEvent =
+          rawStatus === "3" ||
+          rawStatus === "settled" ||
+          rawStatus === "paid" ||
+          rawStatus === "released" ||
+          params.get("event") === "payout_settled";
+
+        if (isSettlementEvent) {
+          const heldRow = await env.DB.prepare(
+            "SELECT id, amount_coins FROM ledger_entries WHERE external_tx_id = ? AND status = 'pending_hold'"
+          )
+            .bind(txId)
+            .first();
+          if (heldRow) {
+            const releaseAmt = Math.max(0, Number(heldRow.amount_coins) || coins);
+            await env.DB.prepare("UPDATE ledger_entries SET status = 'credited' WHERE id = ?")
+              .bind(heldRow.id)
+              .run();
+            await env.DB.prepare(
+              "UPDATE users SET pending_coins = MAX(0, pending_coins - ?), available_coins = available_coins + ? WHERE id = ?"
+            )
+              .bind(releaseAmt, releaseAmt, user.id)
+              .run();
+          }
+          return new Response("ok", { status: 200, headers: corsHeaders });
+        }
+
         // Duplicate Transaction Check
         const duplicate = await env.DB.prepare(
           "SELECT id FROM ledger_entries WHERE external_tx_id = ?"
@@ -1234,6 +1297,81 @@ export default {
             .run();
 
           return Response.json({ ok: true }, { status: 200, headers: corsHeaders });
+        }
+
+        // 1-Click Network Payout Settlement -> Auto-Release Held Coins to Withdrawable Balance
+        if (url.pathname === "/api/admin/holds/release" && request.method === "POST") {
+          const body = await request.json();
+          const ledgerId = String(body.ledgerId || "").trim();
+          const providerPrefix = String(body.providerId || "").trim().toLowerCase();
+          const releaseAll = Boolean(body.releaseAll);
+
+          let rowsToRelease = [];
+          if (ledgerId) {
+            const single = await env.DB.prepare(
+              "SELECT id, user_id, amount_coins FROM ledger_entries WHERE id = ? AND status = 'pending_hold'"
+            )
+              .bind(ledgerId)
+              .first();
+            if (single) rowsToRelease = [single];
+          } else if (providerPrefix) {
+            const res = await env.DB.prepare(
+              "SELECT id, user_id, amount_coins FROM ledger_entries WHERE status = 'pending_hold' AND LOWER(external_tx_id) LIKE ?"
+            )
+              .bind(`${providerPrefix}_%`)
+              .all();
+            rowsToRelease = (res && res.results) || [];
+          } else if (releaseAll) {
+            const res = await env.DB.prepare(
+              "SELECT id, user_id, amount_coins FROM ledger_entries WHERE status = 'pending_hold'"
+            ).all();
+            rowsToRelease = (res && res.results) || [];
+          }
+
+          let releasedCount = 0;
+          let releasedCoinsTotal = 0;
+          for (const row of rowsToRelease) {
+            const amt = Math.max(0, Number(row.amount_coins) || 0);
+            if (amt > 0 && row.user_id) {
+              await env.DB.prepare("UPDATE ledger_entries SET status = 'credited' WHERE id = ?")
+                .bind(row.id)
+                .run();
+              await env.DB.prepare(
+                "UPDATE users SET pending_coins = MAX(0, pending_coins - ?), available_coins = available_coins + ? WHERE id = ?"
+              )
+                .bind(amt, amt, row.user_id)
+                .run();
+              releasedCount += 1;
+              releasedCoinsTotal += amt;
+            }
+          }
+
+          // Also if releaseAll is true and any user still has residual pending_coins (e.g. from older records), move them to available_coins
+          if (releaseAll) {
+            const residualUsers = await env.DB.prepare(
+              "SELECT id, pending_coins FROM users WHERE pending_coins > 0"
+            ).all();
+            for (const u of (residualUsers && residualUsers.results) || []) {
+              const rem = Math.max(0, Number(u.pending_coins) || 0);
+              if (rem > 0) {
+                await env.DB.prepare(
+                  "UPDATE users SET pending_coins = 0, available_coins = available_coins + ? WHERE id = ?"
+                )
+                  .bind(rem, u.id)
+                  .run();
+                releasedCoinsTotal += rem;
+              }
+            }
+          }
+
+          return Response.json(
+            {
+              ok: true,
+              releasedCount,
+              releasedCoinsTotal,
+            },
+            { status: 200, headers: corsHeaders }
+          );
         }
       }
 

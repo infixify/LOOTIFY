@@ -19,7 +19,7 @@ const DEFAULT_OFFERWALLME_WALL: OfferwallConfig = {
   enabled: 1,
   app_id: OFFERWALLME_PUBLIC_KEY,
   iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
-  hold_days: 0,
+  hold_days: 7,
   postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
 };
 
@@ -150,6 +150,7 @@ function loadCurrentUser(): PlayerUser | null {
       referralsCount: Number(parsed.referralsCount) || 0,
       joinedAt: String(parsed.joinedAt || new Date().toISOString().slice(0, 10)),
       withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
+      heldRewards: Array.isArray(parsed.heldRewards) ? parsed.heldRewards : [],
     };
   } catch {
     return null;
@@ -695,6 +696,35 @@ export default function App() {
           text: `Withdrawal ${withdrawalId} marked as ${status.toUpperCase()}!`,
         });
         fetchAdminDashboard();
+      }
+    } catch {}
+  };
+
+  const handleReleaseHeldCoins = async (opts: {
+    ledgerId?: string;
+    providerId?: string;
+    releaseAll?: boolean;
+  }) => {
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/holds/release`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify(opts),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminStatusBanner({
+          type: 'success',
+          text: `💸 Released ${data.releasedCoinsTotal || 0} Held Coins into Players' Withdrawable Balance!`,
+        });
+        fetchAdminDashboard();
+        if (user) {
+          syncUserWithBackend(user, false);
+        }
       }
     } catch {}
   };
@@ -1677,16 +1707,40 @@ export default function App() {
             </div>
 
             <div className="card" style={{ padding: 24 }}>
-              <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
-                Recent S2S Postback Logs ({adminPostbacks.length}) &amp; Players ({adminUsers.length})
-              </h3>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 10,
+                  marginBottom: 14,
+                }}
+              >
+                <div>
+                  <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                    S2S Postback &amp; Escrow Hold Queue ({adminPostbacks.length})
+                  </h3>
+                  <p style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                    Jaise hi Ad Network se aapka payout aa jaye, 1-click me sabhi users ke Held Coins unke Withdrawable me bhej dein.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleReleaseHeldCoins({ releaseAll: true })}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontSize: 11, padding: '7px 12px' }}
+                >
+                  💸 Network Payout Received → Release All Holds
+                </button>
+              </div>
               {adminPostbacks.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--txt2)', fontSize: 13, background: 'var(--bg2)', borderRadius: 10 }}>
                   No S2S postbacks received yet. Use the tester above to verify!
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {adminPostbacks.slice(0, 10).map((p) => (
+                  {adminPostbacks.slice(0, 12).map((p) => (
                     <div
                       key={p.id}
                       style={{
@@ -1697,25 +1751,41 @@ export default function App() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        flexWrap: 'wrap',
                         gap: 8,
                       }}
                     >
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{p.title}</div>
                         <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
-                          User: {p.user_id} • TX: {p.external_tx_id}
+                          User: {p.user_id} • Status:{' '}
+                          <span style={{ color: p.status === 'pending_hold' ? 'var(--gold)' : 'var(--green)' }}>
+                            {p.status === 'pending_hold' ? 'ON HOLD' : p.status}
+                          </span>
                         </div>
                       </div>
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: Number(p.amount_coins) >= 0 ? 'var(--green)' : 'var(--red)',
-                        }}
-                      >
-                        {Number(p.amount_coins) >= 0 ? `+${p.amount_coins}` : p.amount_coins} Coins
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: Number(p.amount_coins) >= 0 ? 'var(--green)' : 'var(--red)',
+                          }}
+                        >
+                          {Number(p.amount_coins) >= 0 ? `+${p.amount_coins}` : p.amount_coins} Coins
+                        </span>
+                        {p.status === 'pending_hold' && (
+                          <button
+                            type="button"
+                            onClick={() => handleReleaseHeldCoins({ ledgerId: p.id })}
+                            className="btn btn-outline btn-sm"
+                            style={{ padding: '4px 9px', fontSize: 10 }}
+                          >
+                            ✓ Release Hold
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1754,6 +1824,8 @@ export default function App() {
     return null;
   }
 
+  const totalCoins = user.availableCoins + user.pendingCoins;
+  const totalInr = (totalCoins / 100).toFixed(2);
   const inrBalance = (user.availableCoins / 100).toFixed(2);
   const pendingInr = (user.pendingCoins / 100).toFixed(2);
   const referralLink = `${window.location.origin}${window.location.pathname}?ref=${user.referralCode}`;
@@ -2168,49 +2240,49 @@ export default function App() {
             >
               <div className="card" style={{ padding: 22 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  AVAILABLE COINS
+                  TOTAL COINS BALANCE
+                </div>
+                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--txt)' }}>
+                  {totalCoins.toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                  Total Value: <strong style={{ color: 'var(--txt)' }}>₹{totalInr}</strong> (Withdrawable + Hold)
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 22, border: '1px solid rgba(0,232,154,0.3)' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  WITHDRAWABLE NOW
                 </div>
                 <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--green)' }}>
                   {user.availableCoins.toLocaleString('en-IN')}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Cash Value: <strong style={{ color: 'var(--txt)' }}>₹{inrBalance}</strong> (1,000 Coins = ₹10)
+                  Ready for Cashout: <strong style={{ color: 'var(--green)' }}>₹{inrBalance}</strong> (1,000 Coins = ₹10)
                 </div>
               </div>
 
-              <div className="card" style={{ padding: 22 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  PENDING ESCROW
+              <div className="card" style={{ padding: 22, border: '1px solid rgba(255,180,0,0.28)' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gold)', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  ON HOLD (VERIFICATION)
                 </div>
                 <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--gold)' }}>
                   {user.pendingCoins.toLocaleString('en-IN')}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  ₹{pendingInr} in verification hold
+                  ₹{pendingInr} — Auto-moves to Withdrawable after network clearance
                 </div>
               </div>
 
               <div className="card" style={{ padding: 22 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  QUESTS COMPLETED
+                  QUESTS &amp; REFERRALS
                 </div>
                 <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--violet)' }}>
-                  {user.questsCompleted}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Offerwalls, PTC &amp; shortlinks
-                </div>
-              </div>
-
-              <div className="card" style={{ padding: 22 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  REFERRED PLAYERS
-                </div>
-                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--txt)' }}>
-                  {user.referralsCount}
+                  {user.questsCompleted} <span style={{ fontSize: 14, color: 'var(--txt2)' }}>• {user.referralsCount} Refs</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 6 }}>
-                  10% lifetime commission active
+                  10% lifetime referral commission active
                 </div>
               </div>
             </div>
@@ -2641,207 +2713,414 @@ export default function App() {
           </div>
         )}
 
-        {/* ── TAB 4: CASHOUT WALLET ── */}
+        {/* ── TAB 4: CASHOUT WALLET (TOTAL COINS | WITHDRAWABLE | ON HOLD) ── */}
         {activeTab === 'wallet' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
-            <div className="card card-glow" style={{ padding: 28 }}>
-              <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
-                Withdraw Earnings
-              </h2>
-              <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 20 }}>
-                Minimum withdrawal is <strong>1,000 Coins (₹10)</strong>. Conversion rate: 100 Coins = ₹1 INR (1,000 Coins = ₹10).
-              </p>
-
-              <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 8 }}>
-                    SELECT PAYOUT CHANNEL
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {(
-                      [
-                        { id: 'upi', label: '⚡ UPI Transfer' },
-                        { id: 'bank', label: '🏦 Bank IMPS' },
-                        { id: 'gift_card', label: '🎁 Gift Vouchers' },
-                        { id: 'crypto', label: '🪙 Crypto / FaucetPay' },
-                      ] as { id: PayoutChannel; label: string }[]
-                    ).map((ch) => (
-                      <button
-                        key={ch.id}
-                        type="button"
-                        onClick={() => setPayoutChannel(ch.id)}
-                        style={{
-                          padding: '12px 10px',
-                          borderRadius: 10,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          background: payoutChannel === ch.id ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
-                          border: payoutChannel === ch.id ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                          color: payoutChannel === ch.id ? 'var(--green)' : 'var(--txt)',
-                          transition: 'all 0.2s',
-                        }}
-                      >
-                        {ch.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                    {payoutChannel === 'upi'
-                      ? 'UPI ID (e.g. name@okaxis)'
-                      : payoutChannel === 'bank'
-                      ? 'ACCOUNT NO & IFSC CODE'
-                      : payoutChannel === 'gift_card'
-                      ? 'DELIVERY EMAIL ADDRESS'
-                      : 'FAUCETPAY EMAIL OR USDT ADDRESS'}
-                  </label>
-                  <input
-                    type="text"
-                    value={payoutDestination}
-                    onChange={(e) => setPayoutDestination(e.target.value)}
-                    placeholder={
-                      payoutChannel === 'upi'
-                        ? 'yourname@upi'
-                        : payoutChannel === 'bank'
-                        ? 'A/C Number & IFSC'
-                        : payoutChannel === 'gift_card'
-                        ? user.email
-                        : 'FaucetPay Email or TRC20 / Polygon Address'
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '12px 14px',
-                      borderRadius: 10,
-                      background: 'var(--bg2)',
-                      border: '1px solid var(--border2)',
-                      color: 'var(--txt)',
-                      fontSize: 13,
-                      outline: 'none',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                    COINS TO WITHDRAW (AVAILABLE: {user.availableCoins} COINS)
-                  </label>
-                  <input
-                    type="number"
-                    min={1000}
-                    step={100}
-                    value={payoutCoins}
-                    onChange={(e) => setPayoutCoins(e.target.value)}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* 3-Section Wallet Balance Breakdown */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: 16,
+              }}
+            >
+              <div className="card" style={{ padding: 22 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
+                    1. TOTAL COINS BALANCE
+                  </span>
+                  <span
                     className="font-mono"
                     style={{
-                      width: '100%',
-                      padding: '12px 14px',
-                      borderRadius: 10,
-                      background: 'var(--bg2)',
-                      border: '1px solid var(--border2)',
-                      color: 'var(--gold)',
-                      fontSize: 15,
-                      fontWeight: 700,
-                      outline: 'none',
-                    }}
-                  />
-                  <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                    Payout Value:{' '}
-                    <strong className="font-mono" style={{ color: 'var(--green)' }}>
-                      ₹{((Math.max(0, Number(payoutCoins) || 0)) / 100).toFixed(2)} INR
-                    </strong>
-                  </div>
-                </div>
-
-                {payoutMessage && (
-                  <div
-                    style={{
-                      padding: '12px 14px',
-                      borderRadius: 8,
-                      fontSize: 12,
-                      lineHeight: 1.5,
-                      background:
-                        payoutMessage.type === 'error' ? 'rgba(255,85,102,0.1)' : 'rgba(0,232,154,0.1)',
-                      border:
-                        payoutMessage.type === 'error'
-                          ? '1px solid rgba(255,85,102,0.3)'
-                          : '1px solid rgba(0,232,154,0.3)',
-                      color: payoutMessage.type === 'error' ? 'var(--red)' : 'var(--green)',
+                      fontSize: 10,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      background: 'var(--bg3)',
+                      color: 'var(--txt2)',
                     }}
                   >
-                    {payoutMessage.text}
-                  </div>
-                )}
+                    COMBINED
+                  </span>
+                </div>
+                <div className="font-mono" style={{ fontSize: 32, fontWeight: 700, color: 'var(--txt)' }}>
+                  {totalCoins.toLocaleString('en-IN')}{' '}
+                  <span style={{ fontSize: 14, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                  Total Value: <strong style={{ color: 'var(--txt)' }}>₹{totalInr} INR</strong> (Withdrawable + On Hold)
+                </div>
+              </div>
 
-                <button type="submit" className="btn btn-primary btn-full" style={{ padding: '14px' }}>
-                  Request Instant Cashout →
-                </button>
-              </form>
+              <div
+                className="card"
+                style={{
+                  padding: 22,
+                  border: '1.5px solid rgba(0,232,154,0.4)',
+                  background: 'linear-gradient(135deg, rgba(0,232,154,0.08), rgba(0,232,154,0.02))',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', letterSpacing: '0.06em' }}>
+                    2. WITHDRAWABLE BALANCE
+                  </span>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontSize: 10,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      background: 'rgba(0,232,154,0.16)',
+                      color: 'var(--green)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    ACTIVE • READY
+                  </span>
+                </div>
+                <div className="font-mono" style={{ fontSize: 32, fontWeight: 700, color: 'var(--green)' }}>
+                  {user.availableCoins.toLocaleString('en-IN')}{' '}
+                  <span style={{ fontSize: 14, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                  Instant Cashout Value: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} INR</strong> (Min ₹10)
+                </div>
+              </div>
+
+              <div
+                className="card"
+                style={{
+                  padding: 22,
+                  border: '1.5px solid rgba(255,180,0,0.35)',
+                  background: 'linear-gradient(135deg, rgba(255,180,0,0.08), rgba(255,180,0,0.02))',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gold)', letterSpacing: '0.06em' }}>
+                    3. ON HOLD (VERIFICATION)
+                  </span>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontSize: 10,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      background: 'rgba(255,180,0,0.16)',
+                      color: 'var(--gold)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    ESCROW HOLD
+                  </span>
+                </div>
+                <div className="font-mono" style={{ fontSize: 32, fontWeight: 700, color: 'var(--gold)' }}>
+                  {user.pendingCoins.toLocaleString('en-IN')}{' '}
+                  <span style={{ fontSize: 14, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                  Hold Value: <strong style={{ color: 'var(--gold)' }}>₹{pendingInr} INR</strong> — Auto-transfers to Withdrawable once Ad Network settles payout
+                </div>
+              </div>
             </div>
 
-            <div className="card" style={{ padding: 28 }}>
-              <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
-                Withdrawal History
-              </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+              <div className="card card-glow" style={{ padding: 28 }}>
+                <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
+                  Withdraw Active Earnings
+                </h2>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 20 }}>
+                  Minimum withdrawal is <strong>1,000 Withdrawable Coins (₹10)</strong>. Coins in Hold automatically move to Withdrawable as soon as Ad Network clearance completes.
+                </p>
 
-              {user.withdrawals.length === 0 ? (
-                <div
-                  style={{
-                    padding: '36px 20px',
-                    textAlign: 'center',
-                    background: 'var(--bg2)',
-                    border: '1px dashed var(--border2)',
-                    borderRadius: 12,
-                  }}
-                >
-                  <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
-                    You haven&apos;t made any withdrawal requests yet.
-                  </p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {user.withdrawals.map((w) => (
-                    <div
-                      key={w.id}
+                <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 8 }}>
+                      SELECT PAYOUT CHANNEL
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {(
+                        [
+                          { id: 'upi', label: '⚡ UPI Transfer' },
+                          { id: 'bank', label: '🏦 Bank IMPS' },
+                          { id: 'gift_card', label: '🎁 Gift Vouchers' },
+                          { id: 'crypto', label: '🪙 Crypto / FaucetPay' },
+                        ] as { id: PayoutChannel; label: string }[]
+                      ).map((ch) => (
+                        <button
+                          key={ch.id}
+                          type="button"
+                          onClick={() => setPayoutChannel(ch.id)}
+                          style={{
+                            padding: '12px 10px',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            background: payoutChannel === ch.id ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
+                            border: payoutChannel === ch.id ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                            color: payoutChannel === ch.id ? 'var(--green)' : 'var(--txt)',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          {ch.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                      {payoutChannel === 'upi'
+                        ? 'UPI ID (e.g. name@okaxis)'
+                        : payoutChannel === 'bank'
+                        ? 'ACCOUNT NO & IFSC CODE'
+                        : payoutChannel === 'gift_card'
+                        ? 'DELIVERY EMAIL ADDRESS'
+                        : 'FAUCETPAY EMAIL OR USDT ADDRESS'}
+                    </label>
+                    <input
+                      type="text"
+                      value={payoutDestination}
+                      onChange={(e) => setPayoutDestination(e.target.value)}
+                      placeholder={
+                        payoutChannel === 'upi'
+                          ? 'yourname@upi'
+                          : payoutChannel === 'bank'
+                          ? 'A/C Number & IFSC'
+                          : payoutChannel === 'gift_card'
+                          ? user.email
+                          : 'FaucetPay Email or TRC20 / Polygon Address'
+                      }
                       style={{
-                        padding: '14px 16px',
-                        background: 'var(--bg2)',
-                        border: '1px solid var(--border)',
+                        width: '100%',
+                        padding: '12px 14px',
                         borderRadius: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 10,
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--txt)',
+                        fontSize: 13,
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                      COINS TO WITHDRAW (WITHDRAWABLE NOW: {user.availableCoins} COINS)
+                    </label>
+                    <input
+                      type="number"
+                      min={1000}
+                      step={100}
+                      value={payoutCoins}
+                      onChange={(e) => setPayoutCoins(e.target.value)}
+                      className="font-mono"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--gold)',
+                        fontSize: 15,
+                        fontWeight: 700,
+                        outline: 'none',
+                      }}
+                    />
+                    <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                      Payout Value:{' '}
+                      <strong className="font-mono" style={{ color: 'var(--green)' }}>
+                        ₹{((Math.max(0, Number(payoutCoins) || 0)) / 100).toFixed(2)} INR
+                      </strong>
+                    </div>
+                  </div>
+
+                  {payoutMessage && (
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        background:
+                          payoutMessage.type === 'error' ? 'rgba(255,85,102,0.1)' : 'rgba(0,232,154,0.1)',
+                        border:
+                          payoutMessage.type === 'error'
+                            ? '1px solid rgba(255,85,102,0.3)'
+                            : '1px solid rgba(0,232,154,0.3)',
+                        color: payoutMessage.type === 'error' ? 'var(--red)' : 'var(--green)',
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
-                          ₹{w.amountInr} — {w.methodLabel}
-                        </div>
-                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                          {w.destination} • {w.createdAt}
-                        </div>
-                      </div>
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontSize: 10,
-                          padding: '4px 8px',
-                          borderRadius: 6,
-                          background: 'rgba(255,180,0,0.1)',
-                          border: '1px solid rgba(255,180,0,0.25)',
-                          color: 'var(--gold)',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {w.status}
-                      </span>
+                      {payoutMessage.text}
                     </div>
-                  ))}
+                  )}
+
+                  <button type="submit" className="btn btn-primary btn-full" style={{ padding: '14px' }}>
+                    Request Instant Cashout →
+                  </button>
+                </form>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Dedicated On-Hold & Settled Task Breakdown */}
+                <div className="card" style={{ padding: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div>
+                      <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                        Coins on Hold &amp; Task Settlement Queue
+                      </h3>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
+                        Completed tasks stay in Hold until advertiser verification &amp; payout settlement completes.
+                      </p>
+                    </div>
+                    <span className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>
+                      {user.pendingCoins} Held
+                    </span>
+                  </div>
+
+                  {!user.heldRewards || user.heldRewards.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '24px 16px',
+                        textAlign: 'center',
+                        background: 'var(--bg2)',
+                        border: '1px dashed var(--border2)',
+                        borderRadius: 12,
+                      }}
+                    >
+                      <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
+                        {user.pendingCoins > 0
+                          ? `${user.pendingCoins.toLocaleString('en-IN')} Coins (₹${pendingInr}) currently in verification hold. Will auto-transfer to Withdrawable once settled.`
+                          : 'No coins currently on hold. Complete Offerwall quests to earn!'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {user.heldRewards.map((item) => {
+                        const isHeld = item.status === 'pending_hold';
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              padding: '12px 14px',
+                              background: 'var(--bg2)',
+                              border: isHeld
+                                ? '1px solid rgba(255,180,0,0.28)'
+                                : '1px solid rgba(0,232,154,0.22)',
+                              borderRadius: 10,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+                                {item.title}
+                              </div>
+                              <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                                Earned: {item.createdAt}
+                                {isHeld && item.unlocksAt ? ` • Auto-Release: ${item.unlocksAt}` : ''}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  color: isHeld ? 'var(--gold)' : 'var(--green)',
+                                }}
+                              >
+                                +{item.coins} Coins (₹{item.amountInr})
+                              </span>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: 10,
+                                  padding: '3px 7px',
+                                  borderRadius: 6,
+                                  background: isHeld
+                                    ? 'rgba(255,180,0,0.12)'
+                                    : 'rgba(0,232,154,0.12)',
+                                  color: isHeld ? 'var(--gold)' : 'var(--green)',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {isHeld ? '⏳ ON HOLD' : '✅ WITHDRAWABLE'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Withdrawal History */}
+                <div className="card" style={{ padding: 24 }}>
+                  <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginBottom: 12 }}>
+                    Withdrawal History
+                  </h3>
+
+                  {user.withdrawals.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '28px 20px',
+                        textAlign: 'center',
+                        background: 'var(--bg2)',
+                        border: '1px dashed var(--border2)',
+                        borderRadius: 12,
+                      }}
+                    >
+                      <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
+                        You haven&apos;t made any withdrawal requests yet.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {user.withdrawals.map((w) => (
+                        <div
+                          key={w.id}
+                          style={{
+                            padding: '14px 16px',
+                            background: 'var(--bg2)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 10,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
+                              ₹{w.amountInr} — {w.methodLabel}
+                            </div>
+                            <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                              {w.destination} • {w.createdAt}
+                            </div>
+                          </div>
+                          <span
+                            className="font-mono"
+                            style={{
+                              fontSize: 10,
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              background: 'rgba(255,180,0,0.1)',
+                              border: '1px solid rgba(255,180,0,0.25)',
+                              color: 'var(--gold)',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {w.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
