@@ -1,6 +1,6 @@
 export type ThemeMode = 'dark' | 'light';
 
-export type DashboardTab = 'overview' | 'quests' | 'referrals' | 'wallet';
+export type DashboardTab = 'overview' | 'quests' | 'faucet' | 'referrals' | 'wallet';
 
 export type PayoutChannel = 'upi' | 'bank' | 'gift_card' | 'crypto';
 
@@ -25,6 +25,15 @@ export interface HeldRewardRecord {
   unlocksAt?: string | null;
 }
 
+export interface FaucetClaimRecord {
+  id: string;
+  rollNumber: number;
+  coins: number;
+  payoutMode: 'wallet' | 'faucetpay';
+  faucetpayTxId?: string | null;
+  createdAt: string;
+}
+
 export interface PlayerUser {
   id: string;
   name: string;
@@ -36,9 +45,12 @@ export interface PlayerUser {
   pendingCoins: number;
   questsCompleted: number;
   referralsCount: number;
+  faucetClaimsCount?: number;
+  lastFaucetClaimAt?: string | null;
   joinedAt: string;
   withdrawals: WithdrawalRecord[];
   heldRewards?: HeldRewardRecord[];
+  faucetHistory?: FaucetClaimRecord[];
 }
 
 export interface OfferwallConfig {

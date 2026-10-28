@@ -148,9 +148,12 @@ function loadCurrentUser(): PlayerUser | null {
       pendingCoins: Number(parsed.pendingCoins) || 0,
       questsCompleted: Number(parsed.questsCompleted) || 0,
       referralsCount: Number(parsed.referralsCount) || 0,
+      faucetClaimsCount: Number(parsed.faucetClaimsCount) || 0,
+      lastFaucetClaimAt: parsed.lastFaucetClaimAt || null,
       joinedAt: String(parsed.joinedAt || new Date().toISOString().slice(0, 10)),
       withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
       heldRewards: Array.isArray(parsed.heldRewards) ? parsed.heldRewards : [],
+      faucetHistory: Array.isArray(parsed.faucetHistory) ? parsed.faucetHistory : [],
     };
   } catch {
     return null;
@@ -223,6 +226,7 @@ function getTabFromHash(): DashboardTab {
   if (hash === 'quests' || hash === 'offerwalls' || hash === 'shortlinks' || hash === 'tasks') {
     return 'quests';
   }
+  if (hash === 'faucet' || hash === 'roll') return 'faucet';
   if (hash === 'referrals') return 'referrals';
   if (hash === 'wallet') return 'wallet';
   return 'overview';
@@ -279,6 +283,30 @@ export default function App() {
   const [payoutDestination, setPayoutDestination] = useState('');
   const [payoutCoins, setPayoutCoins] = useState('1000');
   const [payoutMessage, setPayoutMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+
+  // Built-in Faucet state
+  const [faucetMode, setFaucetMode] = useState<'wallet' | 'faucetpay'>('wallet');
+  const [faucetPayAddress, setFaucetPayAddress] = useState<string>(() => {
+    try {
+      return localStorage.getItem('lootify_faucetpay_address') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [faucetCurrency, setFaucetCurrency] = useState<'USDT' | 'TRX' | 'DOGE' | 'BTC'>('USDT');
+  const [faucetMathA, setFaucetMathA] = useState<number>(() => Math.floor(3 + Math.random() * 9));
+  const [faucetMathB, setFaucetMathB] = useState<number>(() => Math.floor(2 + Math.random() * 8));
+  const [faucetMathInput, setFaucetMathInput] = useState<string>('');
+  const [faucetUnlockSecs, setFaucetUnlockSecs] = useState<number>(0);
+  const [faucetUnlocked, setFaucetUnlocked] = useState<boolean>(false);
+  const [faucetRolling, setFaucetRolling] = useState<boolean>(false);
+  const [faucetCooldownSecs, setFaucetCooldownSecs] = useState<number>(0);
+  const [faucetLastResult, setFaucetLastResult] = useState<{
+    rollNumber: number;
+    rewardCoins: number;
+    notice?: string | null;
+  } | null>(null);
+  const [faucetError, setFaucetError] = useState<string | null>(null);
 
   const syncUserWithBackend = useCallback(async (currentUser: PlayerUser | null, showFeedback = false) => {
     if (!currentUser) return;
@@ -403,6 +431,141 @@ export default function App() {
       fetchAdminDashboard();
     }
   }, [isAdminRoute, adminLoggedIn, fetchAdminDashboard]);
+
+  // Faucet 30-min Cooldown & 5-sec Anti-Bot Timer
+  useEffect(() => {
+    const updateTimers = () => {
+      if (user?.lastFaucetClaimAt) {
+        const lastMs = new Date(user.lastFaucetClaimAt).getTime();
+        const remMs = lastMs + 30 * 60 * 1000 - Date.now();
+        setFaucetCooldownSecs(remMs > 0 ? Math.ceil(remMs / 1000) : 0);
+      } else {
+        setFaucetCooldownSecs(0);
+      }
+      setFaucetUnlockSecs((prev) => {
+        if (prev <= 1) {
+          if (prev === 1) setFaucetUnlocked(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    };
+    updateTimers();
+    const id = window.setInterval(updateTimers, 1000);
+    return () => window.clearInterval(id);
+  }, [user?.lastFaucetClaimAt]);
+
+  const startFaucetAntiBotTimer = () => {
+    setFaucetError(null);
+    if (Number(faucetMathInput.trim()) !== faucetMathA + faucetMathB) {
+      setFaucetError(`Incorrect math answer! Please solve ${faucetMathA} + ${faucetMathB} first.`);
+      return;
+    }
+    setFaucetUnlocked(false);
+    setFaucetUnlockSecs(5);
+  };
+
+  const handleClaimFaucet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setFaucetError(null);
+    setFaucetLastResult(null);
+
+    if (faucetCooldownSecs > 0) {
+      setFaucetError('Faucet is on 30-minute cooldown. Please wait for the timer.');
+      return;
+    }
+    if (Number(faucetMathInput.trim()) !== faucetMathA + faucetMathB) {
+      setFaucetError(`Please solve the anti-bot challenge (${faucetMathA} + ${faucetMathB}).`);
+      return;
+    }
+    if (!faucetUnlocked) {
+      setFaucetError('Please click "Verify Anti-Bot" and wait 5 seconds before rolling.');
+      return;
+    }
+    if (faucetMode === 'faucetpay' && !faucetPayAddress.trim()) {
+      setFaucetError('Please enter your FaucetPay Email or Crypto Address.');
+      return;
+    }
+
+    try {
+      if (faucetPayAddress.trim()) {
+        localStorage.setItem('lootify_faucetpay_address', faucetPayAddress.trim());
+      }
+    } catch {}
+
+    setFaucetRolling(true);
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/faucet/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          email: user.email,
+          payoutMode: faucetMode,
+          faucetpayAddress: faucetPayAddress.trim(),
+          currency: faucetCurrency,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFaucetError(data?.error || 'Could not complete Faucet claim.');
+        setFaucetRolling(false);
+        return;
+      }
+
+      if (data && data.user) {
+        saveCurrentUser(data.user);
+        setUser(data.user);
+      }
+      setFaucetLastResult({
+        rollNumber: data.rollNumber,
+        rewardCoins: data.rewardCoins,
+        notice: data.notice || null,
+      });
+      setFaucetUnlocked(false);
+      setFaucetMathInput('');
+      setFaucetMathA(Math.floor(3 + Math.random() * 9));
+      setFaucetMathB(Math.floor(2 + Math.random() * 8));
+    } catch {
+      // Fallback local roll if offline
+      const rollNumber = Math.floor(Math.random() * 10000);
+      const rewardCoins =
+        rollNumber >= 9998 ? 250 : rollNumber >= 9986 ? 50 : rollNumber >= 9886 ? 15 : 5;
+      const nowIso = new Date().toISOString();
+      const updated: PlayerUser = {
+        ...user,
+        availableCoins: user.availableCoins + rewardCoins,
+        questsCompleted: user.questsCompleted + 1,
+        faucetClaimsCount: (user.faucetClaimsCount || 0) + 1,
+        lastFaucetClaimAt: nowIso,
+        faucetHistory: [
+          {
+            id: 'fc_' + Date.now(),
+            rollNumber,
+            coins: rewardCoins,
+            payoutMode: 'wallet',
+            createdAt: nowIso.slice(0, 16).replace('T', ' '),
+          },
+          ...(user.faucetHistory || []),
+        ],
+      };
+      saveCurrentUser(updated);
+      setUser(updated);
+      setFaucetLastResult({
+        rollNumber,
+        rewardCoins,
+        notice: 'Credited to your Lootify Withdrawable Wallet!',
+      });
+      setFaucetUnlocked(false);
+      setFaucetMathInput('');
+      setFaucetMathA(Math.floor(3 + Math.random() * 9));
+      setFaucetMathB(Math.floor(2 + Math.random() * 8));
+    } finally {
+      setFaucetRolling(false);
+    }
+  };
 
   const switchTab = (tab: DashboardTab) => {
     setActiveTab(tab);
@@ -727,6 +890,38 @@ export default function App() {
         }
       }
     } catch {}
+  };
+
+  const handleAdminFaucetPayPayout = async (withdrawalId: string) => {
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/faucetpay/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify({ withdrawalId, currency: 'USDT' }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: `⚡ ${data.message || 'Paid via FaucetPay API!'}`,
+        });
+        fetchAdminDashboard();
+      } else {
+        setAdminStatusBanner({
+          type: 'error',
+          text: `FaucetPay API: ${data?.error || 'Could not complete payout.'}`,
+        });
+      }
+    } catch {
+      setAdminStatusBanner({
+        type: 'error',
+        text: 'Failed to reach FaucetPay payout endpoint.',
+      });
+    }
   };
 
   const handleToggleTheme = () => {
@@ -1677,7 +1872,22 @@ export default function App() {
                         </div>
                       </div>
                       {w.status === 'pending' ? (
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {w.method === 'crypto' && (
+                            <button
+                              type="button"
+                              onClick={() => handleAdminFaucetPayPayout(w.id)}
+                              className="btn btn-outline btn-sm"
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: 11,
+                                color: 'var(--gold)',
+                                borderColor: 'rgba(255,180,0,0.45)',
+                              }}
+                            >
+                              ⚡ Pay via FaucetPay API
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleAdminWithdrawalDecision(w.id, 'completed')}
@@ -1976,6 +2186,7 @@ export default function App() {
               [
                 { id: 'overview', label: 'Overview' },
                 { id: 'quests', label: 'Offerwalls & Quests' },
+                { id: 'faucet', label: '🚰 Free Faucet' },
                 { id: 'referrals', label: 'Refer & Earn' },
                 { id: 'wallet', label: 'Cashout' },
               ] as { id: DashboardTab; label: string }[]
@@ -2094,6 +2305,7 @@ export default function App() {
               [
                 { id: 'overview', label: '⚡ Overview' },
                 { id: 'quests', label: '🎮 Offerwalls & Quests' },
+                { id: 'faucet', label: '🚰 Free Faucet (Every 30m)' },
                 { id: 'referrals', label: '👥 Refer & Earn' },
                 { id: 'wallet', label: '🏦 Cashout Wallet' },
               ] as { id: DashboardTab; label: string }[]
@@ -2321,16 +2533,16 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="card qcard" style={{ padding: 26 }} onClick={() => switchTab('referrals')}>
-                <div style={{ fontSize: 26, marginBottom: 10 }}>👥</div>
+              <div className="card qcard" style={{ padding: 26 }} onClick={() => switchTab('faucet')}>
+                <div style={{ fontSize: 26, marginBottom: 10 }}>🚰</div>
                 <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
-                  Refer &amp; Earn
+                  Free Coin &amp; FaucetPay Roll
                 </h3>
                 <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 16 }}>
-                  Share your code <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 600 }}>{user.referralCode}</span> with friends and earn 10% lifetime commission.
+                  Roll every 30 minutes to win up to <strong style={{ color: 'var(--gold)' }}>250 Coins</strong> directly to your Wallet or FaucetPay account!
                 </p>
-                <button type="button" className="btn btn-outline btn-sm btn-full">
-                  Get Referral Link
+                <button type="button" className="btn btn-primary btn-sm btn-full">
+                  🎲 Claim Free Faucet →
                 </button>
               </div>
             </div>
@@ -2629,6 +2841,399 @@ export default function App() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── TAB 2B: LOOTIFY BUILT-IN FREE FAUCET + FAUCETPAY INSTANT ROLL ── */}
+        {activeTab === 'faucet' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+            {/* Top Sponsored Banner Slot (728x90 & 468x60) */}
+            <div
+              className="card"
+              style={{
+                padding: '16px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.08em' }}>
+                  FAUCET SPONSOR PLACEMENT • OFFERWALL.ME
+                </span>
+                <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
+                  ACTIVE AD SLOT
+                </span>
+              </div>
+              <OfferwallMeBanner size="728x90" />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 22 }}>
+              {/* Left Column: Faucet Roll Box */}
+              <div className="card card-glow" style={{ padding: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 12,
+                        background: 'linear-gradient(135deg, var(--green), #059669)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 22,
+                      }}
+                    >
+                      🚰
+                    </div>
+                    <div>
+                      <h2 className="font-display" style={{ fontSize: 21, fontWeight: 700, color: 'var(--txt)' }}>
+                        Lootify Lucky Faucet Roll
+                      </h2>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                        Claim Free Coins Every 30 Minutes • Instant Credit or FaucetPay
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontSize: 11,
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      background: faucetCooldownSecs > 0 ? 'rgba(255,180,0,0.14)' : 'rgba(0,232,154,0.14)',
+                      color: faucetCooldownSecs > 0 ? 'var(--gold)' : 'var(--green)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {faucetCooldownSecs > 0
+                      ? `⏳ Next Roll: ${Math.floor(faucetCooldownSecs / 60)}m ${faucetCooldownSecs % 60}s`
+                      : '✅ READY TO ROLL'}
+                  </span>
+                </div>
+
+                {/* Lucky Roll Payout Table */}
+                <div
+                  style={{
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: 14,
+                    marginBottom: 18,
+                  }}
+                >
+                  <div
+                    className="font-mono"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 11,
+                      color: 'var(--txt2)',
+                      paddingBottom: 8,
+                      marginBottom: 8,
+                      borderBottom: '1px solid var(--border)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span>LUCKY NUMBER</span>
+                    <span>FAUCET REWARD</span>
+                  </div>
+                  {[
+                    { range: '0000 – 9885', reward: '+5 Coins (₹0.05)', color: 'var(--txt)' },
+                    { range: '9886 – 9985', reward: '+15 Coins (₹0.15)', color: 'var(--green)' },
+                    { range: '9986 – 9997', reward: '+50 Coins (₹0.50)', color: 'var(--gold)' },
+                    { range: '9998 – 9999', reward: '+250 Coins JACKPOT (₹2.50)', color: 'var(--violet)' },
+                  ].map((row) => (
+                    <div
+                      key={row.range}
+                      className="font-mono"
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: 12,
+                        padding: '5px 0',
+                      }}
+                    >
+                      <span style={{ color: 'var(--txt2)' }}>{row.range}</span>
+                      <span style={{ color: row.color, fontWeight: 700 }}>{row.reward}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleClaimFaucet} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Payout Mode Selector */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                      CHOOSE REWARD DESTINATION
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setFaucetMode('wallet')}
+                        style={{
+                          padding: '10px',
+                          borderRadius: 9,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          background: faucetMode === 'wallet' ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
+                          border: faucetMode === 'wallet' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: faucetMode === 'wallet' ? 'var(--green)' : 'var(--txt)',
+                        }}
+                      >
+                        ⚡ Lootify Wallet Coins
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFaucetMode('faucetpay')}
+                        style={{
+                          padding: '10px',
+                          borderRadius: 9,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          background: faucetMode === 'faucetpay' ? 'rgba(255,180,0,0.12)' : 'var(--bg2)',
+                          border: faucetMode === 'faucetpay' ? '1.5px solid var(--gold)' : '1px solid var(--border)',
+                          color: faucetMode === 'faucetpay' ? 'var(--gold)' : 'var(--txt)',
+                        }}
+                      >
+                        🪙 FaucetPay Direct
+                      </button>
+                    </div>
+                  </div>
+
+                  {faucetMode === 'faucetpay' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
+                          FAUCETPAY EMAIL OR ADDRESS
+                        </label>
+                        <input
+                          type="text"
+                          value={faucetPayAddress}
+                          onChange={(e) => setFaucetPayAddress(e.target.value)}
+                          placeholder="Your FaucetPay email or wallet"
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            background: 'var(--bg2)',
+                            border: '1px solid var(--border2)',
+                            color: 'var(--txt)',
+                            fontSize: 12,
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
+                          COIN
+                        </label>
+                        <select
+                          value={faucetCurrency}
+                          onChange={(e) => setFaucetCurrency(e.target.value as any)}
+                          className="font-mono"
+                          style={{
+                            width: '100%',
+                            padding: '10px 8px',
+                            borderRadius: 8,
+                            background: 'var(--bg2)',
+                            border: '1px solid var(--border2)',
+                            color: 'var(--gold)',
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <option value="USDT">USDT</option>
+                          <option value="TRX">TRX</option>
+                          <option value="DOGE">DOGE</option>
+                          <option value="BTC">BTC</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Anti-Bot Math + 5s Security Verification */}
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 10,
+                      background: 'var(--bg2)',
+                      border: '1px solid var(--border2)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <span className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt)' }}>
+                        🤖 Anti-Bot Check: What is {faucetMathA} + {faucetMathB} ?
+                      </span>
+                      <input
+                        type="number"
+                        value={faucetMathInput}
+                        onChange={(e) => setFaucetMathInput(e.target.value)}
+                        placeholder="Answer"
+                        className="font-mono"
+                        style={{
+                          width: 90,
+                          padding: '7px 10px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--green)',
+                          fontSize: 13,
+                          fontWeight: 700,
+                        }}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={startFaucetAntiBotTimer}
+                      disabled={faucetUnlockSecs > 0 || faucetUnlocked}
+                      className="btn btn-outline btn-sm"
+                      style={{ width: '100%' }}
+                    >
+                      {faucetUnlocked
+                        ? '✅ Anti-Bot Verified — Click Roll Below!'
+                        : faucetUnlockSecs > 0
+                        ? `⏳ Verifying Human... ${faucetUnlockSecs}s`
+                        : '🛡️ Step 1: Verify Anti-Bot (5s Timer)'}
+                    </button>
+                  </div>
+
+                  {faucetError && (
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        background: 'rgba(255,85,102,0.1)',
+                        border: '1px solid rgba(255,85,102,0.35)',
+                        color: 'var(--red)',
+                        fontSize: 12,
+                      }}
+                    >
+                      ⚠️ {faucetError}
+                    </div>
+                  )}
+
+                  {faucetLastResult && (
+                    <div
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: 10,
+                        background: 'rgba(0,232,154,0.12)',
+                        border: '1.5px solid rgba(0,232,154,0.4)',
+                        color: 'var(--green)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div className="font-mono" style={{ fontSize: 18, fontWeight: 700 }}>
+                        🎲 Lucky Roll #{String(faucetLastResult.rollNumber).padStart(4, '0')} → +{faucetLastResult.rewardCoins} Coins Won!
+                      </div>
+                      {faucetLastResult.notice && (
+                        <div style={{ fontSize: 12, color: 'var(--txt)', marginTop: 4 }}>
+                          {faucetLastResult.notice}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={faucetRolling || faucetCooldownSecs > 0 || !faucetUnlocked}
+                    className="btn btn-primary btn-full"
+                    style={{
+                      padding: '14px',
+                      opacity: faucetRolling || faucetCooldownSecs > 0 || !faucetUnlocked ? 0.6 : 1,
+                    }}
+                  >
+                    {faucetRolling
+                      ? '🎲 Rolling Lucky Number...'
+                      : faucetCooldownSecs > 0
+                      ? `⏳ Cooldown (${Math.floor(faucetCooldownSecs / 60)}m ${faucetCooldownSecs % 60}s)`
+                      : '🎲 Step 2: Roll & Claim Free Reward!'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Right Column: 300x250 + 468x60 Banner Ads & Recent Faucet Claims */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                <div
+                  className="card"
+                  style={{
+                    padding: 20,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
+                    SPONSORED FAUCET ADS • OFFERWALL.ME
+                  </span>
+                  <OfferwallMeBanner size="300x250" />
+                  <OfferwallMeBanner size="468x60" />
+                </div>
+
+                <div className="card" style={{ padding: 22 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                      Your Recent Faucet Rolls
+                    </h3>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                      {user.faucetClaimsCount || 0} Total Claims
+                    </span>
+                  </div>
+                  {!user.faucetHistory || user.faucetHistory.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '20px 14px',
+                        textAlign: 'center',
+                        borderRadius: 10,
+                        background: 'var(--bg2)',
+                        border: '1px dashed var(--border2)',
+                        fontSize: 12,
+                        color: 'var(--txt2)',
+                      }}
+                    >
+                      No faucet rolls yet. Complete your first free roll now!
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {user.faucetHistory.slice(0, 8).map((fc) => (
+                        <div
+                          key={fc.id}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            background: 'var(--bg2)',
+                            border: '1px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <div>
+                            <div className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt)' }}>
+                              Roll #{String(fc.rollNumber).padStart(4, '0')}
+                            </div>
+                            <div className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)' }}>
+                              {fc.createdAt} • {fc.payoutMode === 'faucetpay' ? 'FaucetPay' : 'Wallet'}
+                            </div>
+                          </div>
+                          <span className="font-mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+                            +{fc.coins} Coins
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

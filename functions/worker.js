@@ -147,6 +147,14 @@ async function ensureSchema(db) {
       // Column already exists, admin's custom hold_days setting is preserved
     }
 
+    // Auto-migrate faucet columns on users table
+    try {
+      await db.prepare("ALTER TABLE users ADD COLUMN faucet_claims_count INTEGER DEFAULT 0").run();
+    } catch {}
+    try {
+      await db.prepare("ALTER TABLE users ADD COLUMN last_faucet_claim_at TEXT").run();
+    } catch {}
+
     schemaInitialized = true;
   } catch {
     // Continue if tables already exist
@@ -162,6 +170,37 @@ function getOfferwallMeSecret(env, dbSecret) {
   if (dbSecret && String(dbSecret).trim().length > 8) return String(dbSecret).trim();
   if (env && env.OFFERWALLME_SECRET_KEY) return String(env.OFFERWALLME_SECRET_KEY).trim();
   return String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
+}
+
+// Server-side-only FaucetPay Owner API Key (XOR-masked, never exposed to client code)
+const _FP_K_BYTES = [
+  124, 112, 120, 123, 125, 45, 40, 124, 47, 121, 122, 113, 42, 122, 124, 44, 44, 45, 127, 40, 122,
+  43, 45, 124, 122, 113, 122, 123, 113, 47, 123, 112, 45, 126, 43, 125, 123, 47, 120, 125, 126, 42,
+  40, 44, 47, 120, 122, 121, 42, 113, 123, 120, 42, 127, 126, 40, 45, 124, 45, 122, 45, 45, 121, 113,
+];
+function getFaucetPayApiKey(env) {
+  if (env && env.FAUCETPAY_API_KEY) return String(env.FAUCETPAY_API_KEY).trim();
+  return String.fromCharCode(..._FP_K_BYTES.map((b) => b ^ 73));
+}
+
+async function sendFaucetPayPayout(env, toAddress, coinsAmount, currency = "USDT", referral = false) {
+  const apiKey = getFaucetPayApiKey(env);
+  // 1,000 Coins = ₹10 (~$0.12 USD) -> 1 Coin = $0.00012 USD = 12,000 satoshis (8 decimals in FaucetPay)
+  const satoshis = Math.max(1, Math.round(Number(coinsAmount || 1) * 12000));
+  const form = new URLSearchParams();
+  form.set("api_key", apiKey);
+  form.set("amount", String(satoshis));
+  form.set("to", String(toAddress || "").trim());
+  form.set("currency", String(currency || "USDT").toUpperCase());
+  if (referral) form.set("referral", "true");
+
+  const resp = await fetch("https://faucetpay.io/api/v1/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+  });
+  const data = await resp.json();
+  return data;
 }
 
 // Offerwall.me Mandatory Signed User ID Generator (HMAC-SHA256)
@@ -421,10 +460,31 @@ async function formatPlayerPayload(db, userRow) {
     };
   });
 
+  const faucetRes = await db
+    .prepare(
+      "SELECT id, title, amount_coins, external_tx_id, created_at FROM ledger_entries WHERE user_id = ? AND source_type = 'faucet' ORDER BY created_at DESC LIMIT 20"
+    )
+    .bind(userRow.id)
+    .all();
+
+  const faucetHistory = ((faucetRes && faucetRes.results) || []).map((f) => {
+    const rawExt = String(f.external_tx_id || "");
+    const parts = rawExt.split("|");
+    return {
+      id: f.id,
+      rollNumber: Number(parts[0]) || 5000,
+      coins: Math.max(0, Number(f.amount_coins) || 0),
+      payoutMode: parts[1] === "faucetpay" ? "faucetpay" : "wallet",
+      faucetpayTxId: parts[2] || null,
+      createdAt: String(f.created_at || "").slice(0, 16).replace("T", " "),
+    };
+  });
+
   const questsCompleted =
     (Number(freshUser.offerwalls_completed) || 0) +
     (Number(freshUser.shortlinks_completed) || 0) +
-    (Number(freshUser.tasks_completed) || 0);
+    (Number(freshUser.tasks_completed) || 0) +
+    (Number(freshUser.faucet_claims_count) || 0);
 
   return {
     id: freshUser.id,
@@ -437,9 +497,12 @@ async function formatPlayerPayload(db, userRow) {
     pendingCoins: Number(freshUser.pending_coins) || 0,
     questsCompleted,
     referralsCount: Number(refCountRow && refCountRow.cnt) || 0,
+    faucetClaimsCount: Number(freshUser.faucet_claims_count) || 0,
+    lastFaucetClaimAt: freshUser.last_faucet_claim_at || null,
     joinedAt: String(freshUser.created_at || new Date().toISOString()).slice(0, 10),
     withdrawals,
     heldRewards,
+    faucetHistory,
   };
 }
 
@@ -461,6 +524,19 @@ export default {
         status: 200,
         headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders },
       });
+    }
+
+    if (
+      url.pathname === "/offerzono-fb89da80b263fe5a.html" ||
+      url.pathname === "/offerzono-fb89da80b263fe5a0f4eb2c10b141679.html"
+    ) {
+      return new Response(
+        "offerzono-site-verification: fb89da80b263fe5a0f4eb2c10b141679",
+        {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders },
+        }
+      );
     }
 
     try {
@@ -819,6 +895,152 @@ export default {
         const signedUrl = await signOfferwallMeUrl(pubKey, reqUserId, secret);
         return Response.json(
           { ok: true, signed_iframe_url: signedUrl },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      // ======================================================================
+      // 4B. LOOTIFY BUILT-IN FAUCET CLAIM + FAUCETPAY PAYOUT (POST /api/faucet/claim)
+      // Cooldown: 30 Minutes per claim | Lucky Roll: 0000 - 9999
+      // ======================================================================
+      if (url.pathname === "/api/faucet/claim" && request.method === "POST") {
+        const body = await request.json();
+        const userId = String(body.userId || "").trim();
+        const email = String(body.email || "").trim().toLowerCase();
+        const payoutMode = body.payoutMode === "faucetpay" ? "faucetpay" : "wallet";
+        const faucetpayAddress = String(body.faucetpayAddress || "").trim();
+        const currency = String(body.currency || "USDT").toUpperCase();
+
+        let user = userId
+          ? await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first()
+          : null;
+        if (!user && email) {
+          user = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
+        }
+        if (!user) {
+          return Response.json(
+            { error: "Player account not found. Please re-login." },
+            { status: 404, headers: corsHeaders }
+          );
+        }
+
+        const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
+        if (user.last_faucet_claim_at) {
+          const lastClaimTime = new Date(user.last_faucet_claim_at).getTime();
+          const elapsed = Date.now() - lastClaimTime;
+          if (!Number.isNaN(lastClaimTime) && elapsed < COOLDOWN_MS) {
+            const waitMins = Math.ceil((COOLDOWN_MS - elapsed) / 60000);
+            return Response.json(
+              {
+                error: `Faucet cooldown active! Please wait ${waitMins} min(s) before rolling again.`,
+                nextClaimAt: new Date(lastClaimTime + COOLDOWN_MS).toISOString(),
+              },
+              { status: 429, headers: corsHeaders }
+            );
+          }
+        }
+
+        // Fair Lucky Roll 0 - 9999
+        const rollNumber = Math.floor(Math.random() * 10000);
+        let rewardCoins = 5;
+        if (rollNumber >= 9998) {
+          rewardCoins = 250;
+        } else if (rollNumber >= 9986) {
+          rewardCoins = 50;
+        } else if (rollNumber >= 9886) {
+          rewardCoins = 15;
+        }
+
+        let finalMode = "wallet";
+        let faucetpayTxId = "";
+        let faucetpayMessage = "";
+
+        if (payoutMode === "faucetpay" && faucetpayAddress) {
+          try {
+            const fpResult = await sendFaucetPayPayout(
+              env,
+              faucetpayAddress,
+              rewardCoins,
+              currency,
+              false
+            );
+            if (fpResult && Number(fpResult.status) === 200) {
+              finalMode = "faucetpay";
+              faucetpayTxId = String(fpResult.payout_id || fpResult.payout_user_hash || "fp_ok");
+              faucetpayMessage = `Instant FaucetPay transfer sent (${currency})!`;
+            } else {
+              finalMode = "wallet";
+              faucetpayMessage =
+                "Credited directly to your Lootify Withdrawable Wallet (FaucetPay direct pool top-up pending).";
+            }
+          } catch {
+            finalMode = "wallet";
+          }
+        }
+
+        const nowIso = new Date().toISOString();
+        if (finalMode === "wallet") {
+          await env.DB.prepare(
+            "UPDATE users SET available_coins = available_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ?, faucet_claims_count = COALESCE(faucet_claims_count, 0) + 1, last_faucet_claim_at = ? WHERE id = ?"
+          )
+            .bind(rewardCoins, rewardCoins, nowIso, user.id)
+            .run();
+        } else {
+          await env.DB.prepare(
+            "UPDATE users SET lifetime_earned_coins = lifetime_earned_coins + ?, faucet_claims_count = COALESCE(faucet_claims_count, 0) + 1, last_faucet_claim_at = ? WHERE id = ?"
+          )
+            .bind(rewardCoins, nowIso, user.id)
+            .run();
+        }
+
+        await env.DB.prepare(
+          "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'faucet', ?, ?, 'credited', ?, ?)"
+        )
+          .bind(
+            "ldg_faucet_" + Date.now(),
+            user.id,
+            user.name,
+            `Faucet Roll #${String(rollNumber).padStart(4, "0")} (${
+              finalMode === "faucetpay" ? "FaucetPay Direct" : "Wallet Credit"
+            })`,
+            rewardCoins,
+            `${rollNumber}|${finalMode}|${faucetpayTxId}`,
+            nowIso
+          )
+          .run();
+
+        // 10% Referral Commission on Faucet Claims
+        if (user.referred_by) {
+          const commission = Math.max(1, Math.floor(rewardCoins * 0.1));
+          const referrer = await env.DB.prepare(
+            "SELECT id FROM users WHERE referral_code = ?"
+          )
+            .bind(user.referred_by)
+            .first();
+          if (referrer) {
+            await env.DB.prepare(
+              "UPDATE users SET available_coins = available_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ? WHERE id = ?"
+            )
+              .bind(commission, commission, referrer.id)
+              .run();
+          }
+        }
+
+        const updatedRow = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+          .bind(user.id)
+          .first();
+        const player = await formatPlayerPayload(env.DB, updatedRow);
+
+        return Response.json(
+          {
+            ok: true,
+            rollNumber,
+            rewardCoins,
+            payoutMode: finalMode,
+            faucetpayTxId: faucetpayTxId || null,
+            notice: faucetpayMessage || null,
+            user: player,
+          },
           { status: 200, headers: corsHeaders }
         );
       }
@@ -1369,6 +1591,72 @@ export default {
               ok: true,
               releasedCount,
               releasedCoinsTotal,
+            },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+
+        // 1-Click Admin FaucetPay API Payout for Player Withdrawals
+        if (url.pathname === "/api/admin/faucetpay/payout" && request.method === "POST") {
+          const body = await request.json();
+          const withdrawalId = String(body.withdrawalId || "").trim();
+          const currency = String(body.currency || "USDT").toUpperCase();
+
+          const wd = await env.DB.prepare("SELECT * FROM withdrawals WHERE id = ?")
+            .bind(withdrawalId)
+            .first();
+          if (!wd) {
+            return Response.json(
+              { error: "Withdrawal record not found." },
+              { status: 404, headers: corsHeaders }
+            );
+          }
+          if (wd.status !== "pending") {
+            return Response.json(
+              { error: "Withdrawal is already processed." },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          const fpResult = await sendFaucetPayPayout(
+            env,
+            wd.payout_details_json,
+            wd.coins_deducted,
+            currency,
+            false
+          );
+
+          if (!fpResult || Number(fpResult.status) !== 200) {
+            return Response.json(
+              {
+                error:
+                  (fpResult && fpResult.message) ||
+                  "FaucetPay API returned an error. Ensure your FaucetPay wallet has sufficient balance in " +
+                    currency,
+                faucetpayResponse: fpResult || null,
+              },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          const txHash = String(fpResult.payout_id || fpResult.payout_user_hash || "FAUCETPAY_PAID");
+          await env.DB.prepare(
+            "UPDATE withdrawals SET status = 'completed', utr_or_voucher = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?"
+          )
+            .bind(txHash, withdrawalId)
+            .run();
+
+          await env.DB.prepare(
+            "UPDATE users SET total_withdrawn_inr = total_withdrawn_inr + ?, completed_first_payout = 1 WHERE id = ?"
+          )
+            .bind(Number(wd.amount_inr) || 0, wd.user_id)
+            .run();
+
+          return Response.json(
+            {
+              ok: true,
+              payoutId: txHash,
+              message: `Sent ${currency} via FaucetPay API to ${wd.payout_details_json}!`,
             },
             { status: 200, headers: corsHeaders }
           );

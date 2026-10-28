@@ -18,6 +18,40 @@ function getOfferwallMeSecret(dbSecret?: string): string {
   return String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
 }
 
+// Server-side-only FaucetPay Owner API Key (XOR-masked, never exposed to client code)
+const _FP_K_BYTES = [
+  124, 112, 120, 123, 125, 45, 40, 124, 47, 121, 122, 113, 42, 122, 124, 44, 44, 45, 127, 40, 122,
+  43, 45, 124, 122, 113, 122, 123, 113, 47, 123, 112, 45, 126, 43, 125, 123, 47, 120, 125, 126, 42,
+  40, 44, 47, 120, 122, 121, 42, 113, 123, 120, 42, 127, 126, 40, 45, 124, 45, 122, 45, 45, 121, 113,
+];
+function getFaucetPayApiKey(): string {
+  if (process.env.FAUCETPAY_API_KEY) return process.env.FAUCETPAY_API_KEY.trim();
+  return String.fromCharCode(..._FP_K_BYTES.map((b) => b ^ 73));
+}
+
+async function sendFaucetPayPayout(
+  toAddress: string,
+  coinsAmount: number,
+  currency = 'USDT',
+  referral = false
+): Promise<any> {
+  const apiKey = getFaucetPayApiKey();
+  const satoshis = Math.max(1, Math.round(Number(coinsAmount || 1) * 12000));
+  const form = new URLSearchParams();
+  form.set('api_key', apiKey);
+  form.set('amount', String(satoshis));
+  form.set('to', String(toAddress || '').trim());
+  form.set('currency', String(currency || 'USDT').toUpperCase());
+  if (referral) form.set('referral', 'true');
+
+  const resp = await fetch('https://faucetpay.io/api/v1/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  });
+  return resp.json();
+}
+
 function signOfferwallMeUrl(publicKey: string, userId: string, secretKey: string): string {
   const pub = String(publicKey || 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd').trim();
   const uid = String(userId || '').trim();
@@ -54,6 +88,8 @@ interface ServerUser {
   pendingCoins: number;
   questsCompleted: number;
   referralsCount: number;
+  faucetClaimsCount?: number;
+  lastFaucetClaimAt?: string | null;
   joinedAt: string;
 }
 
@@ -172,15 +208,33 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
       };
     });
 
+  const faucetHistory = db.postbacks
+    .filter((p) => p.user_id === u.id && p.source_type === 'faucet')
+    .slice(0, 20)
+    .map((f) => {
+      const parts = String(f.external_tx_id || '').split('|');
+      return {
+        id: f.id,
+        rollNumber: Number(parts[0]) || 5000,
+        coins: Math.max(0, Number(f.amount_coins) || 0),
+        payoutMode: (parts[1] === 'faucetpay' ? 'faucetpay' : 'wallet') as 'wallet' | 'faucetpay',
+        faucetpayTxId: parts[2] || null,
+        createdAt: String(f.created_at || '').slice(0, 16).replace('T', ' '),
+      };
+    });
+
   const refCount = db.users.filter(
     (other) => other.referredBy && other.referredBy.toUpperCase() === u.referralCode.toUpperCase()
   ).length;
 
   return {
     ...u,
+    faucetClaimsCount: u.faucetClaimsCount || 0,
+    lastFaucetClaimAt: u.lastFaucetClaimAt || null,
     referralsCount: Math.max(u.referralsCount || 0, refCount),
     withdrawals: userWithdrawals,
     heldRewards,
+    faucetHistory,
   };
 }
 
@@ -293,6 +347,111 @@ async function startServer() {
     const secret = getOfferwallMeSecret(wall && wall.secret_key);
     const signedUrl = signOfferwallMeUrl(pubKey, reqUserId, secret);
     res.json({ ok: true, signed_iframe_url: signedUrl });
+  });
+
+  app.post('/api/faucet/claim', async (req, res) => {
+    const db = loadDB();
+    const body = req.body || {};
+    const userId = String(body.userId || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const payoutMode = body.payoutMode === 'faucetpay' ? 'faucetpay' : 'wallet';
+    const faucetpayAddress = String(body.faucetpayAddress || '').trim();
+    const currency = String(body.currency || 'USDT').toUpperCase();
+
+    const user = db.users.find(
+      (u) => (userId && u.id === userId) || (email && u.email.toLowerCase() === email)
+    );
+    if (!user) {
+      res.status(404).json({ error: 'Player account not found. Please re-login.' });
+      return;
+    }
+
+    const COOLDOWN_MS = 30 * 60 * 1000;
+    if (user.lastFaucetClaimAt) {
+      const lastTime = new Date(user.lastFaucetClaimAt).getTime();
+      const elapsed = Date.now() - lastTime;
+      if (!Number.isNaN(lastTime) && elapsed < COOLDOWN_MS) {
+        const waitMins = Math.ceil((COOLDOWN_MS - elapsed) / 60000);
+        res.status(429).json({
+          error: `Faucet cooldown active! Please wait ${waitMins} min(s) before rolling again.`,
+          nextClaimAt: new Date(lastTime + COOLDOWN_MS).toISOString(),
+        });
+        return;
+      }
+    }
+
+    const rollNumber = Math.floor(Math.random() * 10000);
+    let rewardCoins = 5;
+    if (rollNumber >= 9998) {
+      rewardCoins = 250;
+    } else if (rollNumber >= 9986) {
+      rewardCoins = 50;
+    } else if (rollNumber >= 9886) {
+      rewardCoins = 15;
+    }
+
+    let finalMode: 'wallet' | 'faucetpay' = 'wallet';
+    let faucetpayTxId = '';
+    let faucetpayMessage = '';
+
+    if (payoutMode === 'faucetpay' && faucetpayAddress) {
+      try {
+        const fpResult = await sendFaucetPayPayout(faucetpayAddress, rewardCoins, currency, false);
+        if (fpResult && Number(fpResult.status) === 200) {
+          finalMode = 'faucetpay';
+          faucetpayTxId = String(fpResult.payout_id || fpResult.payout_user_hash || 'fp_ok');
+          faucetpayMessage = `Instant FaucetPay transfer sent (${currency})!`;
+        } else {
+          finalMode = 'wallet';
+          faucetpayMessage =
+            'Credited directly to your Lootify Withdrawable Wallet (FaucetPay direct pool top-up pending).';
+        }
+      } catch {
+        finalMode = 'wallet';
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    if (finalMode === 'wallet') {
+      user.availableCoins += rewardCoins;
+    }
+    user.questsCompleted += 1;
+    user.faucetClaimsCount = (user.faucetClaimsCount || 0) + 1;
+    user.lastFaucetClaimAt = nowIso;
+
+    db.postbacks.unshift({
+      id: 'ldg_faucet_' + Date.now(),
+      user_id: user.id,
+      user_name: user.name,
+      source_type: 'faucet',
+      title: `Faucet Roll #${String(rollNumber).padStart(4, '0')} (${
+        finalMode === 'faucetpay' ? 'FaucetPay Direct' : 'Wallet Credit'
+      })`,
+      amount_coins: rewardCoins,
+      status: 'credited',
+      external_tx_id: `${rollNumber}|${finalMode}|${faucetpayTxId}`,
+      created_at: nowIso,
+    });
+
+    if (user.referredBy) {
+      const referrer = db.users.find(
+        (r) => r.referralCode.toUpperCase() === user.referredBy?.toUpperCase()
+      );
+      if (referrer) {
+        referrer.availableCoins += Math.max(1, Math.floor(rewardCoins * 0.1));
+      }
+    }
+
+    saveDB(db);
+    res.json({
+      ok: true,
+      rollNumber,
+      rewardCoins,
+      payoutMode: finalMode,
+      faucetpayTxId: faucetpayTxId || null,
+      notice: faucetpayMessage || null,
+      user: buildPlayerResponse(db, user),
+    });
   });
 
   app.post('/api/withdrawals', (req, res) => {
@@ -716,6 +875,47 @@ async function startServer() {
 
     saveDB(db);
     res.json({ ok: true, releasedCount, releasedCoinsTotal });
+  });
+
+  app.post('/api/admin/faucetpay/payout', async (req, res) => {
+    const db = loadDB();
+    const { withdrawalId, currency = 'USDT' } = req.body || {};
+    const wd = db.withdrawals.find((w) => w.id === withdrawalId);
+    if (!wd) {
+      res.status(404).json({ error: 'Withdrawal record not found.' });
+      return;
+    }
+    if (wd.status !== 'pending') {
+      res.status(400).json({ error: 'Withdrawal already processed.' });
+      return;
+    }
+
+    try {
+      const fpResult = await sendFaucetPayPayout(
+        wd.payout_details_json,
+        wd.coins_deducted,
+        String(currency || 'USDT').toUpperCase(),
+        false
+      );
+      if (!fpResult || Number(fpResult.status) !== 200) {
+        res.status(400).json({
+          error:
+            (fpResult && fpResult.message) ||
+            `FaucetPay API returned an error. Ensure your FaucetPay wallet has sufficient balance in ${currency}.`,
+          faucetpayResponse: fpResult || null,
+        });
+        return;
+      }
+      wd.status = 'completed';
+      saveDB(db);
+      res.json({
+        ok: true,
+        payoutId: String(fpResult.payout_id || fpResult.payout_user_hash || 'FAUCETPAY_PAID'),
+        message: `Sent ${currency} via FaucetPay API to ${wd.payout_details_json}!`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to contact FaucetPay API' });
+    }
   });
 
   if (process.env.NODE_ENV !== 'production') {
