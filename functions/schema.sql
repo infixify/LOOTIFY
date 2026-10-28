@@ -1,7 +1,7 @@
 -- ============================================================================
 -- LOOTIFY — CLOUDFLARE D1 (SERVERLESS SQLITE) DATABASE SCHEMA (functions/schema.sql)
--- Free Tier: 5,000,000 (50 Lakh) Reads/Day + 100,000 Writes/Day FREE
--- Copy & Paste this entire file into Cloudflare D1 -> Console -> Execute
+-- Note: functions/worker.js automatically creates these tables on first request,
+-- so pushing to Git works automatically without manual SQL execution!
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
   unlocks_at TEXT
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_external_tx
+ON ledger_entries(external_tx_id)
+WHERE external_tx_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS withdrawals (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -71,6 +75,19 @@ CREATE TABLE IF NOT EXISTS referrals (
   total_commission_coins INTEGER DEFAULT 0,
   same_ip_flag INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS offerwall_configs (
+  provider_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  badge TEXT DEFAULT 'Offerwall & Tasks',
+  enabled INTEGER DEFAULT 1,
+  app_id TEXT DEFAULT '',
+  iframe_url_template TEXT DEFAULT '',
+  secret_key TEXT DEFAULT '',
+  hold_days INTEGER DEFAULT 0,
+  postback_macro_query TEXT DEFAULT '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status=1',
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Real Founder Admin Account (Email: sarthaksinghyadav1@gmail.com)

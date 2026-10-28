@@ -802,9 +802,10 @@ body.on-app-route #root {
       <div>
         <h4 class="font-display" style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:14px;letter-spacing:.04em;">BUSINESS</h4>
         <div style="display:flex;flex-direction:column;gap:10px;">
-          <a href="#hero-auth" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Advertise With Us</a>
+          <a href="mailto:contact@lootify.eternant.c0m.to" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Advertise With Us</a>
           <a href="#quest-modes" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Affiliate Program</a>
-          <a href="#faq" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Support / Help</a>
+          <a href="mailto:contact@lootify.eternant.c0m.to" style="font-size:13px;color:var(--txt2);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--txt2)'">Support / Help</a>
+          <a href="mailto:contact@lootify.eternant.c0m.to" class="font-mono" style="font-size:12px;color:var(--green);text-decoration:none;word-break:break-all;">✉️ contact@lootify.eternant.c0m.to</a>
         </div>
       </div>
 
@@ -819,7 +820,7 @@ body.on-app-route #root {
     </div>
 
     <div style="border-top:1px solid var(--border);padding-top:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
-      <p style="font-size:12px;color:var(--txt2);">© 2026 Lootify.in — All rights reserved. Play smart, earn real.</p>
+      <p style="font-size:12px;color:var(--txt2);">© 2026 Lootify — All rights reserved. Official Contact: <a href="mailto:contact@lootify.eternant.c0m.to" class="font-mono" style="color:var(--green);text-decoration:none;">contact@lootify.eternant.c0m.to</a></p>
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="live-dot" style="width:6px;height:6px;"></div>
         <span class="font-mono" style="font-size:11px;color:var(--green);">All systems operational</span>
@@ -1203,7 +1204,7 @@ document.getElementById('btn-google-signin').addEventListener('click', function(
   if (emailInput) emailInput.focus();
 });
 
-// Calculator
+// Calculator (1,000 Coins = ₹10 / 100 Coins = ₹1)
 function calc() {
   var o = +document.getElementById('s1').value;
   var l = +document.getElementById('s2').value;
@@ -1211,8 +1212,8 @@ function calc() {
   document.getElementById('v1').textContent = o + ' offers';
   document.getElementById('v2').textContent = l + ' links';
   document.getElementById('v3').textContent = r + ' friends';
-  var coins = Math.round(o*4*1200 + l*20*30 + r*50 + r*500*0.1);
-  var inr = Math.round(coins/10);
+  var coins = Math.round(o*4*1200 + l*20*30 + r*500 + r*5000*0.1);
+  var inr = Math.round(coins/100);
   document.getElementById('rc').textContent = coins.toLocaleString('en-IN');
   document.getElementById('ri').textContent = '₹' + inr.toLocaleString('en-IN');
 }

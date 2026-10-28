@@ -29,3 +29,15 @@ export interface PlayerUser {
   joinedAt: string;
   withdrawals: WithdrawalRecord[];
 }
+
+export interface OfferwallConfig {
+  provider_id: string;
+  name: string;
+  badge: string;
+  enabled: number;
+  app_id: string;
+  iframe_url_template: string;
+  secret_key?: string;
+  hold_days: number;
+  postback_macro_query?: string;
+}

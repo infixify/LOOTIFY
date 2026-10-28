@@ -24,6 +24,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies & build latest React bundle
+        run: |
+          npm install
+          npm run build
+          mkdir -p site/assets
+          cp -r dist/assets/* site/assets/
+          cp index.html site/index.html
+          cp 404.html site/404.html
+          cp CNAME site/CNAME
+          touch site/.nojekyll
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 

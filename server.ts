@@ -1,15 +1,531 @@
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+
+const ADMIN_EMAIL = 'sarthaksinghyadav1@gmail.com';
+const DB_FILE = path.join(process.cwd(), '.lootify-server-db.json');
+
+interface ServerUser {
+  id: string;
+  name: string;
+  email: string;
+  authProvider: 'google' | 'email';
+  referralCode: string;
+  referredBy: string | null;
+  availableCoins: number;
+  pendingCoins: number;
+  questsCompleted: number;
+  referralsCount: number;
+  joinedAt: string;
+}
+
+interface ServerWithdrawal {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  method: string;
+  tier_label: string;
+  coins_deducted: number;
+  amount_inr: number;
+  payout_details_json: string;
+  status: 'pending' | 'completed' | 'rejected';
+  created_at: string;
+}
+
+interface ServerPostbackLog {
+  id: string;
+  user_id: string;
+  user_name: string;
+  source_type: string;
+  title: string;
+  amount_coins: number;
+  status: string;
+  external_tx_id: string;
+  created_at: string;
+}
+
+interface ServerOfferwallConfig {
+  provider_id: string;
+  name: string;
+  badge: string;
+  enabled: number;
+  app_id: string;
+  iframe_url_template: string;
+  secret_key: string;
+  hold_days: number;
+  postback_macro_query: string;
+}
+
+interface ServerDB {
+  users: ServerUser[];
+  withdrawals: ServerWithdrawal[];
+  postbacks: ServerPostbackLog[];
+  offerwalls: ServerOfferwallConfig[];
+}
+
+function loadDB(): ServerDB {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+      const rawWalls: ServerOfferwallConfig[] = Array.isArray(parsed.offerwalls) ? parsed.offerwalls : [];
+      return {
+        users: Array.isArray(parsed.users) ? parsed.users : [],
+        withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
+        postbacks: Array.isArray(parsed.postbacks) ? parsed.postbacks : [],
+        offerwalls: rawWalls,
+      };
+    }
+  } catch {
+    // ignore read error
+  }
+  return {
+    users: [],
+    withdrawals: [],
+    postbacks: [],
+    offerwalls: [],
+  };
+}
+
+function saveDB(db: ServerDB) {
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+  } catch {
+    // ignore write error
+  }
+}
+
+function buildPlayerResponse(db: ServerDB, u: ServerUser) {
+  const userWithdrawals = db.withdrawals
+    .filter((w) => w.user_id === u.id || w.user_email.toLowerCase() === u.email.toLowerCase())
+    .map((w) => ({
+      id: w.id,
+      method: w.method as any,
+      methodLabel: w.tier_label,
+      destination: w.payout_details_json,
+      coins: w.coins_deducted,
+      amountInr: w.amount_inr,
+      status: w.status,
+      createdAt: w.created_at.slice(0, 10),
+    }));
+
+  const refCount = db.users.filter(
+    (other) => other.referredBy && other.referredBy.toUpperCase() === u.referralCode.toUpperCase()
+  ).length;
+
+  return {
+    ...u,
+    referralsCount: Math.max(u.referralsCount || 0, refCount),
+    withdrawals: userWithdrawals,
+  };
+}
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-id, x-admin-email, Authorization');
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+    next();
+  });
 
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', service: 'lootify' });
+    res.json({
+      ok: true,
+      status: 'ok',
+      service: 'Lootify Dynamic Offerwall & Postback Backend',
+      domain: 'lootify.eternant.c0m.to',
+    });
+  });
+
+  app.post(['/api/user/sync', '/api/auth/google', '/api/auth/register', '/api/auth/login'], (req, res) => {
+    const db = loadDB();
+    const body = req.body || {};
+    const email = String(body.email || '').trim().toLowerCase();
+    const name = String(body.name || email.split('@')[0] || 'Player').trim();
+    const preferredId = String(body.id || '').trim();
+    const referredBy = body.referredBy || body.referralCodeInput || null;
+
+    if (!email) {
+      res.status(400).json({ error: 'Email is required.' });
+      return;
+    }
+
+    let user = db.users.find(
+      (u) => u.email.toLowerCase() === email || (preferredId && u.id === preferredId)
+    );
+
+    if (!user) {
+      const cleanPrefix = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5) || 'LOOT';
+      user = {
+        id: preferredId || 'plr_' + Date.now().toString(36),
+        name,
+        email,
+        authProvider: body.authProvider === 'email' ? 'email' : 'google',
+        referralCode: body.referralCode || cleanPrefix + Math.floor(100 + Math.random() * 900),
+        referredBy: referredBy ? String(referredBy).toUpperCase() : null,
+        availableCoins: Number(body.availableCoins) || 0,
+        pendingCoins: Number(body.pendingCoins) || 0,
+        questsCompleted: Number(body.questsCompleted) || 0,
+        referralsCount: 0,
+        joinedAt: body.joinedAt || new Date().toISOString().slice(0, 10),
+      };
+      db.users.unshift(user);
+      saveDB(db);
+    }
+
+    res.json({ ok: true, user: buildPlayerResponse(db, user) });
+  });
+
+  app.get('/api/offerwalls', (_req, res) => {
+    const db = loadDB();
+    const publicWalls = db.offerwalls.map((w) => ({
+      provider_id: w.provider_id,
+      name: w.name,
+      badge: w.badge,
+      enabled: w.enabled,
+      app_id: w.app_id,
+      iframe_url_template: w.iframe_url_template,
+      hold_days: w.hold_days,
+      postback_macro_query: w.postback_macro_query,
+    }));
+    res.json({ ok: true, offerwalls: publicWalls });
+  });
+
+  app.post('/api/withdrawals', (req, res) => {
+    const db = loadDB();
+    const body = req.body || {};
+    const userId = String(body.userId || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const method = String(body.method || 'upi').trim();
+    const methodLabel = String(body.methodLabel || 'UPI Direct Transfer').trim();
+    const destination = String(body.destination || '').trim();
+    const coins = Math.floor(Number(body.coins) || 0);
+
+    if (coins < 1000 || !destination) {
+      res.status(400).json({ error: 'Minimum withdrawal is 1,000 Coins (₹10) and destination is required.' });
+      return;
+    }
+
+    const user = db.users.find(
+      (u) => (userId && u.id === userId) || (email && u.email.toLowerCase() === email)
+    );
+    if (!user) {
+      res.status(404).json({ error: 'Player account not found on server.' });
+      return;
+    }
+
+    if (user.availableCoins < coins) {
+      res.status(400).json({
+        error: `Insufficient balance. Server available balance is ${user.availableCoins} Coins.`,
+      });
+      return;
+    }
+
+    user.availableCoins -= coins;
+    const amountInr = Number((coins / 100).toFixed(2));
+    const wd: ServerWithdrawal = {
+      id: 'wd_' + Date.now().toString(36),
+      user_id: user.id,
+      user_name: user.name,
+      user_email: user.email,
+      method,
+      tier_label: methodLabel,
+      coins_deducted: coins,
+      amount_inr: amountInr,
+      payout_details_json: destination,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    };
+    db.withdrawals.unshift(wd);
+    saveDB(db);
+
+    res.json({ ok: true, user: buildPlayerResponse(db, user), withdrawalId: wd.id });
+  });
+
+  // SINGLE Universal S2S Offerwall Postback Webhook (GET & POST) — Works before & after approval for ALL networks
+  app.all(['/api/postback', '/api/postback/:provider'], (req, res) => {
+    const db = loadDB();
+
+    const merged: Record<string, string> = {};
+    Object.entries(req.query || {}).forEach(([k, v]) => {
+      if (v !== undefined) merged[k] = String(v);
+    });
+    Object.entries(req.body || {}).forEach(([k, v]) => {
+      if (v !== undefined) merged[k] = String(v);
+    });
+
+    const providerId = String(
+      req.params.provider || merged.network || merged.provider || merged.source || 'universal'
+    ).toLowerCase();
+    const providerLabel = providerId === 'universal' ? 'OFFERWALL' : providerId.toUpperCase();
+
+    const userId = (
+      merged.user_id ||
+      merged.uid ||
+      merged.subid ||
+      merged.subId ||
+      merged.user ||
+      merged.userid ||
+      merged.click_id ||
+      ''
+    ).trim();
+
+    // 35% User Share / 65% Admin Profit Economy:
+    // 1,000 Coins = ₹10 (100 Coins = ₹1) | $1.00 USD (₹84) = 3,000 Coins (₹30 to user, ₹54 profit to you)
+    const rawCoinsParam =
+      merged.amount || merged.coins || merged.reward || merged.points || merged.currency || '';
+    const rawUsdPayout = merged.payout || merged.usd || '';
+    const parsedAmount = parseFloat(rawCoinsParam || rawUsdPayout || '0');
+    let coins = 0;
+    if (!rawCoinsParam && rawUsdPayout) {
+      coins = Math.max(1, Math.round(Math.abs(parsedAmount) * 3000));
+    } else if (parsedAmount > 0 && parsedAmount < 1 && String(rawCoinsParam).includes('.')) {
+      coins = Math.max(1, Math.round(parsedAmount * 3000));
+    } else {
+      coins = Math.round(Math.abs(parsedAmount || 0));
+    }
+
+    const rawTxId = (
+      merged.txn_id ||
+      merged.tx_id ||
+      merged.transId ||
+      merged.transaction_id ||
+      merged.id ||
+      merged.offer_id ||
+      `${Date.now()}`
+    ).trim();
+    // Combine providerId + userId + rawTxId so two different networks sending e.g. txn_id=101 on the same /api/postback never collide
+    const txId = `${providerId}_${userId || 'anon'}_${rawTxId}`;
+
+    const rawStatus = String(merged.status || '1').toLowerCase();
+    const isChargeback =
+      rawStatus === '2' ||
+      rawStatus === 'chargeback' ||
+      rawStatus === 'reversed' ||
+      rawStatus === '0' ||
+      parsedAmount < 0;
+
+    const offerName = merged.offer_name || merged.offer || merged.task || `${providerLabel} Task`;
+
+    // Pre-approval Ad Network verification ping (empty params or raw macro like "{user_id}")
+    if (!userId || userId.includes('{') || coins <= 0) {
+      db.postbacks.unshift({
+        id: 'ldg_ping_' + Date.now(),
+        user_id: userId || 'NETWORK_VERIFIER',
+        user_name: `${providerLabel} Reviewer`,
+        source_type: 'offerwall',
+        title: `[PRE-APPROVAL VERIFY PING] ${providerLabel} Webhook Checked`,
+        amount_coins: coins || 0,
+        status: 'verified_ping',
+        external_tx_id: txId,
+        created_at: new Date().toISOString(),
+      });
+      saveDB(db);
+      res.status(200).send('OK');
+      return;
+    }
+
+    const wallCfg = db.offerwalls.find((w) => w.provider_id === providerId);
+    const providedSecret = merged.secret || merged.pwd || '';
+    if (wallCfg && wallCfg.secret_key && providedSecret && wallCfg.secret_key !== providedSecret) {
+      res.status(403).send('ERROR: INVALID_SECRET');
+      return;
+    }
+
+    const user = db.users.find(
+      (u) => u.id.toLowerCase() === userId.toLowerCase() || u.email.toLowerCase() === userId.toLowerCase()
+    );
+    // Pre-approval Ad Network Test Postback (dummy user_id like "test", "12345")
+    if (!user) {
+      db.postbacks.unshift({
+        id: 'ldg_test_' + Date.now(),
+        user_id: userId,
+        user_name: 'Network Test User',
+        source_type: 'offerwall',
+        title: `[NETWORK TEST POSTBACK] ${providerLabel}: ${offerName}`,
+        amount_coins: coins,
+        status: 'network_test_ok',
+        external_tx_id: txId,
+        created_at: new Date().toISOString(),
+      });
+      saveDB(db);
+      res.status(200).send('OK');
+      return;
+    }
+
+    if (isChargeback) {
+      if (user.pendingCoins >= coins) {
+        user.pendingCoins -= coins;
+      } else {
+        const rem = coins - user.pendingCoins;
+        user.pendingCoins = 0;
+        user.availableCoins = Math.max(0, user.availableCoins - rem);
+      }
+      db.postbacks.unshift({
+        id: 'ldg_cb_' + Date.now(),
+        user_id: user.id,
+        user_name: user.name,
+        source_type: 'chargeback_reversal',
+        title: `${providerLabel} Reversal (${offerName})`,
+        amount_coins: -coins,
+        status: 'reversed_chargeback',
+        external_tx_id: txId + '_cb',
+        created_at: new Date().toISOString(),
+      });
+      saveDB(db);
+      res.status(200).send('OK');
+      return;
+    }
+
+    if (db.postbacks.some((p) => p.external_tx_id === txId)) {
+      res.status(200).send('OK_DUPLICATE_IGNORED');
+      return;
+    }
+
+    const holdDays = wallCfg ? Number(wallCfg.hold_days) || 0 : 0;
+    if (holdDays > 0) {
+      user.pendingCoins += coins;
+    } else {
+      user.availableCoins += coins;
+    }
+    user.questsCompleted += 1;
+
+    db.postbacks.unshift({
+      id: 'ldg_' + Date.now(),
+      user_id: user.id,
+      user_name: user.name,
+      source_type: 'offerwall',
+      title: `${providerLabel}: ${offerName}`,
+      amount_coins: coins,
+      status: holdDays > 0 ? 'pending_hold' : 'credited',
+      external_tx_id: txId,
+      created_at: new Date().toISOString(),
+    });
+
+    if (user.referredBy) {
+      const referrer = db.users.find(
+        (r) => r.referralCode.toUpperCase() === user.referredBy?.toUpperCase()
+      );
+      if (referrer) {
+        referrer.availableCoins += Math.max(1, Math.floor(coins * 0.1));
+      }
+    }
+
+    saveDB(db);
+    res.status(200).send('OK');
+  });
+
+  app.use('/api/admin', (req, res, next) => {
+    const adminHeader = String(req.headers['x-admin-email'] || req.query.admin_email || '')
+      .trim()
+      .toLowerCase();
+    if (adminHeader !== ADMIN_EMAIL) {
+      res.status(403).json({ error: 'Unauthorized. Restricted to ' + ADMIN_EMAIL });
+      return;
+    }
+    next();
+  });
+
+  app.get('/api/admin/dashboard', (_req, res) => {
+    const db = loadDB();
+    res.json({
+      ok: true,
+      users: db.users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        available_coins: u.availableCoins,
+        pending_coins: u.pendingCoins,
+        lifetime_earned_coins: u.availableCoins + u.pendingCoins,
+        offerwalls_completed: u.questsCompleted,
+        created_at: u.joinedAt,
+      })),
+      withdrawals: db.withdrawals,
+      postbacks: db.postbacks,
+      offerwalls: db.offerwalls,
+    });
+  });
+
+  app.post('/api/admin/withdrawals/update', (req, res) => {
+    const db = loadDB();
+    const { withdrawalId, status } = req.body || {};
+    const wd = db.withdrawals.find((w) => w.id === withdrawalId);
+    if (!wd) {
+      res.status(404).json({ error: 'Withdrawal record not found.' });
+      return;
+    }
+    if (wd.status !== 'pending') {
+      res.status(400).json({ error: 'Withdrawal already processed.' });
+      return;
+    }
+    wd.status = status;
+    if (status === 'rejected') {
+      const u = db.users.find((usr) => usr.id === wd.user_id);
+      if (u) {
+        u.availableCoins += wd.coins_deducted;
+      }
+    }
+    saveDB(db);
+    res.json({ ok: true });
+  });
+
+  // Dynamic Offerwall Add / Update (UPSERT)
+  app.post(['/api/admin/offerwalls/update', '/api/admin/offerwalls/save'], (req, res) => {
+    const db = loadDB();
+    const body = req.body || {};
+    const providerId = String(body.provider_id || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '');
+
+    if (!providerId) {
+      res.status(400).json({ error: 'Provider ID / Slug is required.' });
+      return;
+    }
+
+    const updatedWall: ServerOfferwallConfig = {
+      provider_id: providerId,
+      name: String(body.name || providerId).trim(),
+      badge: String(body.badge || 'Offerwall & Tasks').trim(),
+      enabled: body.enabled !== undefined ? (body.enabled ? 1 : 0) : 1,
+      app_id: String(body.app_id || '').trim(),
+      iframe_url_template: String(body.iframe_url_template || '').trim(),
+      secret_key: String(body.secret_key || '').trim(),
+      hold_days: Math.max(0, parseInt(String(body.hold_days || '0'), 10)),
+      postback_macro_query: String(
+        body.postback_macro_query || '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status=1'
+      ).trim(),
+    };
+
+    const existingIdx = db.offerwalls.findIndex((w) => w.provider_id === providerId);
+    if (existingIdx >= 0) {
+      db.offerwalls[existingIdx] = updatedWall;
+    } else {
+      db.offerwalls.push(updatedWall);
+    }
+
+    saveDB(db);
+    res.json({ ok: true, offerwall: updatedWall, offerwalls: db.offerwalls });
+  });
+
+  // Dynamic Offerwall Delete
+  app.post('/api/admin/offerwalls/delete', (req, res) => {
+    const db = loadDB();
+    const providerId = String(req.body?.provider_id || '').trim().toLowerCase();
+    db.offerwalls = db.offerwalls.filter((w) => w.provider_id !== providerId);
+    saveDB(db);
+    res.json({ ok: true, offerwalls: db.offerwalls });
   });
 
   if (process.env.NODE_ENV !== 'production') {

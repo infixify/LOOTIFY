@@ -1204,7 +1204,7 @@ document.getElementById('btn-google-signin').addEventListener('click', function(
   if (emailInput) emailInput.focus();
 });
 
-// Calculator
+// Calculator (1,000 Coins = ₹10 / 100 Coins = ₹1)
 function calc() {
   var o = +document.getElementById('s1').value;
   var l = +document.getElementById('s2').value;
@@ -1212,8 +1212,8 @@ function calc() {
   document.getElementById('v1').textContent = o + ' offers';
   document.getElementById('v2').textContent = l + ' links';
   document.getElementById('v3').textContent = r + ' friends';
-  var coins = Math.round(o*4*1200 + l*20*30 + r*50 + r*500*0.1);
-  var inr = Math.round(coins/10);
+  var coins = Math.round(o*4*1200 + l*20*30 + r*500 + r*5000*0.1);
+  var inr = Math.round(coins/100);
   document.getElementById('rc').textContent = coins.toLocaleString('en-IN');
   document.getElementById('ri').textContent = '₹' + inr.toLocaleString('en-IN');
 }

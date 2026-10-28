@@ -1,8 +1,39 @@
-import React, { useEffect, useState } from 'react';
-import { DashboardTab, PayoutChannel, PlayerUser, ThemeMode, WithdrawalRecord } from './types.ts';
+import React, { useCallback, useEffect, useState } from 'react';
+import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ThemeMode, WithdrawalRecord } from './types.ts';
 
 const STORAGE_USER_KEY = 'lootify_player_user';
 const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
+const STORAGE_API_BASE_KEY = 'lootify_api_base_url';
+const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v2';
+
+function getApiBaseUrl(): string {
+  try {
+    const saved = localStorage.getItem(STORAGE_API_BASE_KEY);
+    if (saved && saved.trim()) {
+      return saved.trim().replace(/\/+$/, '');
+    }
+  } catch {}
+  return '';
+}
+
+function loadCachedOfferwalls(): OfferwallConfig[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_OFFERWALLS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return [];
+}
+
+function saveCachedOfferwalls(walls: OfferwallConfig[]) {
+  try {
+    localStorage.setItem(STORAGE_OFFERWALLS_CACHE_KEY, JSON.stringify(walls));
+  } catch {}
+}
 
 function loadCurrentUser(): PlayerUser | null {
   try {
@@ -39,7 +70,6 @@ function saveCurrentUser(user: PlayerUser | null) {
     localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(user));
     localStorage.setItem('lootify_user_id', user.id);
 
-    // Also update in registered accounts map so balances persist across logins
     const accountsRaw = localStorage.getItem(STORAGE_ACCOUNTS_KEY);
     const accounts: Record<string, any> = accountsRaw ? JSON.parse(accountsRaw) : {};
     const key = user.email.toLowerCase();
@@ -114,20 +144,133 @@ export default function App() {
   const [copiedRef, setCopiedRef] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  // Dynamic Offerwalls state (starts empty — zero pre-configured bloat)
+  const [offerwalls, setOfferwalls] = useState<OfferwallConfig[]>(() => loadCachedOfferwalls());
+  const [selectedWallId, setSelectedWallId] = useState<string>('');
+  const [syncingWallet, setSyncingWallet] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
+
+  // Admin state
+  const [apiBaseInput, setApiBaseInput] = useState<string>(() => getApiBaseUrl());
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [adminWithdrawals, setAdminWithdrawals] = useState<any[]>([]);
+  const [adminPostbacks, setAdminPostbacks] = useState<any[]>([]);
+  const [copiedPostbackId, setCopiedPostbackId] = useState<string | null>(null);
+  const [adminStatusBanner, setAdminStatusBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // New Offerwall Creator state (100% Dynamic)
+  const [newWallName, setNewWallName] = useState('');
+  const [newWallSlug, setNewWallSlug] = useState('');
+  const [newWallBadge, setNewWallBadge] = useState('Tasks & Surveys');
+  const [newWallAppId, setNewWallAppId] = useState('');
+  const [newWallIframe, setNewWallIframe] = useState('');
+  const [newWallSecret, setNewWallSecret] = useState('');
+  const [newWallHoldDays, setNewWallHoldDays] = useState('0');
+  const [newWallMacroQuery, setNewWallMacroQuery] = useState(
+    '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status={status}'
+  );
+
+  // Admin S2S Test Simulator state
+  const [testProvider, setTestProvider] = useState('custom');
+  const [testUserId, setTestUserId] = useState('');
+  const [testCoins, setTestCoins] = useState('500');
+
   // Cashout form state
   const [payoutChannel, setPayoutChannel] = useState<PayoutChannel>('upi');
   const [payoutDestination, setPayoutDestination] = useState('');
-  const [payoutCoins, setPayoutCoins] = useState('100');
+  const [payoutCoins, setPayoutCoins] = useState('1000');
   const [payoutMessage, setPayoutMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
+  const syncUserWithBackend = useCallback(async (currentUser: PlayerUser | null, showFeedback = false) => {
+    if (!currentUser) return;
+    if (showFeedback) setSyncingWallet(true);
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/user/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentUser),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.user) {
+          saveCurrentUser(data.user);
+          setUser(data.user);
+          if (showFeedback) {
+            setSyncStatusMsg(`✅ Synced! Balance: ${data.user.availableCoins} Available Coins`);
+            setTimeout(() => setSyncStatusMsg(null), 3500);
+          }
+        }
+      }
+    } catch {
+      if (showFeedback) {
+        setSyncStatusMsg('⚡ Using local wallet cache');
+        setTimeout(() => setSyncStatusMsg(null), 3500);
+      }
+    } finally {
+      if (showFeedback) setSyncingWallet(false);
+    }
+  }, []);
+
+  const fetchOfferwallsFromBackend = useCallback(async () => {
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/offerwalls`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.offerwalls)) {
+          setOfferwalls(data.offerwalls);
+          saveCachedOfferwalls(data.offerwalls);
+        }
+      }
+    } catch {
+      // Fallback to cached offerwalls
+    }
+  }, []);
+
+  const fetchAdminDashboard = useCallback(async () => {
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/dashboard`, {
+        headers: { 'x-admin-email': ADMIN_ALLOWED_EMAIL },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBackendOnline(true);
+        if (Array.isArray(data.users)) setAdminUsers(data.users);
+        if (Array.isArray(data.withdrawals)) setAdminWithdrawals(data.withdrawals);
+        if (Array.isArray(data.postbacks)) setAdminPostbacks(data.postbacks);
+        if (Array.isArray(data.offerwalls)) {
+          setOfferwalls(data.offerwalls);
+          saveCachedOfferwalls(data.offerwalls);
+        }
+      } else {
+        setBackendOnline(false);
+      }
+    } catch {
+      setBackendOnline(false);
+    }
+  }, []);
+
   useEffect(() => {
-    // Clear legacy fake keys from earlier versions
     try {
       localStorage.removeItem('lootify_client_db_v1');
+      localStorage.removeItem('lootify_offerwalls_cache_v1');
     } catch {}
 
+    fetchOfferwallsFromBackend();
+    const initialUser = loadCurrentUser();
+    if (initialUser) {
+      syncUserWithBackend(initialUser, false);
+    }
+
     const syncFromEvents = () => {
-      setUser(loadCurrentUser());
+      const loaded = loadCurrentUser();
+      setUser(loaded);
+      if (loaded) {
+        syncUserWithBackend(loaded, false);
+      }
       setIsAdminRoute(isHashAdmin());
       setAdminLoggedIn(loadAdminSession());
       setActiveTab(getTabFromHash());
@@ -143,7 +286,13 @@ export default function App() {
       window.removeEventListener('hashchange', syncFromEvents);
       window.removeEventListener('popstate', syncFromEvents);
     };
-  }, []);
+  }, [fetchOfferwallsFromBackend, syncUserWithBackend]);
+
+  useEffect(() => {
+    if (isAdminRoute && adminLoggedIn) {
+      fetchAdminDashboard();
+    }
+  }, [isAdminRoute, adminLoggedIn, fetchAdminDashboard]);
 
   const switchTab = (tab: DashboardTab) => {
     setActiveTab(tab);
@@ -227,6 +376,218 @@ export default function App() {
     saveAdminSession(false);
     setAdminLoggedIn(false);
     setAdminAuthError(null);
+  };
+
+  const handleSaveApiBaseUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = apiBaseInput.trim().replace(/\/+$/, '');
+    try {
+      if (cleaned) {
+        localStorage.setItem(STORAGE_API_BASE_KEY, cleaned);
+      } else {
+        localStorage.removeItem(STORAGE_API_BASE_KEY);
+      }
+    } catch {}
+    setAdminStatusBanner({
+      type: 'success',
+      text: cleaned
+        ? `Cloudflare Worker Backend URL saved: ${cleaned}`
+        : 'Using default same-origin /api backend.',
+    });
+    fetchAdminDashboard();
+  };
+
+  const handleAddOfferwall = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = newWallName.trim();
+    const cleanSlug = (newWallSlug.trim() || cleanName)
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '');
+
+    if (!cleanName || !cleanSlug) {
+      setAdminStatusBanner({
+        type: 'error',
+        text: 'Please enter a Network Name and Provider ID / Slug.',
+      });
+      return;
+    }
+
+    const newWall: OfferwallConfig = {
+      provider_id: cleanSlug,
+      name: cleanName,
+      badge: newWallBadge.trim() || 'Offerwall & Tasks',
+      enabled: 1,
+      app_id: newWallAppId.trim(),
+      iframe_url_template: newWallIframe.trim(),
+      secret_key: newWallSecret.trim(),
+      hold_days: Math.max(0, parseInt(newWallHoldDays || '0', 10)),
+      postback_macro_query:
+        newWallMacroQuery.trim() || '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status={status}',
+    };
+
+    const nextWalls = [...offerwalls.filter((w) => w.provider_id !== cleanSlug), newWall];
+    setOfferwalls(nextWalls);
+    saveCachedOfferwalls(nextWalls);
+    setTestProvider(cleanSlug);
+
+    setNewWallName('');
+    setNewWallSlug('');
+    setNewWallAppId('');
+    setNewWallIframe('');
+    setNewWallSecret('');
+    setNewWallHoldDays('0');
+
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/offerwalls/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify(newWall),
+      });
+      if (res.ok) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: `✅ Added "${cleanName}" (${cleanSlug}) to Database! S2S Postback URL is ready below.`,
+        });
+        fetchAdminDashboard();
+        return;
+      }
+    } catch {}
+
+    setAdminStatusBanner({
+      type: 'success',
+      text: `✅ Added "${cleanName}" (${cleanSlug})!`,
+    });
+  };
+
+  const handleUpdateOfferwallField = (
+    providerId: string,
+    field: keyof OfferwallConfig,
+    value: string | number
+  ) => {
+    setOfferwalls((prev) =>
+      prev.map((w) => (w.provider_id === providerId ? { ...w, [field]: value } : w))
+    );
+  };
+
+  const handleSaveOfferwallConfig = async (wall: OfferwallConfig) => {
+    saveCachedOfferwalls(offerwalls);
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/offerwalls/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify(wall),
+      });
+      if (res.ok) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: `✅ ${wall.name} configuration saved to database!`,
+        });
+        fetchAdminDashboard();
+        return;
+      }
+    } catch {}
+    setAdminStatusBanner({
+      type: 'success',
+      text: `✅ ${wall.name} saved!`,
+    });
+  };
+
+  const handleDeleteOfferwall = async (providerId: string, wallName: string) => {
+    const nextWalls = offerwalls.filter((w) => w.provider_id !== providerId);
+    setOfferwalls(nextWalls);
+    saveCachedOfferwalls(nextWalls);
+
+    const base = getApiBaseUrl();
+    try {
+      await fetch(`${base}/api/admin/offerwalls/delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify({ provider_id: providerId }),
+      });
+      fetchAdminDashboard();
+    } catch {}
+
+    setAdminStatusBanner({
+      type: 'success',
+      text: `🗑️ Removed "${wallName}" from Offerwalls.`,
+    });
+  };
+
+  const handleSimulatePostback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetUid = (testUserId || user?.id || '').trim();
+    const providerSlug = (testProvider || 'custom').trim().toLowerCase();
+    const amount = Math.max(1, parseInt(testCoins || '50', 10));
+    if (!targetUid) {
+      setAdminStatusBanner({
+        type: 'error',
+        text: 'Please enter a Player ID or Email to test the S2S Postback.',
+      });
+      return;
+    }
+
+    const base = getApiBaseUrl();
+    const txId = 'TEST_' + Date.now();
+    try {
+      const res = await fetch(
+        `${base}/api/postback/${encodeURIComponent(providerSlug)}?user_id=${encodeURIComponent(
+          targetUid
+        )}&amount=${amount}&txn_id=${txId}&status=1&offer_name=Admin_S2S_Test`
+      );
+      const text = await res.text();
+      if (res.ok && text.startsWith('OK')) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: `🚀 S2S Postback [${providerSlug.toUpperCase()}] returned "${text}"! +${amount} Coins credited to ${targetUid}.`,
+        });
+        fetchAdminDashboard();
+        if (user && (user.id === targetUid || user.email.toLowerCase() === targetUid.toLowerCase())) {
+          syncUserWithBackend(user, false);
+        }
+      } else {
+        setAdminStatusBanner({
+          type: 'error',
+          text: `Postback response (${res.status}): ${text}`,
+        });
+      }
+    } catch (err: any) {
+      setAdminStatusBanner({
+        type: 'error',
+        text: `Failed to reach postback endpoint: ${err?.message || 'Network error'}`,
+      });
+    }
+  };
+
+  const handleAdminWithdrawalDecision = async (withdrawalId: string, status: 'completed' | 'rejected') => {
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/withdrawals/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify({ withdrawalId, status }),
+      });
+      if (res.ok) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: `Withdrawal ${withdrawalId} marked as ${status.toUpperCase()}!`,
+        });
+        fetchAdminDashboard();
+      }
+    } catch {}
   };
 
   const handleToggleTheme = () => {
@@ -335,7 +696,6 @@ export default function App() {
               Manual login disabled. Only Google Sign-In with the authorized owner Gmail account is permitted.
             </p>
 
-            {/* Google Sign-In Button Only */}
             <button
               type="button"
               onClick={handleAdminGoogleSignIn}
@@ -408,6 +768,9 @@ export default function App() {
       );
     }
 
+    const effectiveOrigin = apiBaseInput.trim().replace(/\/+$/, '') || window.location.origin;
+    const universalPostbackPreview = `${effectiveOrigin}/api/postback${newWallMacroQuery}`;
+
     // ── SINGLE-PAGE ADMIN PANEL (Authenticated as sarthaksinghyadav1@gmail.com) ──
     return (
       <div
@@ -415,7 +778,6 @@ export default function App() {
         data-theme={theme}
         style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}
       >
-        {/* Top Admin Navbar */}
         <nav id="navbar">
           <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -506,14 +868,12 @@ export default function App() {
           </div>
         </nav>
 
-        {/* Single-Page Admin Workspace */}
-        <main className="wrap" style={{ flex: 1, width: '100%', padding: '40px 20px 64px' }}>
+        <main className="wrap" style={{ flex: 1, width: '100%', padding: '32px 20px 64px', display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* Admin Header Card */}
           <div
             className="card card-glow"
             style={{
-              padding: '28px',
-              marginBottom: 24,
+              padding: '24px 28px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -525,8 +885,8 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div
                 style={{
-                  width: 54,
-                  height: 54,
+                  width: 52,
+                  height: 52,
                   borderRadius: 14,
                   background: 'linear-gradient(135deg, var(--gold), #D97706)',
                   display: 'flex',
@@ -543,8 +903,8 @@ export default function App() {
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <h1 className="font-display" style={{ fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 700, color: 'var(--txt)' }}>
-                    Lootify Admin Control Page
+                  <h1 className="font-display" style={{ fontSize: 'clamp(19px, 3vw, 24px)', fontWeight: 700, color: 'var(--txt)' }}>
+                    Lootify Dynamic Backend &amp; Offerwall Manager
                   </h1>
                   <span
                     className="font-mono"
@@ -558,63 +918,959 @@ export default function App() {
                       fontWeight: 600,
                     }}
                   >
-                    VERIFIED OWNER
+                    AUTO-MIGRATED D1
                   </span>
                 </div>
-                <p className="font-mono" style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 4 }}>
-                  Logged in as: <strong style={{ color: 'var(--green)' }}>{ADMIN_ALLOWED_EMAIL}</strong>
+                <p className="font-mono" style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 4 }}>
+                  Admin: <strong style={{ color: 'var(--green)' }}>{ADMIN_ALLOWED_EMAIL}</strong> • Business Mail: <strong style={{ color: 'var(--gold)' }}>contact@lootify.eternant.c0m.to</strong>
                 </p>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div className="live-dot" style={{ width: 8, height: 8 }}></div>
-              <span className="font-mono" style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
-                SINGLE-GMAIL LOCK ACTIVE
+              <span className="font-mono" style={{ fontSize: 12, color: backendOnline ? 'var(--green)' : 'var(--gold)', fontWeight: 600 }}>
+                {backendOnline ? 'DATABASE CONNECTED' : 'READY FOR WORKER URL'}
               </span>
             </div>
           </div>
 
-          {/* Clean Single-Page Placeholder Card (No Bloat / No Fake Data) */}
-          <div
-            className="card"
-            style={{
-              padding: '48px 28px',
-              textAlign: 'center',
-              background: 'var(--bg2)',
-              border: '1px dashed var(--border2)',
-            }}
-          >
+          {adminStatusBanner && (
             <div
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: 16,
-                background: 'rgba(0,232,154,0.1)',
-                border: '1px solid rgba(0,232,154,0.25)',
+                padding: '14px 18px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
+                background: adminStatusBanner.type === 'success' ? 'rgba(0,232,154,0.1)' : 'rgba(255,85,102,0.1)',
+                border: adminStatusBanner.type === 'success' ? '1px solid rgba(0,232,154,0.35)' : '1px solid rgba(255,85,102,0.35)',
+                color: adminStatusBanner.type === 'success' ? 'var(--green)' : 'var(--red)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 26,
-                margin: '0 auto 16px',
+                justifyContent: 'space-between',
+                gap: 12,
               }}
             >
-              🛡️
+              <span>{adminStatusBanner.text}</span>
+              <button
+                type="button"
+                onClick={() => setAdminStatusBanner(null)}
+                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16 }}
+              >
+                ✕
+              </button>
             </div>
-            <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
-              Admin Workspace Ready
+          )}
+
+          {/* 1. Cloudflare Worker + D1 Backend URL */}
+          <div className="card" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+              <div>
+                <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                  1. Cloudflare Worker API Connection (`lootify-api`)
+                </h2>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 2 }}>
+                  Aapka `functions/worker.js` Git push par automatic D1 database tables (`users`, `withdrawals`, `ledger_entries`, `offerwall_configs`) create/migrate kar leta hai. Agar Worker alag `.workers.dev` URL par hai to yahan daal dein (same-domain hone par blank chhod dein).
+                </p>
+              </div>
+              <button type="button" onClick={fetchAdminDashboard} className="btn btn-ghost btn-sm">
+                🔄 Refresh Database
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveApiBaseUrl} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={apiBaseInput}
+                onChange={(e) => setApiBaseInput(e.target.value)}
+                placeholder="https://lootify-api.your-subdomain.workers.dev (leave blank for same-origin /api)"
+                className="font-mono"
+                style={{
+                  flex: 1,
+                  minWidth: 260,
+                  padding: '11px 14px',
+                  borderRadius: 8,
+                  background: 'var(--bg2)',
+                  border: '1px solid var(--border2)',
+                  color: 'var(--green)',
+                  fontSize: 13,
+                  outline: 'none',
+                }}
+              />
+              <button type="submit" className="btn btn-primary btn-sm">
+                💾 Save API URL
+              </button>
+            </form>
+          </div>
+
+          {/* 2A. SINGLE UNIVERSAL S2S POSTBACK URL & 35% USER SHARE ECONOMY */}
+          <div className="card card-glow" style={{ padding: 24 }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+                <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                  2. Single Universal S2S Postback URL (Works for ALL Ad Networks)
+                </h2>
+                <span
+                  className="font-mono"
+                  style={{
+                    fontSize: 10,
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    background: 'rgba(0,232,154,0.14)',
+                    border: '1px solid rgba(0,232,154,0.35)',
+                    color: 'var(--green)',
+                    fontWeight: 700,
+                  }}
+                >
+                  35% USER SHARE • 65% ADMIN PROFIT
+                </span>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.6 }}>
+                Aapko har network ke liye alag-alag postback banane ki zaroorat nahi hai! Niche diya gaya <strong>EK HI Universal S2S Postback URL (`/api/postback`)</strong> sabhi Ad Networks (Offerwall.me, OfferwallMedia, MoneyRain, Notik, BitcoTasks, ClixWall, etc.) ke parameter names (<code className="font-mono">user_id/subid/uid</code>, <code className="font-mono">amount/reward/coins/payout</code>, <code className="font-mono">txn_id/transId/tx_id</code>) ko automatically detect kar leta hai aur Approval se pehle ke Test Ping par <code className="font-mono" style={{ color: 'var(--green)' }}>200 OK</code> bhejta hai.
+              </p>
+            </div>
+
+            {/* 35% User Share / 65% Profit Standard App Details to Fill on Ad Networks */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))',
+                gap: 10,
+                marginBottom: 18,
+                padding: 14,
+                borderRadius: 10,
+                background: 'var(--bg2)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--txt2)', fontWeight: 600 }}>APP / WEBSITE NAME</div>
+                <div className="font-mono" style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 700, marginTop: 2 }}>
+                  Lootify
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--txt2)', fontWeight: 600 }}>WEBSITE URL</div>
+                <div className="font-mono" style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, marginTop: 2 }}>
+                  https://lootify.eternant.c0m.to
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--txt2)', fontWeight: 600 }}>IN-APP COIN VALUE</div>
+                <div className="font-mono" style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginTop: 2 }}>
+                  1,000 Coins = ₹10 <span style={{ fontSize: 10, color: 'var(--txt2)' }}>(100 = ₹1)</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--txt2)', fontWeight: 600 }}>AD NETWORK RATIO ($1 USD = ?)</div>
+                <div className="font-mono" style={{ fontSize: 13, color: 'var(--green)', fontWeight: 700, marginTop: 2 }}>
+                  3000 Coins <span style={{ fontSize: 10, color: 'var(--txt2)' }}>(User ₹30 • Profit ₹54)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ONE SINGLE MASTER POSTBACK URL BOX */}
+            {(() => {
+              const masterPostbackUrl = `${effectiveOrigin}/api/postback${newWallMacroQuery}`;
+              return (
+                <div
+                  style={{
+                    padding: 18,
+                    borderRadius: 12,
+                    background: 'linear-gradient(135deg, rgba(0,232,154,0.08), rgba(255,180,0,0.04))',
+                    border: '1.5px solid rgba(0,232,154,0.4)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                        🔗 Master Universal S2S Postback URL (Paste in Any Ad Network)
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
+                        Har Ad Network ke Postback / Webhook box me yahi <strong>Single URL</strong> paste karein:
+                      </div>
+                    </div>
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: 10,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        background: 'var(--bg3)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--gold)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      COLLISION-PROOF DEDUPLICATION
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <code
+                      className="font-mono"
+                      style={{
+                        fontSize: 12,
+                        color: 'var(--green)',
+                        wordBreak: 'break-all',
+                        flex: 1,
+                        minWidth: 220,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {masterPostbackUrl}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(masterPostbackUrl).catch(() => {});
+                        setCopiedPostbackId('master_single_postback');
+                        setTimeout(() => setCopiedPostbackId(null), 2000);
+                      }}
+                      className="btn btn-primary btn-sm"
+                      style={{ padding: '8px 16px', fontSize: 12, flexShrink: 0 }}
+                    >
+                      {copiedPostbackId === 'master_single_postback' ? '✅ Copied Master URL!' : '📋 Copy Single Postback URL'}
+                    </button>
+                  </div>
+
+                  {/* Quick Macro Switcher for the SAME /api/postback endpoint */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>
+                      Switch Macro Format (Same `/api/postback` Endpoint):
+                    </span>
+                    {[
+                      {
+                        label: 'Universal Default ({user_id} & {amount})',
+                        macro: '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status={status}',
+                      },
+                      {
+                        label: 'Offerwall.me / BitcoTasks ({subid} & {reward})',
+                        macro: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
+                      },
+                      {
+                        label: 'MoneyRain / AoyTasks ({user_id} & {reward})',
+                        macro: '?user_id={user_id}&amount={reward}&txn_id={tx_id}&status={status}',
+                      },
+                      {
+                        label: 'ClixWall ({user} & {amount})',
+                        macro: '?user_id={user}&amount={amount}&txn_id={id}&status={status}',
+                      },
+                    ].map((fmt) => (
+                      <button
+                        key={fmt.label}
+                        type="button"
+                        onClick={() => setNewWallMacroQuery(fmt.macro)}
+                        className="btn btn-ghost btn-sm"
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: 11,
+                          borderColor: newWallMacroQuery === fmt.macro ? 'var(--green)' : 'var(--border)',
+                          color: newWallMacroQuery === fmt.macro ? 'var(--green)' : 'var(--txt2)',
+                        }}
+                      >
+                        {fmt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* 2B. Dynamic Offerwall Creator (Activate After Approval) */}
+          <div className="card" style={{ padding: 24 }}>
+            <div style={{ marginBottom: 18 }}>
+              <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                3. Activate Approved Offerwall on Player Dashboard
+              </h2>
+              <p style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 4 }}>
+                Jab network approve ho jaye aur aapko <strong>App ID / API Key</strong> mil jaye, tab niche preset par click karke apna App ID daalein aur <strong>+ Add Offerwall Network</strong> dabayein — tabhi wo Players ko dikhega.
+              </p>
+
+              {/* Quick 1-click Iframe Preset buttons for after approval */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>
+                  Quick Fill Network Iframe:
+                </span>
+                {[
+                  {
+                    id: 'offerwallme',
+                    name: 'Offerwall.me',
+                    note: 'Instant Tasks & Surveys',
+                    macro: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
+                    iframe: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
+                  },
+                  {
+                    id: 'offerwallmedia',
+                    name: 'OfferwallMedia',
+                    note: 'Micro-Tasks & PTC',
+                    macro: '?user_id={user_id}&amount={amount}&txn_id={tx_id}&status={status}',
+                    iframe: 'https://offerwallmedia.com/offerwall/{app_id}/{user_id}',
+                  },
+                  {
+                    id: 'moneyrain',
+                    name: 'MoneyRain / AoyTasks',
+                    note: 'High Paying Tasks & Games',
+                    macro: '?user_id={user_id}&amount={reward}&txn_id={tx_id}&status={status}',
+                    iframe: 'https://offerwall.moneyrain.top/wall/{app_id}?uid={user_id}',
+                  },
+                  {
+                    id: 'notik',
+                    name: 'Notik.me',
+                    note: 'App Installs & Surveys',
+                    macro: '?user_id={user_id}&amount={amount}&txn_id={txn_id}&offer_name={offer_name}',
+                    iframe: 'https://notik.me/coins?api_key={app_id}&pub_id=lootify&user_id={user_id}',
+                  },
+                  {
+                    id: 'bitcotasks',
+                    name: 'BitcoTasks',
+                    note: 'PTC Ads & Shortlinks',
+                    macro: '?user_id={subId}&amount={reward}&txn_id={transId}&status={status}',
+                    iframe: 'https://bitcotasks.com/offerwall/{app_id}/{user_id}',
+                  },
+                  {
+                    id: 'clixwall',
+                    name: 'ClixWall',
+                    note: 'Quick Offers & PTC',
+                    macro: '?user_id={user}&amount={amount}&txn_id={id}&status={status}',
+                    iframe: 'https://www.clixwall.com/wall.php?p={app_id}&u={user_id}',
+                  },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setNewWallName(preset.name);
+                      setNewWallSlug(preset.id);
+                      setNewWallBadge(preset.note);
+                      setNewWallIframe(preset.iframe);
+                      setNewWallMacroQuery(preset.macro);
+                    }}
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '4px 10px', fontSize: 11 }}
+                  >
+                    + {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddOfferwall} style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 18, borderRadius: 12, background: 'var(--bg2)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    NETWORK NAME *
+                  </label>
+                  <input
+                    type="text"
+                    value={newWallName}
+                    onChange={(e) => {
+                      setNewWallName(e.target.value);
+                      if (!newWallSlug) {
+                        setNewWallSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                      }
+                    }}
+                    placeholder="e.g. Offerwall.me or Notik"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    PROVIDER ID / SLUG *
+                  </label>
+                  <input
+                    type="text"
+                    value={newWallSlug}
+                    onChange={(e) => setNewWallSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                    placeholder="e.g. offerwallme"
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--green)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    BADGE / SUBTITLE
+                  </label>
+                  <input
+                    type="text"
+                    value={newWallBadge}
+                    onChange={(e) => setNewWallBadge(e.target.value)}
+                    placeholder="e.g. PTC, Surveys & Tasks"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    APP ID / API KEY
+                  </label>
+                  <input
+                    type="text"
+                    value={newWallAppId}
+                    onChange={(e) => setNewWallAppId(e.target.value)}
+                    placeholder="Publisher App ID / Key"
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    IFRAME URL TEMPLATE (USE {'{app_id}'} &amp; {'{user_id}'})
+                  </label>
+                  <input
+                    type="text"
+                    value={newWallIframe}
+                    onChange={(e) => setNewWallIframe(e.target.value)}
+                    placeholder="https://example.com/wall/{app_id}/{user_id}"
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 12,
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    POSTBACK QUERY MACROS (OPTIONAL)
+                  </label>
+                  <input
+                    type="text"
+                    value={newWallMacroQuery}
+                    onChange={(e) => setNewWallMacroQuery(e.target.value)}
+                    placeholder="?user_id={user_id}&amount={amount}&txn_id={txn_id}&status={status}"
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt2)',
+                      fontSize: 12,
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                      SECRET KEY (OPTIONAL)
+                    </label>
+                    <input
+                      type="text"
+                      value={newWallSecret}
+                      onChange={(e) => setNewWallSecret(e.target.value)}
+                      placeholder="Optional postback secret"
+                      className="font-mono"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        background: 'var(--bg3)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--txt)',
+                        fontSize: 12,
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                      HOLD DAYS
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      value={newWallHoldDays}
+                      onChange={(e) => setNewWallHoldDays(e.target.value)}
+                      className="font-mono"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        background: 'var(--bg3)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--gold)',
+                        fontSize: 12,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  paddingTop: 6,
+                }}
+              >
+                <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', wordBreak: 'break-all' }}>
+                  Single Postback Endpoint: <span style={{ color: 'var(--green)' }}>{universalPostbackPreview}</span>
+                </div>
+                <button type="submit" className="btn btn-primary btn-sm">
+                  + Add Offerwall Network
+                </button>
+              </div>
+            </form>
+
+            {/* Added Offerwalls List */}
+            <div style={{ marginTop: 20 }}>
+              {offerwalls.length === 0 ? (
+                <div
+                  style={{
+                    padding: '28px 20px',
+                    textAlign: 'center',
+                    borderRadius: 12,
+                    background: 'var(--bg2)',
+                    border: '1px dashed var(--border2)',
+                    color: 'var(--txt2)',
+                    fontSize: 13,
+                  }}
+                >
+                  No offerwalls added yet. Use the form above to add any offerwall network whenever you get approved!
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 16 }}>
+                  {offerwalls.map((wall) => {
+                    const macroQuery =
+                      wall.postback_macro_query ||
+                      '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status={status}';
+                    const postbackUrl = `${effectiveOrigin}/api/postback${macroQuery}`;
+                    return (
+                      <div
+                        key={wall.provider_id}
+                        style={{
+                          padding: 18,
+                          borderRadius: 12,
+                          background: 'var(--bg2)',
+                          border: wall.app_id ? '1.5px solid rgba(0,232,154,0.4)' : '1px solid var(--border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 12,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <div>
+                            <div className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                              {wall.name}{' '}
+                              <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                                ({wall.provider_id})
+                              </span>
+                            </div>
+                            <div className="font-mono" style={{ fontSize: 11, color: 'var(--gold)' }}>
+                              {wall.badge}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--txt2)', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(wall.enabled)}
+                                onChange={(e) => handleUpdateOfferwallField(wall.provider_id, 'enabled', e.target.checked ? 1 : 0)}
+                              />
+                              Active
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOfferwall(wall.provider_id, wall.name)}
+                              style={{
+                                background: 'rgba(255,85,102,0.12)',
+                                border: '1px solid rgba(255,85,102,0.3)',
+                                color: 'var(--red)',
+                                borderRadius: 6,
+                                padding: '4px 8px',
+                                fontSize: 11,
+                                cursor: 'pointer',
+                              }}
+                              title="Delete Offerwall"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                            S2S POSTBACK URL (PASTE IN {wall.name.toUpperCase()} DASHBOARD)
+                          </div>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              background: 'var(--bg3)',
+                              border: '1px solid var(--border)',
+                            }}
+                          >
+                            <code
+                              className="font-mono"
+                              style={{
+                                fontSize: 11,
+                                color: 'var(--green)',
+                                wordBreak: 'break-all',
+                                flex: 1,
+                              }}
+                            >
+                              {postbackUrl}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(postbackUrl).catch(() => {});
+                                setCopiedPostbackId(wall.provider_id);
+                                setTimeout(() => setCopiedPostbackId(null), 2000);
+                              }}
+                              className="btn btn-ghost btn-sm"
+                              style={{ padding: '5px 10px', fontSize: 11, flexShrink: 0 }}
+                            >
+                              {copiedPostbackId === wall.provider_id ? '✅ Copied' : '📋 Copy'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
+                              APP ID / API KEY
+                            </label>
+                            <input
+                              type="text"
+                              value={wall.app_id}
+                              onChange={(e) => handleUpdateOfferwallField(wall.provider_id, 'app_id', e.target.value)}
+                              placeholder="Paste App ID or API Key"
+                              className="font-mono"
+                              style={{
+                                width: '100%',
+                                padding: '8px 10px',
+                                borderRadius: 8,
+                                background: 'var(--bg3)',
+                                border: '1px solid var(--border)',
+                                color: 'var(--txt)',
+                                fontSize: 12,
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
+                              HOLD DAYS
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={30}
+                              value={wall.hold_days}
+                              onChange={(e) => handleUpdateOfferwallField(wall.provider_id, 'hold_days', Number(e.target.value) || 0)}
+                              className="font-mono"
+                              style={{
+                                width: '100%',
+                                padding: '8px 10px',
+                                borderRadius: 8,
+                                background: 'var(--bg3)',
+                                border: '1px solid var(--border)',
+                                color: 'var(--gold)',
+                                fontSize: 12,
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
+                            IFRAME URL TEMPLATE ({'{app_id}'} &amp; {'{user_id}'})
+                          </label>
+                          <input
+                            type="text"
+                            value={wall.iframe_url_template}
+                            onChange={(e) => handleUpdateOfferwallField(wall.provider_id, 'iframe_url_template', e.target.value)}
+                            className="font-mono"
+                            style={{
+                              width: '100%',
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              background: 'var(--bg3)',
+                              border: '1px solid var(--border)',
+                              color: 'var(--txt2)',
+                              fontSize: 11,
+                            }}
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSaveOfferwallConfig(wall)}
+                          className="btn btn-primary btn-sm"
+                          style={{ marginTop: 4 }}
+                        >
+                          💾 Save {wall.name} Changes
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Live S2S Postback Webhook Simulator */}
+          <div className="card" style={{ padding: 24 }}>
+            <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
+              3. Universal S2S Postback Webhook Tester (`/api/postback/:provider`)
             </h2>
-            <p style={{ fontSize: 14, color: 'var(--txt2)', maxWidth: 520, margin: '0 auto', lineHeight: 1.7 }}>
-              Aapka Admin Panel successfully setup ho chuka hai aur sirf{' '}
-              <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 600 }}>
-                {ADMIN_ALLOWED_EMAIL}
-              </span>{' '}
-              ke liye locked hai. Abhi is page ko bilkul clean rakha gaya hai — aage jo bhi controls ya sections aap bologe wo yahi add kiye jayenge.
+            <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 16 }}>
+              Apne backend ka universal postback webhook kisi bhi provider slug aur Player ID par test karein.
             </p>
+
+            <form onSubmit={handleSimulatePostback} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, alignItems: 'end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                  PROVIDER SLUG
+                </label>
+                <input
+                  type="text"
+                  value={testProvider}
+                  onChange={(e) => setTestProvider(e.target.value)}
+                  placeholder="e.g. custom or offerwallme"
+                  className="font-mono"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border2)',
+                    color: 'var(--green)',
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                  PLAYER ID OR EMAIL
+                </label>
+                <input
+                  type="text"
+                  value={testUserId}
+                  onChange={(e) => setTestUserId(e.target.value)}
+                  placeholder={user ? `${user.id} or ${user.email}` : 'Player ID or Email'}
+                  className="font-mono"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border2)',
+                    color: 'var(--txt)',
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                  COINS TO CREDIT
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={testCoins}
+                  onChange={(e) => setTestCoins(e.target.value)}
+                  className="font-mono"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border2)',
+                    color: 'var(--gold)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                />
+              </div>
+
+              <button type="submit" className="btn btn-primary btn-sm" style={{ height: 40 }}>
+                ⚡ Fire Test Postback
+              </button>
+            </form>
+          </div>
+
+          {/* 4. Player Withdrawals Queue & Recent Postbacks */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+            <div className="card" style={{ padding: 24 }}>
+              <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
+                Player Withdrawal Requests ({adminWithdrawals.length})
+              </h3>
+              {adminWithdrawals.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--txt2)', fontSize: 13, background: 'var(--bg2)', borderRadius: 10 }}>
+                  No withdrawal requests in queue.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {adminWithdrawals.map((w) => (
+                    <div
+                      key={w.id}
+                      style={{
+                        padding: 14,
+                        borderRadius: 10,
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 10,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>
+                          ₹{w.amount_inr} ({w.coins_deducted} Coins) — {w.tier_label}
+                        </div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--green)', marginTop: 2 }}>
+                          To: {w.payout_details_json} • Player: {w.user_email}
+                        </div>
+                      </div>
+                      {w.status === 'pending' ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleAdminWithdrawalDecision(w.id, 'completed')}
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '6px 10px', fontSize: 11 }}
+                          >
+                            ✓ Mark Paid
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdminWithdrawalDecision(w.id, 'rejected')}
+                            className="btn btn-outline btn-sm"
+                            style={{ padding: '6px 10px', fontSize: 11, color: 'var(--red)', borderColor: 'var(--red)' }}
+                          >
+                            ✕ Reject &amp; Refund
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--gold)', textTransform: 'uppercase' }}>
+                          {w.status}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 24 }}>
+              <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
+                Recent S2S Postback Logs ({adminPostbacks.length}) &amp; Players ({adminUsers.length})
+              </h3>
+              {adminPostbacks.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--txt2)', fontSize: 13, background: 'var(--bg2)', borderRadius: 10 }}>
+                  No S2S postbacks received yet. Use the tester above to verify!
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {adminPostbacks.slice(0, 10).map((p) => (
+                    <div
+                      key={p.id}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{p.title}</div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                          User: {p.user_id} • TX: {p.external_tx_id}
+                        </div>
+                      </div>
+                      <span
+                        className="font-mono"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: Number(p.amount_coins) >= 0 ? 'var(--green)' : 'var(--red)',
+                        }}
+                      >
+                        {Number(p.amount_coins) >= 0 ? `+${p.amount_coins}` : p.amount_coins} Coins
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </main>
 
-        {/* Simple Admin Footer */}
         <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--bg2)', padding: '20px' }}>
           <div
             className="wrap"
@@ -645,8 +1901,8 @@ export default function App() {
     return null;
   }
 
-  const inrBalance = (user.availableCoins / 10).toFixed(2);
-  const pendingInr = (user.pendingCoins / 10).toFixed(2);
+  const inrBalance = (user.availableCoins / 100).toFixed(2);
+  const pendingInr = (user.pendingCoins / 100).toFixed(2);
   const referralLink = `${window.location.origin}${window.location.pathname}?ref=${user.referralCode}`;
 
   const copyReferral = () => {
@@ -655,13 +1911,13 @@ export default function App() {
     setTimeout(() => setCopiedRef(false), 2200);
   };
 
-  const handleWithdrawSubmit = (e: React.FormEvent) => {
+  const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPayoutMessage(null);
 
     const coinsNum = Math.floor(Number(payoutCoins) || 0);
-    if (coinsNum < 100) {
-      setPayoutMessage({ type: 'error', text: 'Minimum withdrawal is 100 Coins (₹10).' });
+    if (coinsNum < 1000) {
+      setPayoutMessage({ type: 'error', text: 'Minimum withdrawal is 1,000 Coins (₹10).' });
       return;
     }
     if (coinsNum > user.availableCoins) {
@@ -680,8 +1936,39 @@ export default function App() {
       upi: 'UPI Direct Transfer',
       bank: 'Bank Transfer (IMPS)',
       gift_card: 'Gift Card Voucher',
-      crypto: 'Crypto (USDT / BTC)',
+      crypto: 'Crypto / FaucetPay (USDT / BTC)',
     };
+
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/withdrawals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          email: user.email,
+          method: payoutChannel,
+          methodLabel: channelLabels[payoutChannel],
+          destination: payoutDestination.trim(),
+          coins: coinsNum,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.user) {
+          saveCurrentUser(data.user);
+          setUser(data.user);
+          setPayoutDestination('');
+          setPayoutMessage({
+            type: 'success',
+            text: `Withdrawal request for ₹${(coinsNum / 100).toFixed(2)} (${coinsNum} Coins) submitted to server!`,
+          });
+          return;
+        }
+      }
+    } catch {
+      // Fallback to local update if offline
+    }
 
     const newRecord: WithdrawalRecord = {
       id: 'wd_' + Date.now().toString(36),
@@ -689,7 +1976,7 @@ export default function App() {
       methodLabel: channelLabels[payoutChannel],
       destination: payoutDestination.trim(),
       coins: coinsNum,
-      amountInr: Number((coinsNum / 10).toFixed(2)),
+      amountInr: Number((coinsNum / 100).toFixed(2)),
       status: 'pending',
       createdAt: new Date().toISOString().slice(0, 10),
     };
@@ -709,12 +1996,22 @@ export default function App() {
     });
   };
 
+  const enabledOfferwalls = offerwalls.filter((w) => w.enabled);
+  const selectedWall =
+    enabledOfferwalls.find((w) => w.provider_id === selectedWallId) || enabledOfferwalls[0] || null;
+
+  const resolvedIframeUrl =
+    selectedWall && selectedWall.iframe_url_template
+      ? selectedWall.iframe_url_template
+          .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || '').trim()))
+          .replace(/\{user_id\}/g, encodeURIComponent(user.id))
+      : '';
+
   return (
     <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* ── TOP NAVBAR (Same theme as Landing Page) ── */}
+      {/* ── TOP NAVBAR ── */}
       <nav id="navbar">
         <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
-          {/* Brand */}
           <a
             href="#/dashboard"
             onClick={(e) => {
@@ -746,12 +2043,11 @@ export default function App() {
             </span>
           </a>
 
-          {/* Desktop Tabs */}
           <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {(
               [
                 { id: 'overview', label: 'Overview' },
-                { id: 'quests', label: 'Quest Modes' },
+                { id: 'quests', label: 'Offerwalls & Quests' },
                 { id: 'referrals', label: 'Refer & Earn' },
                 { id: 'wallet', label: 'Cashout' },
               ] as { id: DashboardTab; label: string }[]
@@ -781,7 +2077,6 @@ export default function App() {
             })}
           </div>
 
-          {/* Right Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <div
               onClick={() => switchTab('wallet')}
@@ -856,7 +2151,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Mobile Drawer */}
         {mobileNavOpen && (
           <div
             style={{
@@ -871,7 +2165,7 @@ export default function App() {
             {(
               [
                 { id: 'overview', label: '⚡ Overview' },
-                { id: 'quests', label: '🎮 Quest Modes' },
+                { id: 'quests', label: '🎮 Offerwalls & Quests' },
                 { id: 'referrals', label: '👥 Refer & Earn' },
                 { id: 'wallet', label: '🏦 Cashout Wallet' },
               ] as { id: DashboardTab; label: string }[]
@@ -965,7 +2259,7 @@ export default function App() {
                     fontWeight: 600,
                   }}
                 >
-                  PLAYER ID: {user.id.toUpperCase().slice(0, 10)}
+                  PLAYER ID: {user.id}
                 </span>
               </div>
               <p style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 4 }}>
@@ -975,8 +2269,13 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <button type="button" onClick={goBackToLanding} className="btn btn-ghost btn-sm">
-              ← Landing Page
+            <button
+              type="button"
+              onClick={() => syncUserWithBackend(user, true)}
+              disabled={syncingWallet}
+              className="btn btn-ghost btn-sm"
+            >
+              {syncingWallet ? '⏳ Syncing...' : '🔄 Sync S2S Coins'}
             </button>
             <button type="button" onClick={() => switchTab('wallet')} className="btn btn-primary btn-sm">
               🏦 Cashout ₹ INR
@@ -984,10 +2283,26 @@ export default function App() {
           </div>
         </div>
 
+        {syncStatusMsg && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: '12px 16px',
+              borderRadius: 10,
+              background: 'rgba(0,232,154,0.1)',
+              border: '1px solid rgba(0,232,154,0.3)',
+              color: 'var(--green)',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {syncStatusMsg}
+          </div>
+        )}
+
         {/* ── TAB 1: OVERVIEW ── */}
         {activeTab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* 4 Real Stat Cards */}
             <div
               style={{
                 display: 'grid',
@@ -1003,7 +2318,7 @@ export default function App() {
                   {user.availableCoins.toLocaleString('en-IN')}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Cash Value: <strong style={{ color: 'var(--txt)' }}>₹{inrBalance}</strong> (10 Coins = ₹1)
+                  Cash Value: <strong style={{ color: 'var(--txt)' }}>₹{inrBalance}</strong> (1,000 Coins = ₹10)
                 </div>
               </div>
 
@@ -1015,7 +2330,7 @@ export default function App() {
                   {user.pendingCoins.toLocaleString('en-IN')}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  ₹{pendingInr} in 3–5 day verification hold
+                  ₹{pendingInr} in verification hold
                 </div>
               </div>
 
@@ -1027,7 +2342,7 @@ export default function App() {
                   {user.questsCompleted}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Offerwalls, shortlinks &amp; micro-tasks
+                  Offerwalls, PTC &amp; shortlinks
                 </div>
               </div>
 
@@ -1039,12 +2354,11 @@ export default function App() {
                   {user.referralsCount}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 6 }}>
-                  Lifetime commission active
+                  10% lifetime commission active
                 </div>
               </div>
             </div>
 
-            {/* Quick Action Bento */}
             <div className="bento">
               <div className="card qcard span2" style={{ padding: 26 }} onClick={() => switchTab('quests')}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
@@ -1064,18 +2378,18 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      Explore Quest Modes
+                      Open Live Offerwalls &amp; Micro-Tasks
                     </h3>
                     <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                      Gaming Offerwalls, Paid Shortlinks &amp; Social Micro-Tasks
+                      Verified S2S Postback Offerwalls • Surveys • Shortlinks • Gaming Quests
                     </p>
                   </div>
                 </div>
                 <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.7, marginBottom: 18 }}>
-                  Complete game quests, surveys, shortlinks, and micro-tasks to earn Lootify Coins directly into your wallet.
+                  Complete PTC ads, paid shortlinks, surveys, and gaming quests with automatic S2S postback credit to your Player ID (<span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>).
                 </p>
                 <button type="button" className="btn btn-primary btn-sm">
-                  🚀 Open Quest Modes →
+                  🚀 Launch Offerwalls →
                 </button>
               </div>
 
@@ -1085,7 +2399,7 @@ export default function App() {
                   Refer &amp; Earn
                 </h3>
                 <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 16 }}>
-                  Share your code <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 600 }}>{user.referralCode}</span> with friends and earn lifetime commission.
+                  Share your code <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 600 }}>{user.referralCode}</span> with friends and earn 10% lifetime commission.
                 </p>
                 <button type="button" className="btn btn-outline btn-sm btn-full">
                   Get Referral Link
@@ -1093,11 +2407,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* Recent Activity / Withdrawals */}
             <div className="card" style={{ padding: 26 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                  Recent Account Activity
+                  Recent Cashout &amp; Account Activity
                 </h3>
                 <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
                   REAL-TIME LEDGER
@@ -1118,7 +2431,7 @@ export default function App() {
                     No transactions yet
                   </p>
                   <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                    Your completed quests, referral commissions, and cashout requests will appear here.
+                    Your completed offerwall tasks and cashout requests will appear here.
                   </p>
                 </div>
               ) : (
@@ -1173,127 +2486,172 @@ export default function App() {
           </div>
         )}
 
-        {/* ── TAB 2: QUEST MODES ── */}
+        {/* ── TAB 2: OFFERWALLS & QUEST MODES (100% Dynamic) ── */}
         {activeTab === 'quests' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div>
-              <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                Quest Modes
-              </h2>
-              <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
-                Select a quest category below. All earnings are verified via real S2S postbacks.
-              </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                  Partner Offerwalls &amp; Micro-Tasks
+                </h2>
+                <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
+                  All completions credit automatically via S2S Postback to Player ID{' '}
+                  <span className="font-mono" style={{ color: 'var(--green)' }}>
+                    {user.id}
+                  </span>
+                  .
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => syncUserWithBackend(user, true)}
+                className="btn btn-outline btn-sm"
+              >
+                🔄 Refresh Earned Coins
+              </button>
             </div>
 
-            <div className="bento">
-              {/* Offerwalls */}
-              <div className="card span2" style={{ padding: 28 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      background: 'linear-gradient(135deg,var(--green),#065F46)',
-                      borderRadius: 12,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 22,
+            {enabledOfferwalls.length === 0 ? (
+              <div
+                className="card card-glow"
+                style={{
+                  padding: '56px 24px',
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ fontSize: 38, marginBottom: 14 }}>🎮</div>
+                <h3 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
+                  Partner Offerwalls Integrating Soon
+                </h3>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', maxWidth: 500, margin: '0 auto 20px', lineHeight: 1.7 }}>
+                  Our S2S Postback Engine is live and ready. As soon as partner offerwalls are added in the Admin Panel, they will appear here automatically.
+                </p>
+                {user.email.toLowerCase() === ADMIN_ALLOWED_EMAIL && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.hash = '#/admin';
                     }}
+                    className="btn btn-primary btn-sm"
                   >
-                    🎮
+                    ⚙️ Open Admin Panel to Add Offerwall →
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  {enabledOfferwalls.map((wall) => {
+                    const isSelected = selectedWall?.provider_id === wall.provider_id;
+                    return (
+                      <button
+                        key={wall.provider_id}
+                        type="button"
+                        onClick={() => setSelectedWallId(wall.provider_id)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '16px',
+                          borderRadius: 12,
+                          cursor: 'pointer',
+                          background: isSelected ? 'rgba(0,232,154,0.1)' : 'var(--bg2)',
+                          border: isSelected ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                            {wall.name}
+                          </span>
+                          <span
+                            className="font-mono"
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 7px',
+                              borderRadius: 5,
+                              background: 'rgba(0,232,154,0.15)',
+                              color: 'var(--green)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            LIVE
+                          </span>
+                        </div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                          {wall.badge}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedWall && (
+                  <div className="card card-glow" style={{ padding: 24 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 12,
+                        marginBottom: 16,
+                        paddingBottom: 14,
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                    >
+                      <div>
+                        <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                          {selectedWall.name} Offerwall
+                        </h3>
+                        <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                          {selectedWall.hold_days > 0
+                            ? `Rewards go through a ${selectedWall.hold_days}-day anti-fraud hold`
+                            : 'Instant S2S Postback credit to Available Balance'}
+                        </p>
+                      </div>
+                      {resolvedIframeUrl && (
+                        <a
+                          href={resolvedIframeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-ghost btn-sm"
+                        >
+                          ↗ Open Fullscreen in New Tab
+                        </a>
+                      )}
+                    </div>
+
+                    {resolvedIframeUrl ? (
+                      <iframe
+                        src={resolvedIframeUrl}
+                        title={selectedWall.name}
+                        style={{
+                          width: '100%',
+                          height: 680,
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          background: '#0B121E',
+                        }}
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          padding: '48px 24px',
+                          textAlign: 'center',
+                          background: 'var(--bg2)',
+                          border: '1px dashed var(--border2)',
+                          borderRadius: 12,
+                        }}
+                      >
+                        <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
+                          Please set the Iframe URL Template for <strong>{selectedWall.name}</strong> in the Admin Panel.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      Gaming &amp; CPI Offerwalls
-                    </h3>
-                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                      S2S Postback Verified • 3–5 Day Anti-Fraud Escrow
-                    </p>
-                  </div>
-                </div>
-                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.7, marginBottom: 16 }}>
-                  Download mobile or PC games, complete in-game milestones, and finish surveys from verified offerwall partners.
-                </p>
-                <div
-                  style={{
-                    padding: '16px',
-                    borderRadius: 10,
-                    background: 'var(--bg2)',
-                    border: '1px solid var(--border)',
-                    fontSize: 13,
-                    color: 'var(--txt2)',
-                  }}
-                >
-                  ⚡ Partner offerwall SDKs are linked to your Player ID (<span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>). Live campaigns will appear here automatically once enabled for your region.
-                </div>
-              </div>
-
-              {/* Shortlinks */}
-              <div className="card" style={{ padding: 24 }}>
-                <div style={{ fontSize: 26, marginBottom: 10 }}>🔗</div>
-                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
-                  Paid Shortlinks Arena
-                </h3>
-                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 14 }}>
-                  Complete daily shortlinks with 24-hour auto-reset cooldowns and instant S2S credit.
-                </p>
-                <div
-                  className="font-mono"
-                  style={{
-                    padding: '12px',
-                    borderRadius: 8,
-                    background: 'rgba(255,180,0,0.06)',
-                    border: '1px solid rgba(255,180,0,0.2)',
-                    fontSize: 12,
-                    color: 'var(--gold)',
-                    textAlign: 'center',
-                  }}
-                >
-                  0 Active Links Available Right Now
-                </div>
-              </div>
-
-              {/* Micro-tasks */}
-              <div className="card" style={{ padding: 24 }}>
-                <div style={{ fontSize: 26, marginBottom: 10 }}>📋</div>
-                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
-                  Micro-Tasks &amp; Social
-                </h3>
-                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 14 }}>
-                  Social quests, app reviews, and community tasks with proof verification.
-                </p>
-                <div
-                  className="font-mono"
-                  style={{
-                    padding: '12px',
-                    borderRadius: 8,
-                    background: 'rgba(155,110,255,0.06)',
-                    border: '1px solid rgba(155,110,255,0.2)',
-                    fontSize: 12,
-                    color: 'var(--violet)',
-                    textAlign: 'center',
-                  }}
-                >
-                  No Active Micro-Tasks Queued
-                </div>
-              </div>
-
-              {/* Refer & Earn */}
-              <div className="card span2" style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-                <div>
-                  <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>
-                    👥 Want to earn passively?
-                  </h3>
-                  <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
-                    Invite your squad with your referral link and earn lifetime commission on every quest they complete.
-                  </p>
-                </div>
-                <button type="button" onClick={() => switchTab('referrals')} className="btn btn-primary btn-sm">
-                  Open Refer &amp; Earn →
-                </button>
-              </div>
-            </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -1304,10 +2662,11 @@ export default function App() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
                 <div
                   style={{
-                    width: 50,
-                    height: 50,
-                    background: 'linear-gradient(135deg,var(--violet),#6D28D9)',
+                    width: 48,
+                    height: 48,
                     borderRadius: 12,
+                    background: 'rgba(155,110,255,0.14)',
+                    border: '1px solid rgba(155,110,255,0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1318,10 +2677,10 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>
-                    Refer &amp; Earn Lifetime Commission
+                    Refer Friends &amp; Earn 10% Lifetime Commission
                   </h2>
                   <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
-                    Share your unique link. Earn 10% lifetime commission on your friends&apos; quest rewards.
+                    Share your unique referral link. Earn 10% of every offerwall task your friends complete — forever.
                   </p>
                 </div>
               </div>
@@ -1331,17 +2690,17 @@ export default function App() {
                   background: 'var(--bg2)',
                   border: '1px solid var(--border2)',
                   borderRadius: 12,
-                  padding: 16,
+                  padding: '16px 18px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   flexWrap: 'wrap',
                   gap: 12,
-                  marginTop: 20,
+                  marginBottom: 20,
                 }}
               >
                 <div style={{ overflow: 'hidden' }}>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600, marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
                     YOUR PERSONAL REFERRAL LINK
                   </div>
                   <div className="font-mono" style={{ fontSize: 13, color: 'var(--green)', wordBreak: 'break-all' }}>
@@ -1349,27 +2708,27 @@ export default function App() {
                   </div>
                 </div>
                 <button type="button" onClick={copyReferral} className="btn btn-primary btn-sm">
-                  {copiedRef ? '✅ Copied!' : '📋 Copy Link'}
+                  {copiedRef ? '✅ Link Copied!' : '📋 Copy Referral Link'}
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginTop: 20 }}>
-                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>YOUR REFERRAL CODE</div>
-                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginTop: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                <div style={{ padding: 18, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 6 }}>YOUR REFERRAL CODE</div>
+                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)' }}>
                     {user.referralCode}
                   </div>
                 </div>
-                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>TOTAL REFERRED FRIENDS</div>
-                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--green)', marginTop: 6 }}>
+                <div style={{ padding: 18, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 6 }}>TOTAL REFERRED FRIENDS</div>
+                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>
                     {user.referralsCount}
                   </div>
                 </div>
-                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 600 }}>COMMISSION RATE</div>
-                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--violet)', marginTop: 6 }}>
-                    10% Lifetime
+                <div style={{ padding: 18, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 6 }}>COMMISSION RATE</div>
+                  <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>
+                    10% Forever
                   </div>
                 </div>
               </div>
@@ -1379,31 +2738,27 @@ export default function App() {
 
         {/* ── TAB 4: CASHOUT WALLET ── */}
         {activeTab === 'wallet' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
-            {/* Left: Cashout Form */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
             <div className="card card-glow" style={{ padding: 28 }}>
               <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
-                Instant Cashout Request
+                Withdraw Earnings
               </h2>
               <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 20 }}>
-                Available Balance:{' '}
-                <strong className="font-mono" style={{ color: 'var(--green)' }}>
-                  {user.availableCoins} Coins (₹{inrBalance})
-                </strong>
+                Minimum withdrawal is <strong>1,000 Coins (₹10)</strong>. Conversion rate: 100 Coins = ₹1 INR (1,000 Coins = ₹10).
               </p>
 
               <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--txt2)', marginBottom: 8 }}>
-                    SELECT CASHOUT CHANNEL
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 8 }}>
+                    SELECT PAYOUT CHANNEL
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     {(
                       [
-                        { id: 'upi', label: '🏦 UPI Transfer' },
-                        { id: 'bank', label: '🏛️ Bank IMPS' },
-                        { id: 'gift_card', label: '🛒 Gift Cards' },
-                        { id: 'crypto', label: '💰 USDT / BTC' },
+                        { id: 'upi', label: '⚡ UPI Transfer' },
+                        { id: 'bank', label: '🏦 Bank IMPS' },
+                        { id: 'gift_card', label: '🎁 Gift Vouchers' },
+                        { id: 'crypto', label: '🪙 Crypto / FaucetPay' },
                       ] as { id: PayoutChannel; label: string }[]
                     ).map((ch) => (
                       <button
@@ -1411,15 +2766,15 @@ export default function App() {
                         type="button"
                         onClick={() => setPayoutChannel(ch.id)}
                         style={{
-                          padding: '10px 12px',
-                          borderRadius: 8,
+                          padding: '12px 10px',
+                          borderRadius: 10,
                           fontSize: 12,
                           fontWeight: 600,
                           cursor: 'pointer',
-                          textAlign: 'left',
                           background: payoutChannel === ch.id ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
                           border: payoutChannel === ch.id ? '1.5px solid var(--green)' : '1px solid var(--border)',
                           color: payoutChannel === ch.id ? 'var(--green)' : 'var(--txt)',
+                          transition: 'all 0.2s',
                         }}
                       >
                         {ch.label}
@@ -1429,11 +2784,14 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                    {payoutChannel === 'upi' && 'ENTER UPI ID (e.g. name@okaxis)'}
-                    {payoutChannel === 'bank' && 'ENTER ACCOUNT NO & IFSC CODE'}
-                    {payoutChannel === 'gift_card' && 'ENTER EMAIL FOR VOUCHER DELIVERY'}
-                    {payoutChannel === 'crypto' && 'ENTER USDT (TRC20/BEP20) OR BTC ADDRESS'}
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                    {payoutChannel === 'upi'
+                      ? 'UPI ID (e.g. name@okaxis)'
+                      : payoutChannel === 'bank'
+                      ? 'ACCOUNT NO & IFSC CODE'
+                      : payoutChannel === 'gift_card'
+                      ? 'DELIVERY EMAIL ADDRESS'
+                      : 'FAUCETPAY EMAIL OR USDT ADDRESS'}
                   </label>
                   <input
                     type="text"
@@ -1441,12 +2799,12 @@ export default function App() {
                     onChange={(e) => setPayoutDestination(e.target.value)}
                     placeholder={
                       payoutChannel === 'upi'
-                        ? 'player@upi'
+                        ? 'yourname@upi'
                         : payoutChannel === 'bank'
-                        ? 'A/C Number + IFSC'
+                        ? 'A/C Number & IFSC'
                         : payoutChannel === 'gift_card'
                         ? user.email
-                        : '0x... or T...'
+                        : 'FaucetPay Email or TRC20 / Polygon Address'
                     }
                     style={{
                       width: '100%',
@@ -1455,20 +2813,20 @@ export default function App() {
                       background: 'var(--bg2)',
                       border: '1px solid var(--border2)',
                       color: 'var(--txt)',
-                      fontSize: 14,
+                      fontSize: 13,
                       outline: 'none',
                     }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                    COINS TO WITHDRAW (MIN 100 COINS = ₹10)
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
+                    COINS TO WITHDRAW (AVAILABLE: {user.availableCoins} COINS)
                   </label>
                   <input
                     type="number"
-                    min={100}
-                    step={10}
+                    min={1000}
+                    step={100}
                     value={payoutCoins}
                     onChange={(e) => setPayoutCoins(e.target.value)}
                     className="font-mono"
@@ -1480,14 +2838,14 @@ export default function App() {
                       border: '1px solid var(--border2)',
                       color: 'var(--gold)',
                       fontSize: 15,
-                      fontWeight: 600,
+                      fontWeight: 700,
                       outline: 'none',
                     }}
                   />
                   <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                    You will receive:{' '}
+                    Payout Value:{' '}
                     <strong className="font-mono" style={{ color: 'var(--green)' }}>
-                      ₹{((Math.max(0, Number(payoutCoins) || 0)) / 10).toFixed(2)} INR
+                      ₹{((Math.max(0, Number(payoutCoins) || 0)) / 100).toFixed(2)} INR
                     </strong>
                   </div>
                 </div>
@@ -1497,47 +2855,44 @@ export default function App() {
                     style={{
                       padding: '12px 14px',
                       borderRadius: 8,
-                      fontSize: 13,
+                      fontSize: 12,
+                      lineHeight: 1.5,
                       background:
-                        payoutMessage.type === 'success' ? 'rgba(0,232,154,0.1)' : 'rgba(255,85,102,0.1)',
+                        payoutMessage.type === 'error' ? 'rgba(255,85,102,0.1)' : 'rgba(0,232,154,0.1)',
                       border:
-                        payoutMessage.type === 'success'
-                          ? '1px solid rgba(0,232,154,0.3)'
-                          : '1px solid rgba(255,85,102,0.3)',
-                      color: payoutMessage.type === 'success' ? 'var(--green)' : 'var(--red)',
+                        payoutMessage.type === 'error'
+                          ? '1px solid rgba(255,85,102,0.3)'
+                          : '1px solid rgba(0,232,154,0.3)',
+                      color: payoutMessage.type === 'error' ? 'var(--red)' : 'var(--green)',
                     }}
                   >
                     {payoutMessage.text}
                   </div>
                 )}
 
-                <button type="submit" className="btn btn-primary btn-full">
-                  🚀 Submit Cashout Request
+                <button type="submit" className="btn btn-primary btn-full" style={{ padding: '14px' }}>
+                  Request Instant Cashout →
                 </button>
               </form>
             </div>
 
-            {/* Right: Withdrawal History */}
             <div className="card" style={{ padding: 28 }}>
-              <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', marginBottom: 16 }}>
-                Your Cashout History
+              <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
+                Withdrawal History
               </h3>
 
               {user.withdrawals.length === 0 ? (
                 <div
                   style={{
-                    padding: '40px 20px',
+                    padding: '36px 20px',
                     textAlign: 'center',
                     background: 'var(--bg2)',
                     border: '1px dashed var(--border2)',
                     borderRadius: 12,
                   }}
                 >
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
-                    No cashouts yet
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                    Once you earn at least 100 Coins (₹10), you can request an instant payout here.
+                  <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
+                    You haven&apos;t made any withdrawal requests yet.
                   </p>
                 </div>
               ) : (
@@ -1558,7 +2913,7 @@ export default function App() {
                     >
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
-                          ₹{w.amountInr} via {w.methodLabel}
+                          ₹{w.amountInr} — {w.methodLabel}
                         </div>
                         <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
                           {w.destination} • {w.createdAt}
@@ -1567,7 +2922,7 @@ export default function App() {
                       <span
                         className="font-mono"
                         style={{
-                          fontSize: 11,
+                          fontSize: 10,
                           padding: '4px 8px',
                           borderRadius: 6,
                           background: 'rgba(255,180,0,0.1)',
@@ -1587,8 +2942,8 @@ export default function App() {
         )}
       </main>
 
-      {/* ── SIMPLE FOOTER ── */}
-      <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--bg2)', padding: '20px' }}>
+      {/* ── FOOTER ── */}
+      <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--bg2)', padding: '24px 20px' }}>
         <div
           className="wrap"
           style={{
@@ -1600,16 +2955,38 @@ export default function App() {
           }}
         >
           <span style={{ fontSize: 12, color: 'var(--txt2)' }}>
-            © 2026 Lootify — Player Dashboard • Support:{' '}
+            © 2026 Lootify — Player Dashboard • Official Contact:{' '}
             <a href="mailto:contact@lootify.eternant.c0m.to" className="font-mono" style={{ color: 'var(--green)', textDecoration: 'none' }}>
               contact@lootify.eternant.c0m.to
             </a>
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="live-dot" style={{ width: 6, height: 6 }}></div>
-            <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
-              Connected as {user.email}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <button
+              type="button"
+              onClick={goBackToLanding}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--txt2)',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              Landing Page
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--red)',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              Logout
+            </button>
           </div>
         </div>
       </footer>
