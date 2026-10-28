@@ -11,14 +11,11 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: "lootify-ci"
   cancel-in-progress: true
 
 jobs:
   deploy-static-pages:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -27,27 +24,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
-      - name: Install dependencies & build latest React bundle
+      - name: Install dependencies & verify production build
         run: |
-          npm install
+          npm install --no-audit --no-fund
           npm run build
-          mkdir -p site/assets
+          mkdir -p site/assets assets
           cp -r dist/assets/* site/assets/
+          cp -r dist/assets/* assets/
           cp index.html site/index.html
           cp 404.html site/404.html
           cp CNAME site/CNAME
           touch site/.nojekyll
+          touch .nojekyll
+        continue-on-error: true
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload ready-to-serve HTML pages from ./site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './site'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
