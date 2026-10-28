@@ -105,7 +105,6 @@ export default function App() {
   const [user, setUser] = useState<PlayerUser | null>(() => loadCurrentUser());
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => isHashAdmin());
   const [adminLoggedIn, setAdminLoggedIn] = useState<boolean>(() => loadAdminSession());
-  const [adminEmailInput, setAdminEmailInput] = useState('');
   const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => getTabFromHash());
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -158,28 +157,17 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const openAdminPanel = (e?: React.MouseEvent) => {
-    if (e) e.preventDefault();
-    setAdminAuthError(null);
-    setIsAdminRoute(true);
-    window.location.hash = '#/admin';
-    if (typeof (window as any).syncLandingAndAppVisibility === 'function') {
-      (window as any).syncLandingAndAppVisibility();
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const verifyAndLoginAdmin = (emailCandidate: string) => {
     const cleanEmail = (emailCandidate || '').trim().toLowerCase();
     if (!cleanEmail) {
-      setAdminAuthError('Please enter your Gmail address or sign in with Google.');
+      setAdminAuthError('Google account verification failed. Please sign in with your authorized Google account.');
       return;
     }
     if (cleanEmail !== ADMIN_ALLOWED_EMAIL) {
       saveAdminSession(false);
       setAdminLoggedIn(false);
       setAdminAuthError(
-        `Access Denied! "${cleanEmail}" is not authorized. Sirf ${ADMIN_ALLOWED_EMAIL} se hi Admin login ho sakta hai.`
+        `Access Denied! "${cleanEmail}" is not authorized. Sirf ${ADMIN_ALLOWED_EMAIL} ke Google login se hi Admin Panel khulega.`
       );
       return;
     }
@@ -188,18 +176,18 @@ export default function App() {
     setAdminLoggedIn(true);
   };
 
-  const handleAdminFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    verifyAndLoginAdmin(adminEmailInput);
-  };
-
   const handleAdminGoogleSignIn = () => {
     setAdminAuthError(null);
+    let clientId = GOOGLE_CLIENT_ID;
+    try {
+      clientId = localStorage.getItem('lootify_google_client_id') || GOOGLE_CLIENT_ID;
+    } catch {}
+
     const g = (window as any).google;
     if (g && g.accounts && g.accounts.oauth2) {
       try {
         const tokenClient = g.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: clientId.trim(),
           scope: 'openid email profile',
           callback: async (tokenResponse: any) => {
             if (tokenResponse && tokenResponse.access_token) {
@@ -214,35 +202,30 @@ export default function App() {
                   setAdminAuthError('Could not retrieve email from Google account.');
                 }
               } catch {
-                setAdminAuthError('Failed to verify Google account. Try entering your Gmail below.');
+                setAdminAuthError('Failed to verify Google account. Please try again.');
               }
+            } else if (tokenResponse && tokenResponse.error) {
+              setAdminAuthError('Google Sign-In was cancelled or failed.');
             }
+          },
+          error_callback: () => {
+            setAdminAuthError('Google Sign-In popup could not be completed. Please try again.');
           },
         });
         tokenClient.requestAccessToken({ prompt: 'select_account' });
         return;
       } catch {
-        // fallback to input below
+        setAdminAuthError('Google Sign-In initialization failed. Please refresh and try again.');
+        return;
       }
     }
 
-    if (adminEmailInput.trim()) {
-      verifyAndLoginAdmin(adminEmailInput);
-      return;
-    }
-
-    if (user && user.email) {
-      verifyAndLoginAdmin(user.email);
-      return;
-    }
-
-    setAdminAuthError(`Enter ${ADMIN_ALLOWED_EMAIL} below to sign in.`);
+    setAdminAuthError('Google Identity Services SDK is still loading. Please wait a moment and click Sign in with Google again.');
   };
 
   const handleAdminLogout = () => {
     saveAdminSession(false);
     setAdminLoggedIn(false);
-    setAdminEmailInput('');
     setAdminAuthError(null);
   };
 
@@ -346,13 +329,13 @@ export default function App() {
             </div>
 
             <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
-              Admin Login
+              Admin Google Login
             </h2>
-            <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.6, marginBottom: 20 }}>
-              Only the authorized owner Gmail account is allowed to sign in to the Lootify Admin Panel.
+            <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.6, marginBottom: 22 }}>
+              Manual login disabled. Only Google Sign-In with the authorized owner Gmail account is permitted.
             </p>
 
-            {/* Google Sign-In Button */}
+            {/* Google Sign-In Button Only */}
             <button
               type="button"
               onClick={handleAdminGoogleSignIn}
@@ -362,7 +345,7 @@ export default function App() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 10,
-                padding: '13px 16px',
+                padding: '14px 16px',
                 borderRadius: 10,
                 background: '#FFFFFF',
                 color: '#0F172A',
@@ -371,7 +354,7 @@ export default function App() {
                 fontWeight: 700,
                 fontSize: 14,
                 cursor: 'pointer',
-                marginBottom: 16,
+                boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
               }}
             >
               <svg width="18" height="18" viewBox="0 0 48 48">
@@ -380,61 +363,25 @@ export default function App() {
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
               </svg>
-              <span>Sign in with Google</span>
+              <span>Continue with Google</span>
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)' }}>
-                OR VERIFY ADMIN GMAIL
-              </span>
-              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-            </div>
-
-            <form onSubmit={handleAdminFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                  ADMIN GMAIL ADDRESS
-                </label>
-                <input
-                  type="email"
-                  value={adminEmailInput}
-                  onChange={(e) => setAdminEmailInput(e.target.value)}
-                  placeholder="Enter authorized admin Gmail..."
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    background: 'var(--bg2)',
-                    border: '1px solid var(--border2)',
-                    color: 'var(--txt)',
-                    fontSize: 14,
-                    outline: 'none',
-                  }}
-                />
+            {adminAuthError && (
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  background: 'rgba(255,85,102,0.1)',
+                  border: '1px solid rgba(255,85,102,0.35)',
+                  color: 'var(--red)',
+                }}
+              >
+                ⛔ {adminAuthError}
               </div>
-
-              {adminAuthError && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                    background: 'rgba(255,85,102,0.1)',
-                    border: '1px solid rgba(255,85,102,0.35)',
-                    color: 'var(--red)',
-                  }}
-                >
-                  ⛔ {adminAuthError}
-                </div>
-              )}
-
-              <button type="submit" className="btn btn-primary btn-full">
-                🔐 Login to Admin Panel →
-              </button>
-            </form>
+            )}
 
             <div
               style={{
