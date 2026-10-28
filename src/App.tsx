@@ -626,7 +626,12 @@ export default function App() {
               gap: 12,
             }}
           >
-            <span style={{ fontSize: 12, color: 'var(--txt2)' }}>© 2026 Lootify.in — Restricted Admin Panel</span>
+            <span style={{ fontSize: 12, color: 'var(--txt2)' }}>
+              © 2026 Lootify — Restricted Admin Panel • Business Mail:{' '}
+              <a href="mailto:contact@lootify.eternant.c0m.to" className="font-mono" style={{ color: 'var(--green)', textDecoration: 'none' }}>
+                contact@lootify.eternant.c0m.to
+              </a>
+            </span>
             <span className="font-mono" style={{ fontSize: 11, color: 'var(--gold)' }}>
               Authorized: {ADMIN_ALLOWED_EMAIL}
             </span>
@@ -1595,7 +1600,10 @@ export default function App() {
           }}
         >
           <span style={{ fontSize: 12, color: 'var(--txt2)' }}>
-            © 2026 Lootify.in — Player Dashboard
+            © 2026 Lootify — Player Dashboard • Support:{' '}
+            <a href="mailto:contact@lootify.eternant.c0m.to" className="font-mono" style={{ color: 'var(--green)', textDecoration: 'none' }}>
+              contact@lootify.eternant.c0m.to
+            </a>
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div className="live-dot" style={{ width: 6, height: 6 }}></div>
