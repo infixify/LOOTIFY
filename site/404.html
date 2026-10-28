@@ -843,7 +843,7 @@ var STORAGE_USER_KEY = 'lootify_player_user';
 var STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
 var currentAuthMode = 'signup';
 
-var APP_HASH_ROUTES = [
+var PLAYER_HASH_ROUTES = [
   'dashboard',
   'quests',
   'offerwalls',
@@ -853,9 +853,8 @@ var APP_HASH_ROUTES = [
   'wallet'
 ];
 
-function isAppRouteActive() {
-  var rawHash = (window.location.hash || '').replace(/^#\/?/, '').replace(/\.html$/, '').toLowerCase();
-  return APP_HASH_ROUTES.indexOf(rawHash) !== -1;
+function getCleanHash() {
+  return (window.location.hash || '').replace(/^#\/?/, '').replace(/\.html$/, '').toLowerCase();
 }
 
 function getSavedPlayerUser() {
@@ -875,7 +874,31 @@ function getSavedUserId() {
   return u ? u.id : '';
 }
 
+function isAppRouteActive() {
+  var rawHash = getCleanHash();
+  if (rawHash === 'admin') return true;
+  if (!getSavedUserId()) return false;
+  return PLAYER_HASH_ROUTES.indexOf(rawHash) !== -1;
+}
+
 function syncLandingAndAppVisibility() {
+  var rawHash = getCleanHash();
+  var uid = getSavedUserId();
+
+  // If user is NOT logged in and tries to open a player dashboard hash, keep them on the Landing Page
+  if (!uid && PLAYER_HASH_ROUTES.indexOf(rawHash) !== -1) {
+    try {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch (e) {}
+    rawHash = '';
+  }
+
+  // If user IS logged in and opens the root URL with no hash, open Dashboard by default
+  if (uid && !rawHash) {
+    window.location.hash = '#/dashboard';
+    rawHash = 'dashboard';
+  }
+
   if (isAppRouteActive()) {
     document.body.classList.remove('on-landing-home');
     document.body.classList.add('on-app-route');
@@ -1240,12 +1263,12 @@ function ensureStaticBundleLoaded() {
     window.__LOOTIFY_STATIC_LOADED__ = true;
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = './assets/lootify.css?v=20261027v6';
+    link.href = './assets/lootify.css?v=20261027v8';
     document.head.appendChild(link);
 
     var s = document.createElement('script');
     s.type = 'module';
-    s.src = './assets/lootify.js?v=20261027v6';
+    s.src = './assets/lootify.js?v=20261027v8';
     document.body.appendChild(s);
   }
 }
