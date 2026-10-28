@@ -227,6 +227,13 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
+    if (url.pathname === "/6ae24c701df775943c89d1b5.html") {
+      return new Response("6ae24c701df775943c89d1b5", {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders },
+      });
+    }
+
     try {
       await ensureSchema(env.DB);
 

@@ -35,6 +35,7 @@ jobs:
           cp -r dist/assets/* assets/
           cp index.html site/index.html
           cp 404.html site/404.html
+          cp 6ae24c701df775943c89d1b5.html site/6ae24c701df775943c89d1b5.html
           cp CNAME site/CNAME
           touch site/.nojekyll
           touch .nojekyll
