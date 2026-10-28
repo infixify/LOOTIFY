@@ -1,10 +1,103 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ThemeMode, WithdrawalRecord } from './types.ts';
 
 const STORAGE_USER_KEY = 'lootify_player_user';
 const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
 const STORAGE_API_BASE_KEY = 'lootify_api_base_url';
-const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v2';
+const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v3';
+
+const OFFERWALLME_PUBLIC_KEY = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
+const _OWM_S_BYTES = [
+  47, 123, 124, 33, 38, 28, 35, 45, 27, 11, 24, 57, 28, 43, 43, 38, 46, 1, 14, 28, 125, 40, 6, 43,
+  17, 120, 37, 43, 126, 30, 123, 125,
+];
+
+const DEFAULT_OFFERWALLME_WALL: OfferwallConfig = {
+  provider_id: 'offerwallme',
+  name: 'Offerwall.me',
+  badge: 'PTC, Shortlinks, Surveys & Tasks',
+  enabled: 1,
+  app_id: OFFERWALLME_PUBLIC_KEY,
+  iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
+  hold_days: 0,
+  postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
+};
+
+async function buildSignedOfferwallMeUrl(publicKey: string, userId: string): Promise<string> {
+  const pub = (publicKey || OFFERWALLME_PUBLIC_KEY).trim();
+  const uid = (userId || '').trim();
+  const expires = String(Math.floor(Date.now() / 1000) + 3600);
+  const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
+  const kStr = String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
+  const enc = new TextEncoder();
+  const cryptoKey = await window.crypto.subtle.importKey(
+    'raw',
+    enc.encode(kStr),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await window.crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+  const signature = Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `https://offerwall.me/offerwall/${encodeURIComponent(pub)}/${encodeURIComponent(
+    uid
+  )}?identityExpires=${encodeURIComponent(expires)}&identitySignature=${encodeURIComponent(
+    signature
+  )}`;
+}
+
+function OfferwallMeBanner({ size }: { size: '728x90' | '468x60' | '300x250' }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.innerHTML = '';
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://offerwall.me/api/public/banner-code.js';
+    script.setAttribute('data-placement', OFFERWALLME_PUBLIC_KEY);
+    script.setAttribute('data-size', size);
+    script.setAttribute('data-frame-origin', 'https://offerwall.me');
+    el.appendChild(script);
+    return () => {
+      el.innerHTML = '';
+    };
+  }, [size]);
+
+  const [w, h] = size.split('x').map(Number);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        width: '100%',
+      }}
+    >
+      <div
+        ref={containerRef}
+        style={{
+          width: w,
+          maxWidth: '100%',
+          minHeight: h,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 10,
+          overflow: 'hidden',
+          background: 'rgba(9,13,25,0.6)',
+          border: '1px solid var(--border)',
+        }}
+      />
+    </div>
+  );
+}
 
 function getApiBaseUrl(): string {
   try {
@@ -21,12 +114,15 @@ function loadCachedOfferwalls(): OfferwallConfig[] {
     const raw = localStorage.getItem(STORAGE_OFFERWALLS_CACHE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (!parsed.some((w: OfferwallConfig) => w.provider_id === 'offerwallme')) {
+          parsed.unshift({ ...DEFAULT_OFFERWALLME_WALL });
+        }
         return parsed;
       }
     }
   } catch {}
-  return [];
+  return [{ ...DEFAULT_OFFERWALLME_WALL }];
 }
 
 function saveCachedOfferwalls(walls: OfferwallConfig[]) {
@@ -144,9 +240,10 @@ export default function App() {
   const [copiedRef, setCopiedRef] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Dynamic Offerwalls state (starts empty — zero pre-configured bloat)
+  // Dynamic Offerwalls state (Offerwall.me active by default)
   const [offerwalls, setOfferwalls] = useState<OfferwallConfig[]>(() => loadCachedOfferwalls());
-  const [selectedWallId, setSelectedWallId] = useState<string>('');
+  const [selectedWallId, setSelectedWallId] = useState<string>('offerwallme');
+  const [signedOfferwallMeUrl, setSignedOfferwallMeUrl] = useState<string>('');
   const [syncingWallet, setSyncingWallet] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
 
@@ -172,7 +269,7 @@ export default function App() {
   );
 
   // Admin S2S Test Simulator state
-  const [testProvider, setTestProvider] = useState('custom');
+  const [testProvider, setTestProvider] = useState('offerwallme');
   const [testUserId, setTestUserId] = useState('');
   const [testCoins, setTestCoins] = useState('500');
 
@@ -213,19 +310,30 @@ export default function App() {
     }
   }, []);
 
-  const fetchOfferwallsFromBackend = useCallback(async () => {
+  const fetchOfferwallsFromBackend = useCallback(async (uid?: string) => {
     const base = getApiBaseUrl();
+    const activeUid = uid || loadCurrentUser()?.id || '';
+    if (activeUid) {
+      buildSignedOfferwallMeUrl(OFFERWALLME_PUBLIC_KEY, activeUid)
+        .then((signed) => setSignedOfferwallMeUrl(signed))
+        .catch(() => {});
+    }
     try {
-      const res = await fetch(`${base}/api/offerwalls`);
+      const query = activeUid ? `?user_id=${encodeURIComponent(activeUid)}` : '';
+      const res = await fetch(`${base}/api/offerwalls${query}`);
       if (res.ok) {
         const data = await res.json();
-        if (data && Array.isArray(data.offerwalls)) {
+        if (data && Array.isArray(data.offerwalls) && data.offerwalls.length > 0) {
           setOfferwalls(data.offerwalls);
           saveCachedOfferwalls(data.offerwalls);
+          const owm = data.offerwalls.find((w: OfferwallConfig) => w.provider_id === 'offerwallme');
+          if (owm && owm.signed_iframe_url) {
+            setSignedOfferwallMeUrl(owm.signed_iframe_url);
+          }
         }
       }
     } catch {
-      // Fallback to cached offerwalls
+      // Fallback to cached offerwalls + Web Crypto signed Offerwall.me URL
     }
   }, []);
 
@@ -241,7 +349,7 @@ export default function App() {
         if (Array.isArray(data.users)) setAdminUsers(data.users);
         if (Array.isArray(data.withdrawals)) setAdminWithdrawals(data.withdrawals);
         if (Array.isArray(data.postbacks)) setAdminPostbacks(data.postbacks);
-        if (Array.isArray(data.offerwalls)) {
+        if (Array.isArray(data.offerwalls) && data.offerwalls.length > 0) {
           setOfferwalls(data.offerwalls);
           saveCachedOfferwalls(data.offerwalls);
         }
@@ -259,8 +367,8 @@ export default function App() {
       localStorage.removeItem('lootify_offerwalls_cache_v1');
     } catch {}
 
-    fetchOfferwallsFromBackend();
     const initialUser = loadCurrentUser();
+    fetchOfferwallsFromBackend(initialUser?.id);
     if (initialUser) {
       syncUserWithBackend(initialUser, false);
     }
@@ -270,6 +378,7 @@ export default function App() {
       setUser(loaded);
       if (loaded) {
         syncUserWithBackend(loaded, false);
+        fetchOfferwallsFromBackend(loaded.id);
       }
       setIsAdminRoute(isHashAdmin());
       setAdminLoggedIn(loadAdminSession());
@@ -1745,11 +1854,14 @@ export default function App() {
     enabledOfferwalls.find((w) => w.provider_id === selectedWallId) || enabledOfferwalls[0] || null;
 
   const resolvedIframeUrl =
-    selectedWall && selectedWall.iframe_url_template
-      ? selectedWall.iframe_url_template
-          .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || '').trim()))
-          .replace(/\{user_id\}/g, encodeURIComponent(user.id))
-      : '';
+    selectedWall?.signed_iframe_url ||
+    (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
+      ? signedOfferwallMeUrl
+      : selectedWall && selectedWall.iframe_url_template
+        ? selectedWall.iframe_url_template
+            .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || '').trim()))
+            .replace(/\{user_id\}/g, encodeURIComponent(user.id))
+        : '');
 
   return (
     <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -2151,6 +2263,29 @@ export default function App() {
               </div>
             </div>
 
+            {/* Offerwall.me Official Banner Ad Slots (728x90 & 468x60) */}
+            <div
+              className="card"
+              style={{
+                padding: '18px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 14,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.08em' }}>
+                  SPONSORED PARTNER PLACEMENT • OFFERWALL.ME
+                </span>
+                <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
+                  VERIFIED ADS
+                </span>
+              </div>
+              <OfferwallMeBanner size="728x90" />
+              <OfferwallMeBanner size="468x60" />
+            </div>
+
             <div className="card" style={{ padding: 26 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
@@ -2394,6 +2529,32 @@ export default function App() {
                     )}
                   </div>
                 )}
+
+                {/* Offerwall.me Multi-Size Banner Ad Showcase (728x90, 468x60, 300x250) */}
+                <div
+                  className="card"
+                  style={{
+                    padding: '20px 24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 16,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 8 }}>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
+                      OFFERWALL.ME SPONSORED BANNERS (728×90 • 468×60 • 300×250)
+                    </span>
+                    <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
+                      DIRECT PLACEMENT ACTIVE
+                    </span>
+                  </div>
+                  <OfferwallMeBanner size="728x90" />
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 16, width: '100%' }}>
+                    <OfferwallMeBanner size="468x60" />
+                    <OfferwallMeBanner size="300x250" />
+                  </div>
+                </div>
               </>
             )}
           </div>

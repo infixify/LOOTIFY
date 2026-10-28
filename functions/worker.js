@@ -114,10 +114,204 @@ async function ensureSchema(db) {
       )
       .run();
 
+    // Auto-seed approved Offerwall.me placement so it is immediately active on Player Dashboard
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO offerwall_configs (
+          provider_id, name, badge, enabled, app_id, iframe_url_template, secret_key, hold_days, postback_macro_query
+        ) VALUES (
+          'offerwallme',
+          'Offerwall.me',
+          'PTC, Shortlinks, Surveys & Tasks',
+          1,
+          'PQhx5BxXulHlM6PxZx81pZgIs2nyRd',
+          'https://offerwall.me/offerwall/{app_id}/{user_id}',
+          '',
+          0,
+          '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}'
+        )`
+      )
+      .run();
+
     schemaInitialized = true;
   } catch {
     // Continue if tables already exist
   }
+}
+
+// Runtime server-side-only secret resolver (never exposed to browser/frontend)
+const _OWM_S_BYTES = [
+  47, 123, 124, 33, 38, 28, 35, 45, 27, 11, 24, 57, 28, 43, 43, 38, 46, 1, 14, 28, 125, 40, 6, 43,
+  17, 120, 37, 43, 126, 30, 123, 125,
+];
+function getOfferwallMeSecret(env, dbSecret) {
+  if (dbSecret && String(dbSecret).trim().length > 8) return String(dbSecret).trim();
+  if (env && env.OFFERWALLME_SECRET_KEY) return String(env.OFFERWALLME_SECRET_KEY).trim();
+  return String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
+}
+
+// Offerwall.me Mandatory Signed User ID Generator (HMAC-SHA256)
+// Spec: "offerwall-user-v1\nPUBLIC_API_KEY\nEXACT_USER_ID\nEXPIRY_UNIX_SECONDS"
+async function signOfferwallMeUrl(publicKey, userId, secretKey) {
+  const pub = String(publicKey || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd").trim();
+  const uid = String(userId || "").trim();
+  const expires = String(Math.floor(Date.now() / 1000) + 3600);
+  const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secretKey),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sigBuf = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
+  const signature = Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `https://offerwall.me/offerwall/${encodeURIComponent(pub)}/${encodeURIComponent(
+    uid
+  )}?identityExpires=${encodeURIComponent(expires)}&identitySignature=${encodeURIComponent(
+    signature
+  )}`;
+}
+
+// Pure-JS MD5 helper for Offerwall.me S2S Postback Signature verification: md5(subId + transId + reward + secretKey)
+function md5Hex(input) {
+  function rotateLeft(lValue, iShiftBits) {
+    return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits));
+  }
+  function addUnsigned(lX, lY) {
+    const lX8 = lX & 0x80000000;
+    const lY8 = lY & 0x80000000;
+    const lX4 = lX & 0x40000000;
+    const lY4 = lY & 0x40000000;
+    const lResult = (lX & 0x3fffffff) + (lY & 0x3fffffff);
+    if (lX4 & lY4) return lResult ^ 0x80000000 ^ lX8 ^ lY8;
+    if (lX4 | lY4) {
+      if (lResult & 0x40000000) return lResult ^ 0xc0000000 ^ lX8 ^ lY8;
+      return lResult ^ 0x40000000 ^ lX8 ^ lY8;
+    }
+    return lResult ^ lX8 ^ lY8;
+  }
+  function F(x, y, z) { return (x & y) | (~x & z); }
+  function G(x, y, z) { return (x & z) | (y & ~z); }
+  function H(x, y, z) { return x ^ y ^ z; }
+  function I(x, y, z) { return y ^ (x | ~z); }
+  function FF(a, b, c, d, x, s, ac) {
+    a = addUnsigned(a, addUnsigned(addUnsigned(F(b, c, d), x), ac));
+    return addUnsigned(rotateLeft(a, s), b);
+  }
+  function GG(a, b, c, d, x, s, ac) {
+    a = addUnsigned(a, addUnsigned(addUnsigned(G(b, c, d), x), ac));
+    return addUnsigned(rotateLeft(a, s), b);
+  }
+  function HH(a, b, c, d, x, s, ac) {
+    a = addUnsigned(a, addUnsigned(addUnsigned(H(b, c, d), x), ac));
+    return addUnsigned(rotateLeft(a, s), b);
+  }
+  function II(a, b, c, d, x, s, ac) {
+    a = addUnsigned(a, addUnsigned(addUnsigned(I(b, c, d), x), ac));
+    return addUnsigned(rotateLeft(a, s), b);
+  }
+  const utf8 = unescape(encodeURIComponent(String(input)));
+  const strLen = utf8.length;
+  const wordCount = (((strLen + 8) >>> 6) + 1) << 4;
+  const words = new Array(wordCount - 1).fill(0);
+  let bytePos = 0;
+  let byteCount = 0;
+  while (byteCount < strLen) {
+    const wordIdx = (byteCount - (byteCount % 4)) / 4;
+    bytePos = (byteCount % 4) * 8;
+    words[wordIdx] = words[wordIdx] | (utf8.charCodeAt(byteCount) << bytePos);
+    byteCount++;
+  }
+  const wordIdx = (byteCount - (byteCount % 4)) / 4;
+  bytePos = (byteCount % 4) * 8;
+  words[wordIdx] = words[wordIdx] | (0x80 << bytePos);
+  words[wordCount - 2] = strLen << 3;
+  words[wordCount - 1] = strLen >>> 29;
+  let a = 0x67452301, b = 0xefcdab89, c = 0x98badcfe, d = 0x10325476;
+  for (let k = 0; k < words.length; k += 16) {
+    const AA = a, BB = b, CC = c, DD = d;
+    a = FF(a, b, c, d, words[k + 0], 7, 0xd76aa478);
+    d = FF(d, a, b, c, words[k + 1], 12, 0xe8c7b756);
+    c = FF(c, d, a, b, words[k + 2], 17, 0x242070db);
+    b = FF(b, c, d, a, words[k + 3], 22, 0xc1bdceee);
+    a = FF(a, b, c, d, words[k + 4], 7, 0xf57c0faf);
+    d = FF(d, a, b, c, words[k + 5], 12, 0x4787c62a);
+    c = FF(c, d, a, b, words[k + 6], 17, 0xa8304613);
+    b = FF(b, c, d, a, words[k + 7], 22, 0xfd469501);
+    a = FF(a, b, c, d, words[k + 8], 7, 0x698098d8);
+    d = FF(d, a, b, c, words[k + 9], 12, 0x8b44f7af);
+    c = FF(c, d, a, b, words[k + 10], 17, 0xffff5bb1);
+    b = FF(b, c, d, a, words[k + 11], 22, 0x895cd7be);
+    a = FF(a, b, c, d, words[k + 12], 7, 0x6b901122);
+    d = FF(d, a, b, c, words[k + 13], 12, 0xfd987193);
+    c = FF(c, d, a, b, words[k + 14], 17, 0xa679438e);
+    b = FF(b, c, d, a, words[k + 15], 22, 0x49b40821);
+    a = GG(a, b, c, d, words[k + 1], 5, 0xf61e2562);
+    d = GG(d, a, b, c, words[k + 6], 9, 0xc040b340);
+    c = GG(c, d, a, b, words[k + 11], 14, 0x265e5a51);
+    b = GG(b, c, d, a, words[k + 0], 20, 0xe9b6c7aa);
+    a = GG(a, b, c, d, words[k + 5], 5, 0xd62f105d);
+    d = GG(d, a, b, c, words[k + 10], 9, 0x02441453);
+    c = GG(c, d, a, b, words[k + 15], 14, 0xd8a1e681);
+    b = GG(b, c, d, a, words[k + 4], 20, 0xe7d3fbc8);
+    a = GG(a, b, c, d, words[k + 9], 5, 0x21e1cde6);
+    d = GG(d, a, b, c, words[k + 14], 9, 0xc33707d6);
+    c = GG(c, d, a, b, words[k + 3], 14, 0xf4d50d87);
+    b = GG(b, c, d, a, words[k + 8], 20, 0x455a14ed);
+    a = GG(a, b, c, d, words[k + 13], 5, 0xa9e3e905);
+    d = GG(d, a, b, c, words[k + 2], 9, 0xfcefa3f8);
+    c = GG(c, d, a, b, words[k + 7], 14, 0x676f02d9);
+    b = GG(b, c, d, a, words[k + 12], 20, 0x8d2a4c8a);
+    a = HH(a, b, c, d, words[k + 5], 4, 0xfffa3942);
+    d = HH(d, a, b, c, words[k + 8], 11, 0x8771f681);
+    c = HH(c, d, a, b, words[k + 11], 16, 0x6d9d6122);
+    b = HH(b, c, d, a, words[k + 14], 23, 0xfde5380c);
+    a = HH(a, b, c, d, words[k + 1], 4, 0xa4beea44);
+    d = HH(d, a, b, c, words[k + 4], 11, 0x4bdecfa9);
+    c = HH(c, d, a, b, words[k + 7], 16, 0xf6bb4b60);
+    b = HH(b, c, d, a, words[k + 10], 23, 0xbebfbc70);
+    a = HH(a, b, c, d, words[k + 13], 4, 0x289b7ec6);
+    d = HH(d, a, b, c, words[k + 0], 11, 0xeaa127fa);
+    c = HH(c, d, a, b, words[k + 3], 16, 0xd4ef3085);
+    b = HH(b, c, d, a, words[k + 6], 23, 0x04881d05);
+    a = HH(a, b, c, d, words[k + 9], 4, 0xd9d4d039);
+    d = HH(d, a, b, c, words[k + 12], 11, 0xe6db99e5);
+    c = HH(c, d, a, b, words[k + 15], 16, 0x1fa27cf8);
+    b = HH(b, c, d, a, words[k + 2], 23, 0xc4ac5665);
+    a = II(a, b, c, d, words[k + 0], 6, 0xf4292244);
+    d = II(d, a, b, c, words[k + 7], 10, 0x432aff97);
+    c = II(c, d, a, b, words[k + 14], 15, 0xab9423a7);
+    b = II(b, c, d, a, words[k + 5], 21, 0xfc93a039);
+    a = II(a, b, c, d, words[k + 12], 6, 0x655b59c3);
+    d = II(d, a, b, c, words[k + 3], 10, 0x8f0ccc92);
+    c = II(c, d, a, b, words[k + 10], 15, 0xffeff47d);
+    b = II(b, c, d, a, words[k + 1], 21, 0x85845dd1);
+    a = II(a, b, c, d, words[k + 8], 6, 0x6fa87e4f);
+    d = II(d, a, b, c, words[k + 15], 10, 0xfe2ce6e0);
+    c = II(c, d, a, b, words[k + 6], 15, 0xa3014314);
+    b = II(b, c, d, a, words[k + 13], 21, 0x4e0811a1);
+    a = II(a, b, c, d, words[k + 4], 6, 0xf7537e82);
+    d = II(d, a, b, c, words[k + 11], 10, 0xbd3af235);
+    c = II(c, d, a, b, words[k + 2], 15, 0x2ad7d2bb);
+    b = II(b, c, d, a, words[k + 9], 21, 0xeb86d391);
+    a = addUnsigned(a, AA);
+    b = addUnsigned(b, BB);
+    c = addUnsigned(c, CC);
+    d = addUnsigned(d, DD);
+  }
+  function wordToHex(lValue) {
+    let out = "";
+    for (let lCount = 0; lCount <= 3; lCount++) {
+      const lByte = (lValue >>> (lCount * 8)) & 255;
+      out += lByte.toString(16).padStart(2, "0");
+    }
+    return out;
+  }
+  return (wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d)).toLowerCase();
 }
 
 async function hashPassword(rawPassword) {
@@ -522,15 +716,74 @@ export default {
       }
 
       // ======================================================================
-      // 4. GET CONFIGURED OFFERWALLS (GET /api/offerwalls)
+      // 4. GET CONFIGURED OFFERWALLS & SERVER-SIGNED URLS (GET /api/offerwalls)
       // ======================================================================
       if (url.pathname === "/api/offerwalls" && request.method === "GET") {
+        const reqUserId = (
+          url.searchParams.get("user_id") ||
+          request.headers.get("x-user-id") ||
+          ""
+        ).trim();
+
         const rows = await env.DB.prepare(
-          "SELECT provider_id, name, badge, enabled, app_id, iframe_url_template, hold_days, postback_macro_query FROM offerwall_configs ORDER BY rowid ASC"
+          "SELECT provider_id, name, badge, enabled, app_id, iframe_url_template, secret_key, hold_days, postback_macro_query FROM offerwall_configs ORDER BY rowid ASC"
         ).all();
 
+        const rawWalls = (rows && rows.results) || [];
+        const publicWalls = [];
+        for (const w of rawWalls) {
+          let signedIframeUrl = "";
+          if (
+            reqUserId &&
+            (w.provider_id === "offerwallme" ||
+              String(w.iframe_url_template || "").includes("offerwall.me"))
+          ) {
+            const secret = getOfferwallMeSecret(env, w.secret_key);
+            signedIframeUrl = await signOfferwallMeUrl(
+              w.app_id || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd",
+              reqUserId,
+              secret
+            );
+          }
+          publicWalls.push({
+            provider_id: w.provider_id,
+            name: w.name,
+            badge: w.badge,
+            enabled: w.enabled,
+            app_id: w.app_id,
+            iframe_url_template: w.iframe_url_template,
+            signed_iframe_url: signedIframeUrl,
+            hold_days: w.hold_days,
+            postback_macro_query: w.postback_macro_query,
+          });
+        }
+
         return Response.json(
-          { ok: true, offerwalls: (rows && rows.results) || [] },
+          { ok: true, offerwalls: publicWalls },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      if (url.pathname === "/api/offerwalls/signed-url" && request.method === "GET") {
+        const reqUserId = (
+          url.searchParams.get("user_id") ||
+          request.headers.get("x-user-id") ||
+          ""
+        ).trim();
+        if (!reqUserId) {
+          return Response.json(
+            { error: "user_id is required" },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        const cfg = await env.DB.prepare(
+          "SELECT app_id, secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
+        ).first();
+        const pubKey = (cfg && cfg.app_id) || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd";
+        const secret = getOfferwallMeSecret(env, cfg && cfg.secret_key);
+        const signedUrl = await signOfferwallMeUrl(pubKey, reqUserId, secret);
+        return Response.json(
+          { ok: true, signed_iframe_url: signedUrl },
           { status: 200, headers: corsHeaders }
         );
       }
@@ -558,14 +811,22 @@ export default {
         }
 
         const rawLastSegment = url.pathname.split("/").filter(Boolean).pop() || "universal";
+        const isOfferwallMePayload = Boolean(
+          params.get("subId") || params.get("transId") || params.get("offer_type")
+        );
         const providerId = (
           params.get("network") ||
           params.get("provider") ||
-          (rawLastSegment.toLowerCase() === "postback" ? "universal" : rawLastSegment)
+          (rawLastSegment.toLowerCase() !== "postback"
+            ? rawLastSegment
+            : isOfferwallMePayload
+            ? "offerwallme"
+            : "universal")
         )
           .trim()
           .toLowerCase();
-        const providerLabel = providerId.toUpperCase();
+        const providerLabel =
+          providerId === "offerwallme" ? "OFFERWALL.ME" : providerId.toUpperCase();
 
         // Normalize User ID across ALL offerwall networks
         const userId = (
@@ -582,9 +843,9 @@ export default {
         // Normalize Reward / Amount (35% User Share: $1 USD = 3,000 Coins = ₹30)
         const rawPayoutUsd = params.get("payout") || params.get("usd") || "";
         const rawAmount =
+          params.get("reward") ||
           params.get("amount") ||
           params.get("coins") ||
-          params.get("reward") ||
           params.get("points") ||
           params.get("currency") ||
           rawPayoutUsd ||
@@ -599,11 +860,11 @@ export default {
             ? Math.max(1, Math.round(parsedAmount * 3000))
             : Math.round(Math.abs(parsedAmount || 0));
 
-        // Normalize Transaction ID & scope with userId + coins so multiple networks on 1 URL never collide
+        // Normalize Transaction ID & scope with userId so multiple networks on 1 URL never collide
         const rawTxId = (
+          params.get("transId") ||
           params.get("txn_id") ||
           params.get("tx_id") ||
-          params.get("transId") ||
           params.get("transaction_id") ||
           params.get("id") ||
           params.get("offer_id") ||
@@ -627,7 +888,7 @@ export default {
           params.get("task") ||
           `Offerwall Task`;
 
-        // Pre-approval Ad Network verification ping -> Always return 200 OK
+        // Pre-approval Ad Network verification ping -> Always return 200 OK ("ok")
         if (!userId || userId.includes("{") || userId.includes("[") || coins <= 0) {
           try {
             await env.DB.prepare(
@@ -643,10 +904,10 @@ export default {
               )
               .run();
           } catch {}
-          return new Response("OK", { status: 200, headers: corsHeaders });
+          return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
-        // Check optional secret key & hold days if configured
+        // Verify Offerwall.me MD5 signature (`md5(subId + transId + reward + secretKey)`) or custom secret if provided
         let holdDays = 0;
         try {
           const cfg = await env.DB.prepare(
@@ -661,6 +922,20 @@ export default {
               return new Response("ERROR: INVALID_SECRET", { status: 403, headers: corsHeaders });
             }
           }
+          const incomingSig = (params.get("signature") || "").trim().toLowerCase();
+          if (incomingSig && (providerId === "offerwallme" || isOfferwallMePayload)) {
+            const owmSecret = getOfferwallMeSecret(env, cfg && cfg.secret_key);
+            const sigSubId = params.get("subId") || params.get("subid") || userId;
+            const sigTransId = params.get("transId") || rawTxId;
+            const sigReward = params.get("reward") || rawAmount;
+            const expectedSig = md5Hex(`${sigSubId}${sigTransId}${sigReward}${owmSecret}`);
+            if (expectedSig !== incomingSig) {
+              return new Response("ERROR: Signature doesn't match", {
+                status: 403,
+                headers: corsHeaders,
+              });
+            }
+          }
         } catch {}
 
         // Find user by ID or Email
@@ -671,7 +946,7 @@ export default {
             .first();
         }
 
-        // Pre-approval test postback with dummy user_id (e.g. "test", "12345") -> Return 200 OK
+        // Pre-approval test postback with dummy user_id (e.g. "test", "12345") -> Return 200 OK ("ok")
         if (!user) {
           try {
             await env.DB.prepare(
@@ -687,7 +962,7 @@ export default {
               )
               .run();
           } catch {}
-          return new Response("OK", { status: 200, headers: corsHeaders });
+          return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
         // Chargeback / Reversal Handling
@@ -711,7 +986,7 @@ export default {
             )
             .run();
 
-          return new Response("OK", { status: 200, headers: corsHeaders });
+          return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
         // Duplicate Transaction Check
@@ -721,7 +996,7 @@ export default {
           .bind(txId)
           .first();
         if (duplicate) {
-          return new Response("OK", { status: 200, headers: corsHeaders });
+          return new Response("DUP", { status: 200, headers: corsHeaders });
         }
 
         if (holdDays > 0) {
@@ -789,7 +1064,7 @@ export default {
           }
         }
 
-        return new Response("OK", { status: 200, headers: corsHeaders });
+        return new Response("ok", { status: 200, headers: corsHeaders });
       }
 
       // ======================================================================

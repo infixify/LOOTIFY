@@ -37,6 +37,7 @@ export interface OfferwallConfig {
   enabled: number;
   app_id: string;
   iframe_url_template: string;
+  signed_iframe_url?: string;
   secret_key?: string;
   hold_days: number;
   postback_macro_query?: string;
