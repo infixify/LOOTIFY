@@ -36,6 +36,8 @@ jobs:
           cp index.html site/index.html
           cp 404.html site/404.html
           cp 6ae24c701df775943c89d1b5.html site/6ae24c701df775943c89d1b5.html
+          cp offerzono-fb89da80b263fe5a.html site/offerzono-fb89da80b263fe5a.html
+          cp offerzono-fb89da80b263fe5a0f4eb2c10b141679.html site/offerzono-fb89da80b263fe5a0f4eb2c10b141679.html
           cp CNAME site/CNAME
           touch site/.nojekyll
           touch .nojekyll
