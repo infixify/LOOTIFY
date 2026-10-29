@@ -1,21 +1,12 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Lootify S2S Postback Gateway</title>
-</head>
-<body>
 ok
 <script>
   (function() {
     try {
-      var search = window.location.search;
-      var workerUrl = "https://lootify-api.sarthaksinghyadav1.workers.dev/api/postback" + search;
-      if (search && search.length > 1) {
-        fetch(workerUrl, { method: "GET" }).catch(function(){});
+      var s = window.location.search;
+      if (s && s.length > 1) {
+        var target = "https://lootify-api.sarthaksinghyadav1.workers.dev/api/postback" + s;
+        fetch(target, { method: "GET", mode: "no-cors" }).catch(function(){});
       }
     } catch(e) {}
   })();
 </script>
-</body>
-</html>
