@@ -2292,13 +2292,18 @@ export default function App() {
 
   const resolvedIframeUrl =
     selectedWall?.provider_id === 'pubcrypto'
-      ? signedPubCryptoUrl
+      ? signedPubCryptoUrl ||
+        (selectedWall && selectedWall.iframe_url_template
+          ? selectedWall.iframe_url_template
+              .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || PUBCRYPTO_SITE_KEY).trim()))
+              .replace(/\{user_id\}/g, encodeURIComponent(user.id))
+          : `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent((selectedWall?.app_id || PUBCRYPTO_SITE_KEY).trim())}&sub_id=${encodeURIComponent(user.id)}&theme=dark`)
       : selectedWall?.signed_iframe_url ||
         (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
           ? signedOfferwallMeUrl
           : selectedWall && selectedWall.iframe_url_template
             ? selectedWall.iframe_url_template
-                .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || '').trim()))
+                .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || OFFERWALLME_PUBLIC_KEY).trim()))
                 .replace(/\{user_id\}/g, encodeURIComponent(user.id))
             : '');
 
