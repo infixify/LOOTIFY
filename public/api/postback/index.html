@@ -1,0 +1,11 @@
+ok
+<script>
+  (function() {
+    var workerUrl = "https://lootify-api.sarthaksinghyadav1.workers.dev/api/postback" + window.location.search;
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(workerUrl);
+    } else {
+      fetch(workerUrl, { mode: "no-cors" }).catch(function(){});
+    }
+  })();
+</script>

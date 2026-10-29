@@ -14,6 +14,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
+  // Handle /api/postback requests immediately with "ok" and forward to Cloudflare Worker
+  if (window.location.pathname.indexOf('/api/postback') !== -1) {
+    var workerUrl = 'https://lootify-api.sarthaksinghyadav1.workers.dev/api/postback' + window.location.search;
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(workerUrl);
+    } else {
+      fetch(workerUrl, { mode: 'no-cors' }).catch(function(){});
+    }
+    document.write('ok');
+    document.close();
+    if (window.stop) window.stop();
+  }
+
   // Restore clean multi-page URLs on GitHub Pages when redirected from 404.html
   (function(l) {
     if (l.search[1] === '/' ) {
