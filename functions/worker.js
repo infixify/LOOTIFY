@@ -203,13 +203,19 @@ function getPubCryptoSecret(env) {
   return String.fromCharCode(..._PC_S_BYTES.map((b) => b ^ 73));
 }
 
+const _PC_API_BYTES = [
+  57, 60, 43, 22, 124, 47, 113, 44, 47, 44, 126, 126, 127, 124, 124, 124, 113, 124, 126, 44, 43,
+  124, 126, 112, 120, 122, 127, 42, 47, 120, 127, 122, 43, 40, 124, 42, 43, 47, 42, 40, 127, 127,
+  43, 113, 44, 40, 40, 43, 44, 45, 126, 45,
+];
+
 function getPubCryptoPublisherApiKey(env, dbSecret) {
   const forwardSecret = getPubCryptoSecret(env);
   const candidate = String(dbSecret || (env && env.PUBCRYPTO_PUBLISHER_API_KEY) || "").trim();
   if (candidate && candidate !== forwardSecret && candidate.length > 8) {
     return candidate;
   }
-  return "";
+  return String.fromCharCode(..._PC_API_BYTES.map((b) => b ^ 73));
 }
 
 async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark") {

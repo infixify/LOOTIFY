@@ -13,6 +13,20 @@ const _OWM_S_BYTES = [
   17, 120, 37, 43, 126, 30, 123, 125,
 ];
 
+const _PC_API_BYTES = [
+  57, 60, 43, 22, 124, 47, 113, 44, 47, 44, 126, 126, 127, 124, 124, 124, 113, 124, 126, 44, 43,
+  124, 126, 112, 120, 122, 127, 42, 47, 120, 127, 122, 43, 40, 124, 42, 43, 47, 42, 40, 127, 127,
+  43, 113, 44, 40, 40, 43, 44, 45, 126, 45,
+];
+
+function getClientPubCryptoApiKey(): string {
+  try {
+    const custom = localStorage.getItem('lootify_pubcrypto_api_key');
+    if (custom && custom.trim().length > 8) return custom.trim();
+  } catch {}
+  return String.fromCharCode(..._PC_API_BYTES.map((b) => b ^ 73));
+}
+
 const DEFAULT_OFFERWALLME_WALL: OfferwallConfig = {
   provider_id: 'offerwallme',
   name: 'Offerwall.me',
@@ -393,6 +407,9 @@ export default function App() {
       const base = getApiBaseUrl();
       const currentTheme =
         document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+
+      // 1. Try server signed URL endpoint first
+      let resolved = false;
       try {
         const res = await fetch(
           `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
@@ -403,9 +420,36 @@ export default function App() {
           const data = await res.json();
           if (data && data.signed_iframe_url) {
             setSignedPubCryptoUrl(data.signed_iframe_url);
+            resolved = true;
           }
         }
       } catch {}
+
+      // 2. Direct client-side fallback (e.g., static hosting on GitHub Pages)
+      if (!resolved) {
+        try {
+          const apiKey = getClientPubCryptoApiKey();
+          const resp = await fetch('https://pub.cryptolinkforearn.com/api/publisher/embed-tokens', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              site_key: PUBCRYPTO_SITE_KEY,
+              sub_id: activeUid,
+              origin: 'https://lootify.eternant.c0m.to',
+              theme: currentTheme,
+            }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data && data.iframe_url) {
+              setSignedPubCryptoUrl(data.iframe_url);
+            }
+          }
+        } catch {}
+      }
     },
     [user?.id]
   );
@@ -489,6 +533,12 @@ export default function App() {
       window.removeEventListener('popstate', syncFromEvents);
     };
   }, [fetchOfferwallsFromBackend, syncUserWithBackend]);
+
+  useEffect(() => {
+    if (user?.id && (selectedWallId === 'pubcrypto' || activeTab === 'quests')) {
+      refreshPubCryptoSignedUrl(user.id);
+    }
+  }, [user?.id, selectedWallId, activeTab, refreshPubCryptoSignedUrl]);
 
   useEffect(() => {
     if (isAdminRoute && adminLoggedIn) {
@@ -2232,7 +2282,7 @@ export default function App() {
     enabledOfferwalls.find((w) => w.provider_id === selectedWallId) || enabledOfferwalls[0] || null;
 
   const resolvedIframeUrl =
-    selectedWall?.provider_id === 'pubcrypto' && signedPubCryptoUrl
+    selectedWall?.provider_id === 'pubcrypto'
       ? signedPubCryptoUrl
       : selectedWall?.signed_iframe_url ||
         (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
@@ -2917,6 +2967,31 @@ export default function App() {
                         }}
                         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
                       />
+                    ) : selectedWall.provider_id === 'pubcrypto' ? (
+                      <div
+                        style={{
+                          padding: '60px 24px',
+                          textAlign: 'center',
+                          background: 'rgba(9,13,25,0.6)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                        }}
+                      >
+                        <div className="live-dot" style={{ width: 14, height: 14, margin: '0 auto 16px' }} />
+                        <h4 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
+                          Connecting to PubCrypto Signed Embed...
+                        </h4>
+                        <p style={{ fontSize: 13, color: 'var(--txt2)', maxWidth: 440, margin: '0 auto 20px', lineHeight: 1.6 }}>
+                          Generating a fresh, secure session token for your Player ID. This usually takes just 1–2 seconds.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => refreshPubCryptoSignedUrl(user.id)}
+                          className="btn btn-primary btn-sm"
+                        >
+                          🔄 Retry Session Generation
+                        </button>
+                      </div>
                     ) : (
                       <div
                         style={{
