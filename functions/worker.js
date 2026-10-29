@@ -1858,6 +1858,29 @@ export default {
         );
       }
 
+      // If anyone or Offerwall crawler visits root / frontend pages on the Worker URL,
+      // seamlessly proxy to your GitHub Pages website (lootify.eternant.c0m.to)
+      try {
+        const ghUrl = new URL(request.url);
+        ghUrl.hostname = "lootify.eternant.c0m.to";
+        ghUrl.protocol = "https:";
+        ghUrl.port = "";
+        const ghReq = new Request(ghUrl.toString(), {
+          method: request.method,
+          headers: request.headers,
+        });
+        const ghResp = await fetch(ghReq);
+        if (ghResp.status < 400 || ghResp.status === 404) {
+          const respHeaders = new Headers(ghResp.headers);
+          respHeaders.set("Access-Control-Allow-Origin", "*");
+          return new Response(ghResp.body, {
+            status: ghResp.status,
+            statusText: ghResp.statusText,
+            headers: respHeaders,
+          });
+        }
+      } catch {}
+
       return Response.json(
         {
           ok: true,
@@ -1867,7 +1890,7 @@ export default {
             "/api/user/sync",
             "/api/withdrawals",
             "/api/offerwalls",
-            "/api/postback/:provider",
+            "/api/postback",
             "/api/admin/dashboard",
           ],
         },
