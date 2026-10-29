@@ -31,9 +31,9 @@
       "name": "PubCrypto",
       "badge": "Shortlinks, PTC, Tasks & Offerwalls",
       "enabled": 1,
-      "app_id": "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
+      "app_id": "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
       "iframe_url_template": "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
-      "secret_key": "",
+      "secret_key": "c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919",
       "hold_days": 0,
       "postback_macro_query": ""
     }

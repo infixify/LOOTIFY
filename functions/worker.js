@@ -133,7 +133,7 @@ async function ensureSchema(db) {
       )
       .run();
 
-    // Auto-seed approved PubCrypto placement (pub.cryptolinkforearn.com — Site Key: site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198)
+    // Auto-seed approved PubCrypto placement (Site Key: site_b233010ad04bdeea470d1114a38e6d0b05839e4a)
     await db
       .prepare(
         `INSERT OR IGNORE INTO offerwall_configs (
@@ -143,18 +143,23 @@ async function ensureSchema(db) {
           'PubCrypto',
           'Shortlinks, PTC, Tasks & Offerwalls',
           1,
-          'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198',
+          'site_b233010ad04bdeea470d1114a38e6d0b05839e4a',
           'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
-          '',
+          'c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919',
           0,
           ''
         )`
       )
       .run();
 
-    // Direct Real-Time Provider Sync migration: default hold_days to 0 (Approved = Instant Available)
+    // Auto-migrate latest PubCrypto approved keys & zero-hold instant credit
     try {
-      await db.prepare("UPDATE offerwall_configs SET hold_days = 0 WHERE provider_id IN ('offerwallme', 'pubcrypto')").run();
+      await db
+        .prepare(
+          "UPDATE offerwall_configs SET app_id = 'site_b233010ad04bdeea470d1114a38e6d0b05839e4a', secret_key = 'c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919', hold_days = 0 WHERE provider_id = 'pubcrypto'"
+        )
+        .run();
+      await db.prepare("UPDATE offerwall_configs SET hold_days = 0 WHERE provider_id = 'offerwallme'").run();
       // Release any previously held coins from artificial 7-day holds
       const held = await db.prepare("SELECT id, user_id, amount_coins FROM ledger_entries WHERE status = 'pending_hold'").all();
       for (const row of (held && held.results) || []) {
@@ -191,16 +196,11 @@ function getOfferwallMeSecret(env, dbSecret) {
   return String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
 }
 
-// Server-side-only PubCrypto Forward Secret Key (XOR-masked, never exposed to client code)
-const _PC_S_BYTES = [
-  44, 126, 122, 43, 42, 120, 42, 112, 44, 47, 44, 123, 127, 124, 126, 123, 123, 45, 120, 43, 47,
-  122, 127, 120, 126, 126, 123, 45, 120, 43, 122, 122, 43, 120, 47, 44, 120, 121, 126, 125, 44,
-  45, 44, 47, 112, 125, 127, 113, 126, 43, 42, 127, 42, 124, 125, 113, 123, 126, 121, 124, 126,
-  43, 123, 122,
-];
-function getPubCryptoSecret(env) {
+// Server-side-only PubCrypto Forward Secret Key
+function getPubCryptoSecret(env, dbSecret) {
+  if (dbSecret && String(dbSecret).trim().length > 8) return String(dbSecret).trim();
   if (env && env.PUBCRYPTO_SECRET_KEY) return String(env.PUBCRYPTO_SECRET_KEY).trim();
-  return String.fromCharCode(..._PC_S_BYTES.map((b) => b ^ 73));
+  return "c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919";
 }
 
 const _PC_API_BYTES = [
@@ -210,7 +210,7 @@ const _PC_API_BYTES = [
 ];
 
 function getPubCryptoPublisherApiKey(env, dbSecret) {
-  const forwardSecret = getPubCryptoSecret(env);
+  const forwardSecret = getPubCryptoSecret(env, dbSecret);
   const candidate = String(dbSecret || (env && env.PUBCRYPTO_PUBLISHER_API_KEY) || "").trim();
   if (candidate && candidate !== forwardSecret && candidate.length > 8) {
     return candidate;
@@ -219,7 +219,7 @@ function getPubCryptoPublisherApiKey(env, dbSecret) {
 }
 
 async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark") {
-  const sKey = String(siteKey || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198").trim();
+  const sKey = String(siteKey || "site_b233010ad04bdeea470d1114a38e6d0b05839e4a").trim();
   const uid = String(userId || "").trim();
   const apiKey = String(publisherApiKey || "").trim();
   const cleanTheme = theme === "light" ? "light" : "dark";
@@ -628,6 +628,12 @@ export default {
               "x-lootify-notice": "D1 DB binding required for persistence",
             },
           });
+        }
+        if (url.pathname.startsWith("/api/")) {
+          return Response.json(
+            { error: "Cloudflare D1 database binding 'DB' is missing. Please add D1 binding named 'DB' in Cloudflare Worker Settings -> Bindings." },
+            { status: 503, headers: corsHeaders }
+          );
         }
       } else {
         await ensureSchema(env.DB);
@@ -1260,7 +1266,10 @@ export default {
             "SELECT secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
           ).first();
           const owmSecret = getOfferwallMeSecret(env, owmCfg && owmCfg.secret_key);
-          const pubCryptoSecret = getPubCryptoSecret(env);
+          const pcCfg = await env.DB.prepare(
+            "SELECT secret_key FROM offerwall_configs WHERE provider_id = 'pubcrypto'"
+          ).first();
+          const pubCryptoSecret = getPubCryptoSecret(env, pcCfg && pcCfg.secret_key);
 
           const expectedOwmSig = md5Hex(`${sigSubId}${sigTransId}${sigReward}${owmSecret}`);
           const expectedPcSig = md5Hex(`${sigSubId}${sigTransId}${sigReward}${pubCryptoSecret}`);
