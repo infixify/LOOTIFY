@@ -139,7 +139,7 @@ const DEFAULT_OFFERWALLME_CONFIG: ServerOfferwallConfig = {
   app_id: 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd',
   iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
   secret_key: '',
-  hold_days: 7,
+  hold_days: 0,
   postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
 };
 
@@ -152,7 +152,7 @@ const DEFAULT_PUBCRYPTO_CONFIG: ServerOfferwallConfig = {
   iframe_url_template:
     'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
   secret_key: '',
-  hold_days: 7,
+  hold_days: 0,
   postback_macro_query: '',
 };
 
@@ -836,7 +836,7 @@ async function startServer() {
     const holdDays = wallCfg ? Number(wallCfg.hold_days) || 0 : 0;
     const existingEntry = db.postbacks.find((p) => p.external_tx_id === txId);
     if (existingEntry) {
-      if (!isPendingStatus && existingEntry.status === 'pending_hold' && holdDays === 0) {
+      if (!isPendingStatus && existingEntry.status === 'pending_hold') {
         const releaseAmt = Math.max(0, Number(existingEntry.amount_coins) || coins);
         existingEntry.status = 'credited';
         user.pendingCoins = Math.max(0, user.pendingCoins - releaseAmt);

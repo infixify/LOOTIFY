@@ -4,7 +4,7 @@ import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ThemeMode, Wi
 const STORAGE_USER_KEY = 'lootify_player_user';
 const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
 const STORAGE_API_BASE_KEY = 'lootify_api_base_url';
-const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v5';
+const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v6';
 
 const OFFERWALLME_PUBLIC_KEY = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
 const PUBCRYPTO_SITE_KEY = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198';
@@ -34,7 +34,7 @@ const DEFAULT_OFFERWALLME_WALL: OfferwallConfig = {
   enabled: 1,
   app_id: OFFERWALLME_PUBLIC_KEY,
   iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
-  hold_days: 7,
+  hold_days: 0,
   postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
 };
 
@@ -46,7 +46,7 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
   app_id: PUBCRYPTO_SITE_KEY,
   iframe_url_template:
     'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
-  hold_days: 7,
+  hold_days: 0,
   postback_macro_query: '',
 };
 
@@ -502,6 +502,7 @@ export default function App() {
       localStorage.removeItem('lootify_client_db_v1');
       localStorage.removeItem('lootify_offerwalls_cache_v1');
       localStorage.removeItem('lootify_offerwalls_dynamic_v4');
+      localStorage.removeItem('lootify_offerwalls_dynamic_v5');
     } catch {}
 
     const initialUser = loadCurrentUser();

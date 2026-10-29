@@ -127,7 +127,7 @@ async function ensureSchema(db) {
           'PQhx5BxXulHlM6PxZx81pZgIs2nyRd',
           'https://offerwall.me/offerwall/{app_id}/{user_id}',
           '',
-          7,
+          0,
           '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}'
         )`
       )
@@ -146,25 +146,25 @@ async function ensureSchema(db) {
           'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198',
           'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
           '',
-          7,
+          0,
           ''
         )`
       )
       .run();
 
-    // One-time upgrade so existing offerwallme row defaults to 7-day hold if still at 0
+    // Direct Real-Time Provider Sync migration: default hold_days to 0 (Approved = Instant Available)
     try {
-      await db
-        .prepare("ALTER TABLE offerwall_configs ADD COLUMN hold_v2_migrated INTEGER DEFAULT 0")
-        .run();
-      await db
-        .prepare(
-          "UPDATE offerwall_configs SET hold_days = 7, hold_v2_migrated = 1 WHERE provider_id = 'offerwallme' AND hold_days = 0"
-        )
-        .run();
-    } catch {
-      // Column already exists, admin's custom hold_days setting is preserved
-    }
+      await db.prepare("UPDATE offerwall_configs SET hold_days = 0 WHERE provider_id IN ('offerwallme', 'pubcrypto')").run();
+      // Release any previously held coins from artificial 7-day holds
+      const held = await db.prepare("SELECT id, user_id, amount_coins FROM ledger_entries WHERE status = 'pending_hold'").all();
+      for (const row of (held && held.results) || []) {
+        const amt = Math.max(0, Number(row.amount_coins) || 0);
+        if (amt > 0 && row.user_id) {
+          await db.prepare("UPDATE ledger_entries SET status = 'credited' WHERE id = ?").bind(row.id).run();
+          await db.prepare("UPDATE users SET pending_coins = MAX(0, pending_coins - ?), available_coins = available_coins + ? WHERE id = ?").bind(amt, amt, row.user_id).run();
+        }
+      }
+    } catch {}
 
     // Auto-migrate faucet columns on users table
     try {
@@ -1411,7 +1411,7 @@ export default {
           .bind(txId)
           .first();
         if (duplicate) {
-          if (!isPendingStatus && duplicate.status === "pending_hold" && holdDays === 0) {
+          if (!isPendingStatus && duplicate.status === "pending_hold") {
             const releaseAmt = Math.max(0, Number(duplicate.amount_coins) || coins);
             await env.DB.prepare("UPDATE ledger_entries SET status = 'credited' WHERE id = ?")
               .bind(duplicate.id)
