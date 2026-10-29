@@ -159,7 +159,11 @@ async function ensureSchema(db) {
           "UPDATE offerwall_configs SET app_id = 'site_b233010ad04bdeea470d1114a38e6d0b05839e4a', secret_key = 'c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919', hold_days = 0 WHERE provider_id = 'pubcrypto'"
         )
         .run();
-      await db.prepare("UPDATE offerwall_configs SET hold_days = 0 WHERE provider_id = 'offerwallme'").run();
+      await db
+        .prepare(
+          "UPDATE offerwall_configs SET secret_key = 'f25hoUjdRBQpUbbogHGU4aObX1lb7W24', hold_days = 0 WHERE provider_id = 'offerwallme'"
+        )
+        .run();
       // Release any previously held coins from artificial 7-day holds
       const held = await db.prepare("SELECT id, user_id, amount_coins FROM ledger_entries WHERE status = 'pending_hold'").all();
       for (const row of (held && held.results) || []) {
@@ -186,14 +190,10 @@ async function ensureSchema(db) {
 }
 
 // Runtime server-side-only secret resolver (never exposed to browser/frontend)
-const _OWM_S_BYTES = [
-  47, 123, 124, 33, 38, 28, 35, 45, 27, 11, 24, 57, 28, 43, 43, 38, 46, 1, 14, 28, 125, 40, 6, 43,
-  17, 120, 37, 43, 126, 30, 123, 125,
-];
 function getOfferwallMeSecret(env, dbSecret) {
   if (dbSecret && String(dbSecret).trim().length > 8) return String(dbSecret).trim();
   if (env && env.OFFERWALLME_SECRET_KEY) return String(env.OFFERWALLME_SECRET_KEY).trim();
-  return String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
+  return "f25hoUjdRBQpUbbogHGU4aObX1lb7W24";
 }
 
 // Server-side-only PubCrypto Forward Secret Key

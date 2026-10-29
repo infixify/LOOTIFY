@@ -50,16 +50,18 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
   postback_macro_query: '',
 };
 
-async function buildSignedOfferwallMeUrl(publicKey: string, userId: string): Promise<string> {
+async function buildSignedOfferwallMeUrl(publicKey: string, userId: string, customSecret?: string): Promise<string> {
   const pub = (publicKey || OFFERWALLME_PUBLIC_KEY).trim();
   const uid = (userId || '').trim();
-  const expires = String(Math.floor(Date.now() / 1000) + 3600);
+  const expires = String(Math.floor(Date.now() / 1000) + 86400);
   const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
-  const kStr = String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
+  const secretKey = (customSecret && customSecret.trim().length > 8)
+    ? customSecret.trim()
+    : 'f25hoUjdRBQpUbbogHGU4aObX1lb7W24';
   const enc = new TextEncoder();
   const cryptoKey = await window.crypto.subtle.importKey(
     'raw',
-    enc.encode(kStr),
+    enc.encode(secretKey),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -312,6 +314,8 @@ export default function App() {
   const [newWallMacroQuery, setNewWallMacroQuery] = useState(
     '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status={status}'
   );
+
+  const [useDirectOfferwallMe, setUseDirectOfferwallMe] = useState<boolean>(false);
 
   // Admin S2S Test Simulator state
   const [testProvider, setTestProvider] = useState('offerwallme');
@@ -2298,14 +2302,16 @@ export default function App() {
               .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || PUBCRYPTO_SITE_KEY).trim()))
               .replace(/\{user_id\}/g, encodeURIComponent(user.id))
           : `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent((selectedWall?.app_id || PUBCRYPTO_SITE_KEY).trim())}&sub_id=${encodeURIComponent(user.id)}&theme=dark`)
-      : selectedWall?.signed_iframe_url ||
-        (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
-          ? signedOfferwallMeUrl
-          : selectedWall && selectedWall.iframe_url_template
-            ? selectedWall.iframe_url_template
-                .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || OFFERWALLME_PUBLIC_KEY).trim()))
-                .replace(/\{user_id\}/g, encodeURIComponent(user.id))
-            : '');
+      : useDirectOfferwallMe
+        ? `https://offerwall.me/offerwall/${encodeURIComponent((selectedWall?.app_id || OFFERWALLME_PUBLIC_KEY).trim())}/${encodeURIComponent(user.id)}`
+        : selectedWall?.signed_iframe_url ||
+          (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
+            ? signedOfferwallMeUrl
+            : selectedWall && selectedWall.iframe_url_template
+              ? selectedWall.iframe_url_template
+                  .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || OFFERWALLME_PUBLIC_KEY).trim()))
+                  .replace(/\{user_id\}/g, encodeURIComponent(user.id))
+              : `https://offerwall.me/offerwall/${encodeURIComponent((selectedWall?.app_id || OFFERWALLME_PUBLIC_KEY).trim())}/${encodeURIComponent(user.id)}`);
 
   return (
     <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -2939,6 +2945,16 @@ export default function App() {
                         </p>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {selectedWall.provider_id === 'offerwallme' && (
+                          <button
+                            type="button"
+                            onClick={() => setUseDirectOfferwallMe(!useDirectOfferwallMe)}
+                            className="btn btn-outline btn-sm"
+                            style={{ color: useDirectOfferwallMe ? 'var(--gold)' : 'var(--green)', borderColor: useDirectOfferwallMe ? 'var(--gold)' : 'var(--green)' }}
+                          >
+                            {useDirectOfferwallMe ? '⚡ Direct Mode (Active)' : '🔒 Signed Session'}
+                          </button>
+                        )}
                         {selectedWall.provider_id === 'pubcrypto' && (
                           <button
                             type="button"

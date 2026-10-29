@@ -8,14 +8,10 @@ const ADMIN_EMAIL = 'sarthaksinghyadav1@gmail.com';
 const DB_FILE = path.join(process.cwd(), '.lootify-server-db.json');
 
 // Server-side-only secret resolver for Offerwall.me (never exposed to browser/frontend)
-const _OWM_S_BYTES = [
-  47, 123, 124, 33, 38, 28, 35, 45, 27, 11, 24, 57, 28, 43, 43, 38, 46, 1, 14, 28, 125, 40, 6, 43,
-  17, 120, 37, 43, 126, 30, 123, 125,
-];
 function getOfferwallMeSecret(dbSecret?: string): string {
   if (dbSecret && dbSecret.trim().length > 8) return dbSecret.trim();
   if (process.env.OFFERWALLME_SECRET_KEY) return process.env.OFFERWALLME_SECRET_KEY.trim();
-  return String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
+  return 'f25hoUjdRBQpUbbogHGU4aObX1lb7W24';
 }
 
 // Server-side-only FaucetPay Owner API Key (XOR-masked, never exposed to client code)

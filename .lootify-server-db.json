@@ -22,7 +22,7 @@
       "enabled": 1,
       "app_id": "PQhx5BxXulHlM6PxZx81pZgIs2nyRd",
       "iframe_url_template": "https://offerwall.me/offerwall/{app_id}/{user_id}",
-      "secret_key": "",
+      "secret_key": "f25hoUjdRBQpUbbogHGU4aObX1lb7W24",
       "hold_days": 0,
       "postback_macro_query": "?user_id={subid}&amount={reward}&txn_id={transId}&status={status}"
     },
