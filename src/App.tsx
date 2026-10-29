@@ -53,7 +53,7 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
 async function buildSignedOfferwallMeUrl(publicKey: string, userId: string, customSecret?: string): Promise<string> {
   const pub = (publicKey || OFFERWALLME_PUBLIC_KEY).trim();
   const uid = (userId || '').trim();
-  const expires = String(Math.floor(Date.now() / 1000) + 86400);
+  const expires = String(Math.floor(Date.now() / 1000) + 3600);
   const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
   const secretKey = (customSecret && customSecret.trim().length > 8)
     ? customSecret.trim()
@@ -412,6 +412,18 @@ export default function App() {
     }
   }, []);
 
+  const refreshOfferwallMeSignedUrl = useCallback(
+    async (uid?: string) => {
+      const activeUid = uid || user?.id || loadCurrentUser()?.id || '';
+      if (!activeUid) return;
+      try {
+        const url = await buildSignedOfferwallMeUrl(OFFERWALLME_PUBLIC_KEY, activeUid);
+        setSignedOfferwallMeUrl(url);
+      } catch {}
+    },
+    [user?.id]
+  );
+
   const refreshPubCryptoSignedUrl = useCallback(
     async (uid?: string) => {
       const activeUid = uid || user?.id || loadCurrentUser()?.id || '';
@@ -548,10 +560,22 @@ export default function App() {
   }, [fetchOfferwallsFromBackend, syncUserWithBackend]);
 
   useEffect(() => {
-    if (user?.id && (selectedWallId === 'pubcrypto' || activeTab === 'quests')) {
-      refreshPubCryptoSignedUrl(user.id);
-    }
-  }, [user?.id, selectedWallId, activeTab, refreshPubCryptoSignedUrl]);
+    const doRefresh = () => {
+      const activeUid = user?.id || loadCurrentUser()?.id;
+      if (activeUid) {
+        if (selectedWallId === 'offerwallme' || activeTab === 'quests') {
+          refreshOfferwallMeSignedUrl(activeUid);
+        }
+        if (selectedWallId === 'pubcrypto' || activeTab === 'quests') {
+          refreshPubCryptoSignedUrl(activeUid);
+        }
+      }
+    };
+
+    doRefresh();
+    const intervalId = window.setInterval(doRefresh, 10 * 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [user?.id, selectedWallId, activeTab, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
 
   useEffect(() => {
     if (isAdminRoute && adminLoggedIn) {
@@ -2945,25 +2969,6 @@ export default function App() {
                         </p>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        {selectedWall.provider_id === 'offerwallme' && (
-                          <button
-                            type="button"
-                            onClick={() => setUseDirectOfferwallMe(!useDirectOfferwallMe)}
-                            className="btn btn-outline btn-sm"
-                            style={{ color: useDirectOfferwallMe ? 'var(--gold)' : 'var(--green)', borderColor: useDirectOfferwallMe ? 'var(--gold)' : 'var(--green)' }}
-                          >
-                            {useDirectOfferwallMe ? '⚡ Direct Mode (Active)' : '🔒 Signed Session'}
-                          </button>
-                        )}
-                        {selectedWall.provider_id === 'pubcrypto' && (
-                          <button
-                            type="button"
-                            onClick={() => refreshPubCryptoSignedUrl(user.id)}
-                            className="btn btn-outline btn-sm"
-                          >
-                            🔄 Refresh Session
-                          </button>
-                        )}
                         {resolvedIframeUrl && (
                           <a
                             href={resolvedIframeUrl}
