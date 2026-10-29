@@ -1266,14 +1266,17 @@ function ensureStaticBundleLoaded() {
     window.location.hostname.indexOf('lootify') !== -1
   ) {
     window.__LOOTIFY_STATIC_LOADED__ = true;
+    try {
+      localStorage.removeItem('lootify_offerwalls_dynamic_v4');
+    } catch (e) {}
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = './assets/lootify.css?v=20261029v9';
+    link.href = './assets/lootify.css?v=20261029v10';
     document.head.appendChild(link);
 
     var s = document.createElement('script');
     s.type = 'module';
-    s.src = './assets/lootify.js?v=20261029v9';
+    s.src = './assets/lootify.js?v=20261029v10';
     document.body.appendChild(s);
   }
 }
