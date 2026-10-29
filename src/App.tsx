@@ -133,6 +133,14 @@ function getApiBaseUrl(): string {
       return saved.trim().replace(/\/+$/, '');
     }
   } catch {}
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname.includes('github.io') ||
+      window.location.hostname.includes('c0m.to') ||
+      window.location.hostname.includes('lootify'))
+  ) {
+    return 'https://lootify-api.sarthaksinghyadav1.workers.dev';
+  }
   return '';
 }
 

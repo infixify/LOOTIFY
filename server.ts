@@ -677,7 +677,14 @@ async function startServer() {
       `${Date.now()}`
     ).trim();
 
-    const incomingSig = (merged.signature || '').trim().toLowerCase();
+    const incomingSig = (
+      merged.signature ||
+      merged.sig ||
+      merged.hash ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
     if (incomingSig) {
       const sigSubId = merged.subId || merged.subid || merged.sub_id || userId;
       const sigTransId = merged.transId || merged.trans_id || rawTxId;

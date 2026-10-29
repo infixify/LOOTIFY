@@ -43,3 +43,9 @@ jobs:
           touch .nojekyll
         continue-on-error: true
 
+      - name: Deploy Cloudflare Worker (lootify-api)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        continue-on-error: true
+

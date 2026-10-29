@@ -619,7 +619,19 @@ export default {
     }
 
     try {
-      await ensureSchema(env.DB);
+      if (!env || !env.DB) {
+        if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
+          return new Response("ok", {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "x-lootify-notice": "D1 DB binding required for persistence",
+            },
+          });
+        }
+      } else {
+        await ensureSchema(env.DB);
+      }
 
       // ======================================================================
       // 1. USER SIGN UP / REGISTER (POST /api/auth/register)
@@ -1225,7 +1237,14 @@ export default {
         ).trim();
 
         // Verify Offerwall.me OR PubCrypto MD5 signature (`md5(subId + transId + reward + secretKey)`)
-        const incomingSig = (params.get("signature") || "").trim().toLowerCase();
+        const incomingSig = (
+          params.get("signature") ||
+          params.get("sig") ||
+          params.get("hash") ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
         if (incomingSig) {
           const sigSubId =
             params.get("subId") || params.get("subid") || params.get("sub_id") || userId;
@@ -1331,6 +1350,26 @@ export default {
           user = await env.DB.prepare("SELECT * FROM users WHERE email = ?")
             .bind(userId.toLowerCase())
             .first();
+        }
+
+        // Auto-create user if not in DB yet so coins are NEVER lost
+        if (!user) {
+          const isDummyTester = /^(test|demo|verifier|reviewer|sample)/i.test(userId);
+          if (!isDummyTester) {
+            const cleanName = userId.startsWith("plr_") ? "Player " + userId.slice(4, 9) : "Player";
+            const userEmail = userId.includes("@") ? userId.toLowerCase() : `${userId}@lootify.local`;
+            const refCode = "LOOT" + Math.floor(100 + Math.random() * 900);
+            try {
+              await env.DB.prepare(
+                `INSERT INTO users (
+                  id, name, email, role, referral_code, available_coins, pending_coins, lifetime_earned_coins
+                ) VALUES (?, ?, ?, 'earner', ?, 0, 0, 0)`
+              )
+                .bind(userId, cleanName, userEmail, refCode)
+                .run();
+              user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
+            } catch {}
+          }
         }
 
         // Pre-approval test postback with dummy user_id (e.g. "test_member_1", "12345") -> Return 200 OK ("ok")

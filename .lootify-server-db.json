@@ -1,0 +1,41 @@
+{
+  "users": [],
+  "withdrawals": [],
+  "postbacks": [
+    {
+      "id": "ldg_test_1793266044347",
+      "user_id": "test_plr",
+      "user_name": "Network Test User",
+      "source_type": "offerwall",
+      "title": "[NETWORK TEST POSTBACK] OFFERWALL.ME: OFFERWALL.ME Task",
+      "amount_coins": 50,
+      "status": "network_test_ok",
+      "external_tx_id": "offerwallme_test_plr_test_tx1",
+      "created_at": "2026-10-29T09:27:24.347Z"
+    }
+  ],
+  "offerwalls": [
+    {
+      "provider_id": "offerwallme",
+      "name": "Offerwall.me",
+      "badge": "PTC, Shortlinks, Surveys & Tasks",
+      "enabled": 1,
+      "app_id": "PQhx5BxXulHlM6PxZx81pZgIs2nyRd",
+      "iframe_url_template": "https://offerwall.me/offerwall/{app_id}/{user_id}",
+      "secret_key": "",
+      "hold_days": 0,
+      "postback_macro_query": "?user_id={subid}&amount={reward}&txn_id={transId}&status={status}"
+    },
+    {
+      "provider_id": "pubcrypto",
+      "name": "PubCrypto",
+      "badge": "Shortlinks, PTC, Tasks & Offerwalls",
+      "enabled": 1,
+      "app_id": "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
+      "iframe_url_template": "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
+      "secret_key": "",
+      "hold_days": 0,
+      "postback_macro_query": ""
+    }
+  ]
+}
