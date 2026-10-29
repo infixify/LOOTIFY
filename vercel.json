@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/postback", "destination": "/api/postback.js" },
+    { "source": "/api/postback/(.*)", "destination": "/api/postback.js" }
+  ]
+}

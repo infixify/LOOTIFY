@@ -1868,10 +1868,10 @@ export default {
       }
 
       // If anyone or Offerwall crawler visits root / frontend pages on the Worker URL,
-      // seamlessly proxy to your GitHub Pages website (lootify.eternant.c0m.to)
+      // seamlessly proxy to your GitHub Pages website (sarthaksinghyadav1.github.io)
       try {
         const ghUrl = new URL(request.url);
-        ghUrl.hostname = "lootify.eternant.c0m.to";
+        ghUrl.hostname = "sarthaksinghyadav1.github.io";
         ghUrl.protocol = "https:";
         ghUrl.port = "";
         const ghReq = new Request(ghUrl.toString(), {
