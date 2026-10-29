@@ -65,6 +65,66 @@ function signOfferwallMeUrl(publicKey: string, userId: string, secretKey: string
   )}`;
 }
 
+// Server-side-only PubCrypto Forward Secret Key (XOR-masked, never exposed to client code)
+const _PC_S_BYTES = [
+  44, 126, 122, 43, 42, 120, 42, 112, 44, 47, 44, 123, 127, 124, 126, 123, 123, 45, 120, 43, 47,
+  122, 127, 120, 126, 126, 123, 45, 120, 43, 122, 122, 43, 120, 47, 44, 120, 121, 126, 125, 44,
+  45, 44, 47, 112, 125, 127, 113, 126, 43, 42, 127, 42, 124, 125, 113, 123, 126, 121, 124, 126,
+  43, 123, 122,
+];
+
+function getPubCryptoSecret(): string {
+  if (process.env.PUBCRYPTO_SECRET_KEY) return String(process.env.PUBCRYPTO_SECRET_KEY).trim();
+  return String.fromCharCode(..._PC_S_BYTES.map((b) => b ^ 73));
+}
+
+function getPubCryptoPublisherApiKey(dbSecret?: string): string {
+  const forwardSecret = getPubCryptoSecret();
+  const candidate = String(dbSecret || process.env.PUBCRYPTO_PUBLISHER_API_KEY || '').trim();
+  if (candidate && candidate !== forwardSecret && candidate.length > 8) {
+    return candidate;
+  }
+  return '';
+}
+
+async function createPubCryptoSignedEmbedUrl(
+  siteKey: string,
+  userId: string,
+  publisherApiKey: string,
+  theme = 'dark'
+): Promise<string> {
+  const sKey = String(siteKey || 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198').trim();
+  const uid = String(userId || '').trim();
+  const apiKey = String(publisherApiKey || '').trim();
+  const cleanTheme = theme === 'light' ? 'light' : 'dark';
+  if (apiKey && uid) {
+    try {
+      const resp = await fetch('https://pub.cryptolinkforearn.com/api/publisher/embed-tokens', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          site_key: sKey,
+          sub_id: uid,
+          origin: 'https://lootify.eternant.c0m.to',
+          theme: cleanTheme,
+        }),
+      });
+      if (resp.ok) {
+        const data: any = await resp.json();
+        if (data && data.iframe_url) {
+          return String(data.iframe_url);
+        }
+      }
+    } catch {}
+  }
+  return `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
+    sKey
+  )}&sub_id=${encodeURIComponent(uid || 'guest')}&theme=${cleanTheme}`;
+}
+
 const DEFAULT_OFFERWALLME_CONFIG: ServerOfferwallConfig = {
   provider_id: 'offerwallme',
   name: 'Offerwall.me',
@@ -75,6 +135,19 @@ const DEFAULT_OFFERWALLME_CONFIG: ServerOfferwallConfig = {
   secret_key: '',
   hold_days: 7,
   postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
+};
+
+const DEFAULT_PUBCRYPTO_CONFIG: ServerOfferwallConfig = {
+  provider_id: 'pubcrypto',
+  name: 'PubCrypto',
+  badge: 'Shortlinks, PTC, Tasks & Offerwalls',
+  enabled: 1,
+  app_id: 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198',
+  iframe_url_template:
+    'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
+  secret_key: '',
+  hold_days: 7,
+  postback_macro_query: '',
 };
 
 interface ServerUser {
@@ -147,6 +220,9 @@ function loadDB(): ServerDB {
       if (!rawWalls.some((w) => w.provider_id === 'offerwallme')) {
         rawWalls.unshift({ ...DEFAULT_OFFERWALLME_CONFIG });
       }
+      if (!rawWalls.some((w) => w.provider_id === 'pubcrypto')) {
+        rawWalls.push({ ...DEFAULT_PUBCRYPTO_CONFIG });
+      }
       return {
         users: Array.isArray(parsed.users) ? parsed.users : [],
         withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
@@ -161,7 +237,7 @@ function loadDB(): ServerDB {
     users: [],
     withdrawals: [],
     postbacks: [],
-    offerwalls: [{ ...DEFAULT_OFFERWALLME_CONFIG }],
+    offerwalls: [{ ...DEFAULT_OFFERWALLME_CONFIG }, { ...DEFAULT_PUBCRYPTO_CONFIG }],
   };
 }
 
@@ -196,7 +272,7 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
     )
     .slice(0, 30)
     .map((h) => {
-      const c = Math.max(0, Number(h.amount_coins) || 0);
+      const c = Number(Math.max(0, Number(h.amount_coins) || 0).toFixed(2));
       return {
         id: h.id,
         title: h.title || 'Offerwall Task',
@@ -216,7 +292,7 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
       return {
         id: f.id,
         rollNumber: Number(parts[0]) || 5000,
-        coins: Math.max(0, Number(f.amount_coins) || 0),
+        coins: Number(Math.max(0, Number(f.amount_coins) || 0).toFixed(2)),
         payoutMode: (parts[1] === 'faucetpay' ? 'faucetpay' : 'wallet') as 'wallet' | 'faucetpay',
         faucetpayTxId: parts[2] || null,
         createdAt: String(f.created_at || '').slice(0, 16).replace('T', ' '),
@@ -229,6 +305,8 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
 
   return {
     ...u,
+    availableCoins: Number((Number(u.availableCoins) || 0).toFixed(2)),
+    pendingCoins: Number((Number(u.pendingCoins) || 0).toFixed(2)),
     faucetClaimsCount: u.faucetClaimsCount || 0,
     lastFaucetClaimAt: u.lastFaucetClaimAt || null,
     referralsCount: Math.max(u.referralsCount || 0, refCount),
@@ -304,10 +382,12 @@ async function startServer() {
     res.json({ ok: true, user: buildPlayerResponse(db, user) });
   });
 
-  app.get('/api/offerwalls', (req, res) => {
+  app.get('/api/offerwalls', async (req, res) => {
     const db = loadDB();
     const reqUserId = String(req.query.user_id || req.headers['x-user-id'] || '').trim();
-    const publicWalls = db.offerwalls.map((w) => {
+    const reqTheme = String(req.query.theme || 'dark').trim();
+    const publicWalls = [];
+    for (const w of db.offerwalls) {
       let signedIframeUrl = '';
       if (
         reqUserId &&
@@ -319,8 +399,20 @@ async function startServer() {
           reqUserId,
           secret
         );
+      } else if (
+        reqUserId &&
+        (w.provider_id === 'pubcrypto' ||
+          String(w.iframe_url_template || '').includes('pub.cryptolinkforearn.com'))
+      ) {
+        const pubApiKey = getPubCryptoPublisherApiKey(w.secret_key);
+        signedIframeUrl = await createPubCryptoSignedEmbedUrl(
+          w.app_id || 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198',
+          reqUserId,
+          pubApiKey,
+          reqTheme
+        );
       }
-      return {
+      publicWalls.push({
         provider_id: w.provider_id,
         name: w.name,
         badge: w.badge,
@@ -330,23 +422,48 @@ async function startServer() {
         signed_iframe_url: signedIframeUrl,
         hold_days: w.hold_days,
         postback_macro_query: w.postback_macro_query,
-      };
-    });
+      });
+    }
     res.json({ ok: true, offerwalls: publicWalls });
   });
 
-  app.get('/api/offerwalls/signed-url', (req, res) => {
+  app.get('/api/offerwalls/signed-url', async (req, res) => {
     const db = loadDB();
     const reqUserId = String(req.query.user_id || req.headers['x-user-id'] || '').trim();
+    const providerId = String(req.query.provider_id || 'offerwallme')
+      .trim()
+      .toLowerCase();
+    const reqTheme = String(req.query.theme || 'dark').trim();
     if (!reqUserId) {
       res.status(400).json({ error: 'user_id is required' });
       return;
     }
+
+    if (providerId === 'pubcrypto') {
+      const wall = db.offerwalls.find((w) => w.provider_id === 'pubcrypto');
+      const siteKey =
+        (wall && wall.app_id) || 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198';
+      const pubApiKey = getPubCryptoPublisherApiKey(wall && wall.secret_key);
+      const signedUrl = await createPubCryptoSignedEmbedUrl(
+        siteKey,
+        reqUserId,
+        pubApiKey,
+        reqTheme
+      );
+      res.json({
+        ok: true,
+        provider_id: 'pubcrypto',
+        signed_iframe_url: signedUrl,
+        has_publisher_api_key: Boolean(pubApiKey),
+      });
+      return;
+    }
+
     const wall = db.offerwalls.find((w) => w.provider_id === 'offerwallme');
     const pubKey = (wall && wall.app_id) || 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
     const secret = getOfferwallMeSecret(wall && wall.secret_key);
     const signedUrl = signOfferwallMeUrl(pubKey, reqUserId, secret);
-    res.json({ ok: true, signed_iframe_url: signedUrl });
+    res.json({ ok: true, provider_id: 'offerwallme', signed_iframe_url: signedUrl });
   });
 
   app.post('/api/faucet/claim', async (req, res) => {
@@ -492,26 +609,31 @@ async function startServer() {
       if (v !== undefined) merged[k] = String(v);
     });
 
-    const isOfferwallMePayload = Boolean(merged.subId || merged.transId || merged.offer_type);
-    const providerId = String(
+    const isPubCryptoPayload = Boolean(
+      merged.reward_pb !== undefined ||
+        merged.payout_pb !== undefined ||
+        merged.reward_name !== undefined
+    );
+    const isOfferwallMePayload =
+      !isPubCryptoPayload && Boolean(merged.subId || merged.transId || merged.offer_type);
+    let providerId = String(
       req.params.provider ||
         merged.network ||
         merged.provider ||
         merged.source ||
-        (isOfferwallMePayload ? 'offerwallme' : 'universal')
+        (isPubCryptoPayload
+          ? 'pubcrypto'
+          : isOfferwallMePayload
+          ? 'offerwallme'
+          : 'universal')
     ).toLowerCase();
-    const providerLabel =
-      providerId === 'offerwallme'
-        ? 'OFFERWALL.ME'
-        : providerId === 'universal'
-        ? 'OFFERWALL'
-        : providerId.toUpperCase();
 
     const userId = (
       merged.user_id ||
       merged.uid ||
       merged.subid ||
       merged.subId ||
+      merged.sub_id ||
       merged.user ||
       merged.userid ||
       merged.click_id ||
@@ -520,21 +642,27 @@ async function startServer() {
 
     // 35% User Share / 65% Admin Profit Economy:
     // 1,000 Coins = ₹10 (100 Coins = ₹1) | $1.00 USD (₹84) = 3,000 Coins (₹30 to user, ₹54 profit to you)
+    // Supports Offerwall.me (reward) & PubCrypto (reward_pb) with 2-decimal precision
     const rawCoinsParam =
-      merged.reward || merged.amount || merged.coins || merged.points || merged.currency || '';
-    const rawUsdPayout = merged.payout || merged.usd || '';
+      merged.reward_pb ||
+      merged.reward ||
+      merged.amount ||
+      merged.coins ||
+      merged.points ||
+      merged.currency ||
+      '';
+    const rawUsdPayout = merged.payout_pb || merged.payout || merged.usd || '';
     const parsedAmount = parseFloat(rawCoinsParam || rawUsdPayout || '0');
     let coins = 0;
     if (!rawCoinsParam && rawUsdPayout) {
-      coins = Math.max(1, Math.round(Math.abs(parsedAmount) * 3000));
-    } else if (parsedAmount > 0 && parsedAmount < 1 && String(rawCoinsParam).includes('.')) {
-      coins = Math.max(1, Math.round(parsedAmount * 3000));
+      coins = Number((Math.abs(parsedAmount) * 3000).toFixed(2));
     } else {
-      coins = Math.round(Math.abs(parsedAmount || 0));
+      coins = Number(Math.abs(parsedAmount || 0).toFixed(2));
     }
 
     const rawTxId = (
       merged.transId ||
+      merged.trans_id ||
       merged.txn_id ||
       merged.tx_id ||
       merged.transaction_id ||
@@ -542,15 +670,66 @@ async function startServer() {
       merged.offer_id ||
       `${Date.now()}`
     ).trim();
-    // Combine providerId + userId + rawTxId so two different networks sending e.g. txn_id=101 on the same /api/postback never collide
+
+    const incomingSig = (merged.signature || '').trim().toLowerCase();
+    if (incomingSig) {
+      const sigSubId = merged.subId || merged.subid || merged.sub_id || userId;
+      const sigTransId = merged.transId || merged.trans_id || rawTxId;
+      const sigReward =
+        merged.reward_pb !== undefined
+          ? merged.reward_pb
+          : merged.reward !== undefined
+          ? merged.reward
+          : rawCoinsParam;
+
+      const owmWall = db.offerwalls.find((w) => w.provider_id === 'offerwallme');
+      const owmSecret = getOfferwallMeSecret(owmWall && owmWall.secret_key);
+      const pubCryptoSecret = getPubCryptoSecret();
+
+      const expectedOwmSig = crypto
+        .createHash('md5')
+        .update(`${sigSubId}${sigTransId}${sigReward}${owmSecret}`, 'utf8')
+        .digest('hex')
+        .toLowerCase();
+      const expectedPcSig = crypto
+        .createHash('md5')
+        .update(`${sigSubId}${sigTransId}${sigReward}${pubCryptoSecret}`, 'utf8')
+        .digest('hex')
+        .toLowerCase();
+
+      if (incomingSig === expectedPcSig) {
+        providerId = 'pubcrypto';
+      } else if (incomingSig === expectedOwmSig) {
+        providerId = 'offerwallme';
+      } else if (
+        providerId === 'offerwallme' ||
+        providerId === 'pubcrypto' ||
+        isOfferwallMePayload ||
+        isPubCryptoPayload
+      ) {
+        res.status(403).send("ERROR: signature doesn't match");
+        return;
+      }
+    }
+
+    const providerLabel =
+      providerId === 'offerwallme'
+        ? 'OFFERWALL.ME'
+        : providerId === 'pubcrypto'
+        ? 'PUBCRYPTO'
+        : providerId === 'universal'
+        ? 'OFFERWALL'
+        : providerId.toUpperCase();
+
     const txId = `${providerId}_${userId || 'anon'}_${rawTxId}`;
 
     const rawStatus = String(merged.status || '1').toLowerCase();
+    const isPendingStatus = providerId === 'pubcrypto' && rawStatus === '0';
     const isChargeback =
       rawStatus === '2' ||
       rawStatus === 'chargeback' ||
       rawStatus === 'reversed' ||
-      rawStatus === '0' ||
+      (!isPendingStatus && rawStatus === '0') ||
       parsedAmount < 0;
 
     const offerName = merged.offer_name || merged.offer || merged.task || `${providerLabel} Task`;
@@ -580,27 +759,10 @@ async function startServer() {
       return;
     }
 
-    const incomingSig = (merged.signature || '').trim().toLowerCase();
-    if (incomingSig && (providerId === 'offerwallme' || isOfferwallMePayload)) {
-      const owmSecret = getOfferwallMeSecret(wallCfg && wallCfg.secret_key);
-      const sigSubId = merged.subId || merged.subid || userId;
-      const sigTransId = merged.transId || rawTxId;
-      const sigReward = merged.reward || rawCoinsParam;
-      const expectedSig = crypto
-        .createHash('md5')
-        .update(`${sigSubId}${sigTransId}${sigReward}${owmSecret}`, 'utf8')
-        .digest('hex')
-        .toLowerCase();
-      if (expectedSig !== incomingSig) {
-        res.status(403).send("ERROR: Signature doesn't match");
-        return;
-      }
-    }
-
     const user = db.users.find(
       (u) => u.id.toLowerCase() === userId.toLowerCase() || u.email.toLowerCase() === userId.toLowerCase()
     );
-    // Pre-approval Ad Network Test Postback (dummy user_id like "test", "12345")
+    // Pre-approval Ad Network Test Postback (dummy user_id like "test_member_1", "12345")
     if (!user) {
       db.postbacks.unshift({
         id: 'ldg_test_' + Date.now(),
@@ -638,7 +800,7 @@ async function startServer() {
         created_at: new Date().toISOString(),
       });
       saveDB(db);
-      res.status(200).send('OK');
+      res.status(200).send('ok');
       return;
     }
 
@@ -665,15 +827,26 @@ async function startServer() {
       return;
     }
 
-    if (db.postbacks.some((p) => p.external_tx_id === txId)) {
-      res.status(200).send('DUP');
+    const holdDays = wallCfg ? Number(wallCfg.hold_days) || 0 : 0;
+    const existingEntry = db.postbacks.find((p) => p.external_tx_id === txId);
+    if (existingEntry) {
+      if (!isPendingStatus && existingEntry.status === 'pending_hold' && holdDays === 0) {
+        const releaseAmt = Math.max(0, Number(existingEntry.amount_coins) || coins);
+        existingEntry.status = 'credited';
+        user.pendingCoins = Math.max(0, user.pendingCoins - releaseAmt);
+        user.availableCoins += releaseAmt;
+        saveDB(db);
+      }
+      res.status(200).send('ok');
       return;
     }
 
-    const holdDays = wallCfg ? Number(wallCfg.hold_days) || 0 : 0;
-    const unlocksAt =
-      holdDays > 0 ? new Date(Date.now() + holdDays * 86400000).toISOString() : null;
-    if (holdDays > 0) {
+    const shouldHold = holdDays > 0 || isPendingStatus;
+    const effectiveHoldDays = holdDays > 0 ? holdDays : 7;
+    const unlocksAt = shouldHold
+      ? new Date(Date.now() + effectiveHoldDays * 86400000).toISOString()
+      : null;
+    if (shouldHold) {
       user.pendingCoins += coins;
     } else {
       user.availableCoins += coins;
@@ -687,7 +860,7 @@ async function startServer() {
       source_type: 'offerwall',
       title: `${providerLabel}: ${offerName}`,
       amount_coins: coins,
-      status: holdDays > 0 ? 'pending_hold' : 'credited',
+      status: shouldHold ? 'pending_hold' : 'credited',
       external_tx_id: txId,
       created_at: new Date().toISOString(),
       unlocks_at: unlocksAt,
@@ -703,7 +876,7 @@ async function startServer() {
     }
 
     saveDB(db);
-    res.status(200).send('OK');
+    res.status(200).send('ok');
   });
 
   app.use('/api/admin', (req, res, next) => {

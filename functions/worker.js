@@ -133,6 +133,25 @@ async function ensureSchema(db) {
       )
       .run();
 
+    // Auto-seed approved PubCrypto placement (pub.cryptolinkforearn.com — Site Key: site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198)
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO offerwall_configs (
+          provider_id, name, badge, enabled, app_id, iframe_url_template, secret_key, hold_days, postback_macro_query
+        ) VALUES (
+          'pubcrypto',
+          'PubCrypto',
+          'Shortlinks, PTC, Tasks & Offerwalls',
+          1,
+          'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198',
+          'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
+          '',
+          7,
+          ''
+        )`
+      )
+      .run();
+
     // One-time upgrade so existing offerwallme row defaults to 7-day hold if still at 0
     try {
       await db
@@ -170,6 +189,60 @@ function getOfferwallMeSecret(env, dbSecret) {
   if (dbSecret && String(dbSecret).trim().length > 8) return String(dbSecret).trim();
   if (env && env.OFFERWALLME_SECRET_KEY) return String(env.OFFERWALLME_SECRET_KEY).trim();
   return String.fromCharCode(..._OWM_S_BYTES.map((b) => b ^ 73));
+}
+
+// Server-side-only PubCrypto Forward Secret Key (XOR-masked, never exposed to client code)
+const _PC_S_BYTES = [
+  44, 126, 122, 43, 42, 120, 42, 112, 44, 47, 44, 123, 127, 124, 126, 123, 123, 45, 120, 43, 47,
+  122, 127, 120, 126, 126, 123, 45, 120, 43, 122, 122, 43, 120, 47, 44, 120, 121, 126, 125, 44,
+  45, 44, 47, 112, 125, 127, 113, 126, 43, 42, 127, 42, 124, 125, 113, 123, 126, 121, 124, 126,
+  43, 123, 122,
+];
+function getPubCryptoSecret(env) {
+  if (env && env.PUBCRYPTO_SECRET_KEY) return String(env.PUBCRYPTO_SECRET_KEY).trim();
+  return String.fromCharCode(..._PC_S_BYTES.map((b) => b ^ 73));
+}
+
+function getPubCryptoPublisherApiKey(env, dbSecret) {
+  const forwardSecret = getPubCryptoSecret(env);
+  const candidate = String(dbSecret || (env && env.PUBCRYPTO_PUBLISHER_API_KEY) || "").trim();
+  if (candidate && candidate !== forwardSecret && candidate.length > 8) {
+    return candidate;
+  }
+  return "";
+}
+
+async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark") {
+  const sKey = String(siteKey || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198").trim();
+  const uid = String(userId || "").trim();
+  const apiKey = String(publisherApiKey || "").trim();
+  const cleanTheme = theme === "light" ? "light" : "dark";
+  if (apiKey && uid) {
+    try {
+      const resp = await fetch("https://pub.cryptolinkforearn.com/api/publisher/embed-tokens", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          site_key: sKey,
+          sub_id: uid,
+          origin: "https://lootify.eternant.c0m.to",
+          theme: cleanTheme,
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && data.iframe_url) {
+          return String(data.iframe_url);
+        }
+      }
+    } catch {}
+  }
+  return `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
+    sKey
+  )}&sub_id=${encodeURIComponent(uid || "guest")}&theme=${cleanTheme}`;
 }
 
 // Server-side-only FaucetPay Owner API Key (XOR-masked, never exposed to client code)
@@ -448,7 +521,7 @@ async function formatPlayerPayload(db, userRow) {
     .all();
 
   const heldRewards = ((heldRes && heldRes.results) || []).map((h) => {
-    const c = Math.max(0, Number(h.amount_coins) || 0);
+    const c = Number(Math.max(0, Number(h.amount_coins) || 0).toFixed(2));
     return {
       id: h.id,
       title: h.title || "Offerwall Task",
@@ -473,7 +546,7 @@ async function formatPlayerPayload(db, userRow) {
     return {
       id: f.id,
       rollNumber: Number(parts[0]) || 5000,
-      coins: Math.max(0, Number(f.amount_coins) || 0),
+      coins: Number(Math.max(0, Number(f.amount_coins) || 0).toFixed(2)),
       payoutMode: parts[1] === "faucetpay" ? "faucetpay" : "wallet",
       faucetpayTxId: parts[2] || null,
       createdAt: String(f.created_at || "").slice(0, 16).replace("T", " "),
@@ -493,8 +566,8 @@ async function formatPlayerPayload(db, userRow) {
     authProvider: String(freshUser.id).startsWith("usr_g_") ? "google" : "email",
     referralCode: freshUser.referral_code,
     referredBy: freshUser.referred_by || null,
-    availableCoins: Number(freshUser.available_coins) || 0,
-    pendingCoins: Number(freshUser.pending_coins) || 0,
+    availableCoins: Number((Number(freshUser.available_coins) || 0).toFixed(2)),
+    pendingCoins: Number((Number(freshUser.pending_coins) || 0).toFixed(2)),
     questsCompleted,
     referralsCount: Number(refCountRow && refCountRow.cnt) || 0,
     faucetClaimsCount: Number(freshUser.faucet_claims_count) || 0,
@@ -835,6 +908,7 @@ export default {
           request.headers.get("x-user-id") ||
           ""
         ).trim();
+        const reqTheme = (url.searchParams.get("theme") || "dark").trim();
 
         const rows = await env.DB.prepare(
           "SELECT provider_id, name, badge, enabled, app_id, iframe_url_template, secret_key, hold_days, postback_macro_query FROM offerwall_configs ORDER BY rowid ASC"
@@ -854,6 +928,18 @@ export default {
               w.app_id || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd",
               reqUserId,
               secret
+            );
+          } else if (
+            reqUserId &&
+            (w.provider_id === "pubcrypto" ||
+              String(w.iframe_url_template || "").includes("pub.cryptolinkforearn.com"))
+          ) {
+            const pubApiKey = getPubCryptoPublisherApiKey(env, w.secret_key);
+            signedIframeUrl = await createPubCryptoSignedEmbedUrl(
+              w.app_id || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
+              reqUserId,
+              pubApiKey,
+              reqTheme
             );
           }
           publicWalls.push({
@@ -881,12 +967,41 @@ export default {
           request.headers.get("x-user-id") ||
           ""
         ).trim();
+        const providerId = (url.searchParams.get("provider_id") || "offerwallme")
+          .trim()
+          .toLowerCase();
+        const reqTheme = (url.searchParams.get("theme") || "dark").trim();
         if (!reqUserId) {
           return Response.json(
             { error: "user_id is required" },
             { status: 400, headers: corsHeaders }
           );
         }
+
+        if (providerId === "pubcrypto") {
+          const cfg = await env.DB.prepare(
+            "SELECT app_id, secret_key FROM offerwall_configs WHERE provider_id = 'pubcrypto'"
+          ).first();
+          const siteKey =
+            (cfg && cfg.app_id) || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198";
+          const pubApiKey = getPubCryptoPublisherApiKey(env, cfg && cfg.secret_key);
+          const signedUrl = await createPubCryptoSignedEmbedUrl(
+            siteKey,
+            reqUserId,
+            pubApiKey,
+            reqTheme
+          );
+          return Response.json(
+            {
+              ok: true,
+              provider_id: "pubcrypto",
+              signed_iframe_url: signedUrl,
+              has_publisher_api_key: Boolean(pubApiKey),
+            },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+
         const cfg = await env.DB.prepare(
           "SELECT app_id, secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
         ).first();
@@ -894,7 +1009,7 @@ export default {
         const secret = getOfferwallMeSecret(env, cfg && cfg.secret_key);
         const signedUrl = await signOfferwallMeUrl(pubKey, reqUserId, secret);
         return Response.json(
-          { ok: true, signed_iframe_url: signedUrl },
+          { ok: true, provider_id: "offerwallme", signed_iframe_url: signedUrl },
           { status: 200, headers: corsHeaders }
         );
       }
@@ -1029,22 +1144,27 @@ export default {
         }
 
         const rawLastSegment = url.pathname.split("/").filter(Boolean).pop() || "universal";
-        const isOfferwallMePayload = Boolean(
-          params.get("subId") || params.get("transId") || params.get("offer_type")
+        const isPubCryptoPayload = Boolean(
+          params.get("reward_pb") !== null ||
+            params.get("payout_pb") !== null ||
+            params.get("reward_name") !== null
         );
-        const providerId = (
+        const isOfferwallMePayload =
+          !isPubCryptoPayload &&
+          Boolean(params.get("subId") || params.get("transId") || params.get("offer_type"));
+        let providerId = (
           params.get("network") ||
           params.get("provider") ||
           (rawLastSegment.toLowerCase() !== "postback"
             ? rawLastSegment
+            : isPubCryptoPayload
+            ? "pubcrypto"
             : isOfferwallMePayload
             ? "offerwallme"
             : "universal")
         )
           .trim()
           .toLowerCase();
-        const providerLabel =
-          providerId === "offerwallme" ? "OFFERWALL.ME" : providerId.toUpperCase();
 
         // Normalize User ID across ALL offerwall networks
         const userId = (
@@ -1052,6 +1172,7 @@ export default {
           params.get("uid") ||
           params.get("subid") ||
           params.get("subId") ||
+          params.get("sub_id") ||
           params.get("user") ||
           params.get("userid") ||
           params.get("click_id") ||
@@ -1059,8 +1180,18 @@ export default {
         ).trim();
 
         // Normalize Reward / Amount (35% User Share: $1 USD = 3,000 Coins = ₹30)
-        const rawPayoutUsd = params.get("payout") || params.get("usd") || "";
+        // Supports Offerwall.me (reward) & PubCrypto (reward_pb) with 2-decimal precision
+        const rawPayoutUsd =
+          params.get("payout_pb") || params.get("payout") || params.get("usd") || "";
+        const hasExplicitCoinParam = Boolean(
+          params.get("reward_pb") ||
+            params.get("reward") ||
+            params.get("coins") ||
+            params.get("points") ||
+            params.get("amount")
+        );
         const rawAmount =
+          params.get("reward_pb") ||
           params.get("reward") ||
           params.get("amount") ||
           params.get("coins") ||
@@ -1070,17 +1201,15 @@ export default {
           "0";
         const parsedAmount = parseFloat(rawAmount);
 
-        // If network sent USD decimal (or `payout` param), convert at 35% share ($1 = 3,000 Coins)
         const coins =
-          rawPayoutUsd && !params.get("amount") && !params.get("coins") && !params.get("reward")
-            ? Math.max(1, Math.round(Math.abs(parseFloat(rawPayoutUsd) || 0) * 3000))
-            : parsedAmount > 0 && parsedAmount < 1 && rawAmount.includes(".")
-            ? Math.max(1, Math.round(parsedAmount * 3000))
-            : Math.round(Math.abs(parsedAmount || 0));
+          rawPayoutUsd && !hasExplicitCoinParam
+            ? Number((Math.abs(parseFloat(rawPayoutUsd) || 0) * 3000).toFixed(2))
+            : Number(Math.abs(parsedAmount || 0).toFixed(2));
 
-        // Normalize Transaction ID & scope with userId so multiple networks on 1 URL never collide
+        // Normalize Transaction ID
         const rawTxId = (
           params.get("transId") ||
+          params.get("trans_id") ||
           params.get("txn_id") ||
           params.get("tx_id") ||
           params.get("transaction_id") ||
@@ -1088,15 +1217,64 @@ export default {
           params.get("offer_id") ||
           `tx_${Date.now()}`
         ).trim();
+
+        // Verify Offerwall.me OR PubCrypto MD5 signature (`md5(subId + transId + reward + secretKey)`)
+        const incomingSig = (params.get("signature") || "").trim().toLowerCase();
+        if (incomingSig) {
+          const sigSubId =
+            params.get("subId") || params.get("subid") || params.get("sub_id") || userId;
+          const sigTransId = params.get("transId") || params.get("trans_id") || rawTxId;
+          const sigReward =
+            params.get("reward_pb") !== null
+              ? params.get("reward_pb")
+              : params.get("reward") !== null
+              ? params.get("reward")
+              : rawAmount;
+
+          const owmCfg = await env.DB.prepare(
+            "SELECT secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
+          ).first();
+          const owmSecret = getOfferwallMeSecret(env, owmCfg && owmCfg.secret_key);
+          const pubCryptoSecret = getPubCryptoSecret(env);
+
+          const expectedOwmSig = md5Hex(`${sigSubId}${sigTransId}${sigReward}${owmSecret}`);
+          const expectedPcSig = md5Hex(`${sigSubId}${sigTransId}${sigReward}${pubCryptoSecret}`);
+
+          if (incomingSig === expectedPcSig) {
+            providerId = "pubcrypto";
+          } else if (incomingSig === expectedOwmSig) {
+            providerId = "offerwallme";
+          } else if (
+            providerId === "offerwallme" ||
+            providerId === "pubcrypto" ||
+            isOfferwallMePayload ||
+            isPubCryptoPayload
+          ) {
+            return new Response("ERROR: signature doesn't match", {
+              status: 403,
+              headers: corsHeaders,
+            });
+          }
+        }
+
+        const providerLabel =
+          providerId === "offerwallme"
+            ? "OFFERWALL.ME"
+            : providerId === "pubcrypto"
+            ? "PUBCRYPTO"
+            : providerId.toUpperCase();
         const txId = `${providerId}_${userId || "anon"}_${rawTxId}`;
 
-        // Normalize Status
+        // Normalize Status:
+        // In PubCrypto: status=0 is Pending, status=1 is Credit, status=2 is Chargeback
+        // In Offerwall.me: status=1 is Credit, status=2 is Chargeback
         const rawStatus = (params.get("status") || params.get("type") || "1").toLowerCase();
+        const isPendingStatus = providerId === "pubcrypto" && rawStatus === "0";
         const isChargeback =
           rawStatus === "2" ||
           rawStatus === "chargeback" ||
           rawStatus === "reversed" ||
-          rawStatus === "0" ||
+          (!isPendingStatus && rawStatus === "0") ||
           rawStatus === "-1" ||
           parsedAmount < 0;
 
@@ -1104,7 +1282,7 @@ export default {
           params.get("offer_name") ||
           params.get("offer") ||
           params.get("task") ||
-          `Offerwall Task`;
+          (providerId === "pubcrypto" ? "PubCrypto Task" : "Offerwall Task");
 
         // Pre-approval Ad Network verification ping -> Always return 200 OK ("ok")
         if (!userId || userId.includes("{") || userId.includes("[") || coins <= 0) {
@@ -1116,7 +1294,7 @@ export default {
                 "ldg_ping_" + Date.now(),
                 userId || "NETWORK_VERIFIER",
                 "Ad Network Reviewer",
-                `[PRE-APPROVAL VERIFY PING] Universal Postback Checked`,
+                `[${providerLabel} VERIFY PING] Universal Postback Checked`,
                 coins || 0,
                 txId
               )
@@ -1125,7 +1303,6 @@ export default {
           return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
-        // Verify Offerwall.me MD5 signature (`md5(subId + transId + reward + secretKey)`) or custom secret if provided
         let holdDays = 0;
         try {
           const cfg = await env.DB.prepare(
@@ -1140,20 +1317,6 @@ export default {
               return new Response("ERROR: INVALID_SECRET", { status: 403, headers: corsHeaders });
             }
           }
-          const incomingSig = (params.get("signature") || "").trim().toLowerCase();
-          if (incomingSig && (providerId === "offerwallme" || isOfferwallMePayload)) {
-            const owmSecret = getOfferwallMeSecret(env, cfg && cfg.secret_key);
-            const sigSubId = params.get("subId") || params.get("subid") || userId;
-            const sigTransId = params.get("transId") || rawTxId;
-            const sigReward = params.get("reward") || rawAmount;
-            const expectedSig = md5Hex(`${sigSubId}${sigTransId}${sigReward}${owmSecret}`);
-            if (expectedSig !== incomingSig) {
-              return new Response("ERROR: Signature doesn't match", {
-                status: 403,
-                headers: corsHeaders,
-              });
-            }
-          }
         } catch {}
 
         // Find user by ID or Email
@@ -1164,7 +1327,7 @@ export default {
             .first();
         }
 
-        // Pre-approval test postback with dummy user_id (e.g. "test", "12345") -> Return 200 OK ("ok")
+        // Pre-approval test postback with dummy user_id (e.g. "test_member_1", "12345") -> Return 200 OK ("ok")
         if (!user) {
           try {
             await env.DB.prepare(
@@ -1174,7 +1337,7 @@ export default {
                 "ldg_test_" + Date.now(),
                 userId,
                 "Network Test User",
-                `[NETWORK TEST POSTBACK] ${offerName}`,
+                `[${providerLabel} TEST POSTBACK] ${offerName}`,
                 coins,
                 txId
               )
@@ -1235,18 +1398,30 @@ export default {
           return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
-        // Duplicate Transaction Check
+        // Duplicate Transaction Check (Always reply "ok" so PubCrypto/Offerwall.me mark delivery as successful)
         const duplicate = await env.DB.prepare(
-          "SELECT id FROM ledger_entries WHERE external_tx_id = ?"
+          "SELECT id, status, amount_coins FROM ledger_entries WHERE external_tx_id = ?"
         )
           .bind(txId)
           .first();
         if (duplicate) {
-          return new Response("DUP", { status: 200, headers: corsHeaders });
+          if (!isPendingStatus && duplicate.status === "pending_hold" && holdDays === 0) {
+            const releaseAmt = Math.max(0, Number(duplicate.amount_coins) || coins);
+            await env.DB.prepare("UPDATE ledger_entries SET status = 'credited' WHERE id = ?")
+              .bind(duplicate.id)
+              .run();
+            await env.DB.prepare(
+              "UPDATE users SET pending_coins = MAX(0, pending_coins - ?), available_coins = available_coins + ? WHERE id = ?"
+            )
+              .bind(releaseAmt, releaseAmt, user.id)
+              .run();
+          }
+          return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
-        if (holdDays > 0) {
-          const unlocksAt = new Date(Date.now() + holdDays * 86400000).toISOString();
+        if (holdDays > 0 || isPendingStatus) {
+          const effectiveHoldDays = holdDays > 0 ? holdDays : 7;
+          const unlocksAt = new Date(Date.now() + effectiveHoldDays * 86400000).toISOString();
           await env.DB.prepare(
             "UPDATE users SET pending_coins = pending_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ?, offerwalls_completed = offerwalls_completed + 1 WHERE id = ?"
           )

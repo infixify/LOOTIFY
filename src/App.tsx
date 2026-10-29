@@ -4,9 +4,10 @@ import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ThemeMode, Wi
 const STORAGE_USER_KEY = 'lootify_player_user';
 const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
 const STORAGE_API_BASE_KEY = 'lootify_api_base_url';
-const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v3';
+const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v4';
 
 const OFFERWALLME_PUBLIC_KEY = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
+const PUBCRYPTO_SITE_KEY = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198';
 const _OWM_S_BYTES = [
   47, 123, 124, 33, 38, 28, 35, 45, 27, 11, 24, 57, 28, 43, 43, 38, 46, 1, 14, 28, 125, 40, 6, 43,
   17, 120, 37, 43, 126, 30, 123, 125,
@@ -21,6 +22,18 @@ const DEFAULT_OFFERWALLME_WALL: OfferwallConfig = {
   iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
   hold_days: 7,
   postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
+};
+
+const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
+  provider_id: 'pubcrypto',
+  name: 'PubCrypto',
+  badge: 'Shortlinks, PTC, Tasks & Offerwalls',
+  enabled: 1,
+  app_id: PUBCRYPTO_SITE_KEY,
+  iframe_url_template:
+    'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
+  hold_days: 7,
+  postback_macro_query: '',
 };
 
 async function buildSignedOfferwallMeUrl(publicKey: string, userId: string): Promise<string> {
@@ -118,11 +131,14 @@ function loadCachedOfferwalls(): OfferwallConfig[] {
         if (!parsed.some((w: OfferwallConfig) => w.provider_id === 'offerwallme')) {
           parsed.unshift({ ...DEFAULT_OFFERWALLME_WALL });
         }
+        if (!parsed.some((w: OfferwallConfig) => w.provider_id === 'pubcrypto')) {
+          parsed.push({ ...DEFAULT_PUBCRYPTO_WALL });
+        }
         return parsed;
       }
     }
   } catch {}
-  return [{ ...DEFAULT_OFFERWALLME_WALL }];
+  return [{ ...DEFAULT_OFFERWALLME_WALL }, { ...DEFAULT_PUBCRYPTO_WALL }];
 }
 
 function saveCachedOfferwalls(walls: OfferwallConfig[]) {
@@ -245,10 +261,12 @@ export default function App() {
   const [copiedRef, setCopiedRef] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Dynamic Offerwalls state (Offerwall.me active by default)
+  // Dynamic Offerwalls state (Offerwall.me & PubCrypto active by default)
   const [offerwalls, setOfferwalls] = useState<OfferwallConfig[]>(() => loadCachedOfferwalls());
   const [selectedWallId, setSelectedWallId] = useState<string>('offerwallme');
   const [signedOfferwallMeUrl, setSignedOfferwallMeUrl] = useState<string>('');
+  const [signedPubCryptoUrl, setSignedPubCryptoUrl] = useState<string>('');
+  const [pubCryptoIframeHeight, setPubCryptoIframeHeight] = useState<number>(800);
   const [syncingWallet, setSyncingWallet] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
 
@@ -333,28 +351,82 @@ export default function App() {
   const fetchOfferwallsFromBackend = useCallback(async (uid?: string) => {
     const base = getApiBaseUrl();
     const activeUid = uid || loadCurrentUser()?.id || '';
+    const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
     if (activeUid) {
       buildSignedOfferwallMeUrl(OFFERWALLME_PUBLIC_KEY, activeUid)
         .then((signed) => setSignedOfferwallMeUrl(signed))
         .catch(() => {});
     }
     try {
-      const query = activeUid ? `?user_id=${encodeURIComponent(activeUid)}` : '';
+      const query = activeUid
+        ? `?user_id=${encodeURIComponent(activeUid)}&theme=${encodeURIComponent(currentTheme)}`
+        : '';
       const res = await fetch(`${base}/api/offerwalls${query}`);
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.offerwalls) && data.offerwalls.length > 0) {
-          setOfferwalls(data.offerwalls);
-          saveCachedOfferwalls(data.offerwalls);
-          const owm = data.offerwalls.find((w: OfferwallConfig) => w.provider_id === 'offerwallme');
+          const mergedWalls: OfferwallConfig[] = [...data.offerwalls];
+          if (!mergedWalls.some((w) => w.provider_id === 'pubcrypto')) {
+            mergedWalls.push({ ...DEFAULT_PUBCRYPTO_WALL });
+          }
+          setOfferwalls(mergedWalls);
+          saveCachedOfferwalls(mergedWalls);
+          const owm = mergedWalls.find((w: OfferwallConfig) => w.provider_id === 'offerwallme');
           if (owm && owm.signed_iframe_url) {
             setSignedOfferwallMeUrl(owm.signed_iframe_url);
+          }
+          const pc = mergedWalls.find((w: OfferwallConfig) => w.provider_id === 'pubcrypto');
+          if (pc && pc.signed_iframe_url) {
+            setSignedPubCryptoUrl(pc.signed_iframe_url);
           }
         }
       }
     } catch {
       // Fallback to cached offerwalls + Web Crypto signed Offerwall.me URL
     }
+  }, []);
+
+  const refreshPubCryptoSignedUrl = useCallback(
+    async (uid?: string) => {
+      const activeUid = uid || user?.id || loadCurrentUser()?.id || '';
+      if (!activeUid) return;
+      const base = getApiBaseUrl();
+      const currentTheme =
+        document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      try {
+        const res = await fetch(
+          `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+            activeUid
+          )}&theme=${encodeURIComponent(currentTheme)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.signed_iframe_url) {
+            setSignedPubCryptoUrl(data.signed_iframe_url);
+          }
+        }
+      } catch {}
+    },
+    [user?.id]
+  );
+
+  // Official PubCrypto Offerwall Auto-Resize postMessage Listener
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== 'https://pub.cryptolinkforearn.com' ||
+        !event.data ||
+        event.data.type !== 'pubcrypto:offerwall-resize'
+      ) {
+        return;
+      }
+      const nextHeight = Math.round(
+        Math.min(5000, Math.max(360, Number(event.data.height) || 800))
+      );
+      setPubCryptoIframeHeight(nextHeight);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
   }, []);
 
   const fetchAdminDashboard = useCallback(async () => {
@@ -1726,6 +1798,40 @@ export default function App() {
                           />
                         </div>
 
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
+                            {wall.provider_id === 'pubcrypto'
+                              ? 'PUBCRYPTO PUBLISHER API KEY (FOR SIGNED EMBED TOKENS)'
+                              : 'SECRET / PUBLISHER API KEY (OPTIONAL)'}
+                          </label>
+                          <input
+                            type="password"
+                            value={wall.secret_key || ''}
+                            onChange={(e) => handleUpdateOfferwallField(wall.provider_id, 'secret_key', e.target.value)}
+                            placeholder={
+                              wall.provider_id === 'pubcrypto'
+                                ? 'Paste Publisher API Key from pub.cryptolinkforearn.com -> Publisher'
+                                : 'Optional Secret / API Key'
+                            }
+                            className="font-mono"
+                            style={{
+                              width: '100%',
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              background: 'var(--bg3)',
+                              border: '1px solid var(--border)',
+                              color: 'var(--txt)',
+                              fontSize: 11,
+                            }}
+                          />
+                          {wall.provider_id === 'pubcrypto' && (
+                            <div style={{ fontSize: 10.5, color: 'var(--gold)', marginTop: 4, lineHeight: 1.4 }}>
+                              🔒 Postback Secret Key (`e73bc...57b23`) is already encrypted on server! Paste your{' '}
+                              <strong>Publisher API Key</strong> (from PubCrypto menu → <em>Publisher</em> → <em>Your API key</em>) here to generate 1-time Signed Embed Tokens (`owe_...`).
+                            </div>
+                          )}
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => handleSaveOfferwallConfig(wall)}
@@ -2125,14 +2231,16 @@ export default function App() {
     enabledOfferwalls.find((w) => w.provider_id === selectedWallId) || enabledOfferwalls[0] || null;
 
   const resolvedIframeUrl =
-    selectedWall?.signed_iframe_url ||
-    (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
-      ? signedOfferwallMeUrl
-      : selectedWall && selectedWall.iframe_url_template
-        ? selectedWall.iframe_url_template
-            .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || '').trim()))
-            .replace(/\{user_id\}/g, encodeURIComponent(user.id))
-        : '');
+    selectedWall?.provider_id === 'pubcrypto' && signedPubCryptoUrl
+      ? signedPubCryptoUrl
+      : selectedWall?.signed_iframe_url ||
+        (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
+          ? signedOfferwallMeUrl
+          : selectedWall && selectedWall.iframe_url_template
+            ? selectedWall.iframe_url_template
+                .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || '').trim()))
+                .replace(/\{user_id\}/g, encodeURIComponent(user.id))
+            : '');
 
   return (
     <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -2699,7 +2807,12 @@ export default function App() {
                       <button
                         key={wall.provider_id}
                         type="button"
-                        onClick={() => setSelectedWallId(wall.provider_id)}
+                        onClick={() => {
+                          setSelectedWallId(wall.provider_id);
+                          if (wall.provider_id === 'pubcrypto') {
+                            refreshPubCryptoSignedUrl(user.id);
+                          }
+                        }}
                         style={{
                           textAlign: 'left',
                           padding: '16px',
@@ -2756,29 +2869,47 @@ export default function App() {
                         </h3>
                         <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
                           {selectedWall.hold_days > 0
-                            ? `Rewards go through a ${selectedWall.hold_days}-day anti-fraud hold`
+                            ? `Rewards go through a ${selectedWall.hold_days}-day anti-fraud hold (auto-releases on network settlement)`
                             : 'Instant S2S Postback credit to Available Balance'}
                         </p>
                       </div>
-                      {resolvedIframeUrl && (
-                        <a
-                          href={resolvedIframeUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-ghost btn-sm"
-                        >
-                          ↗ Open Fullscreen in New Tab
-                        </a>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {selectedWall.provider_id === 'pubcrypto' && (
+                          <button
+                            type="button"
+                            onClick={() => refreshPubCryptoSignedUrl(user.id)}
+                            className="btn btn-outline btn-sm"
+                          >
+                            🔄 Refresh Session
+                          </button>
+                        )}
+                        {resolvedIframeUrl && (
+                          <a
+                            href={resolvedIframeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-ghost btn-sm"
+                          >
+                            ↗ Open Fullscreen in New Tab
+                          </a>
+                        )}
+                      </div>
                     </div>
 
                     {resolvedIframeUrl ? (
                       <iframe
+                        data-pubcrypto-offerwall={selectedWall.provider_id === 'pubcrypto' ? true : undefined}
                         src={resolvedIframeUrl}
                         title={selectedWall.name}
+                        width="100%"
+                        height={selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                        frameBorder={0}
+                        referrerPolicy={selectedWall.provider_id === 'pubcrypto' ? 'no-referrer' : undefined}
                         style={{
+                          display: 'block',
                           width: '100%',
-                          height: 680,
+                          maxWidth: '100%',
+                          height: selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680,
                           border: '1px solid var(--border)',
                           borderRadius: 12,
                           background: '#0B121E',
