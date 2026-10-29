@@ -900,16 +900,17 @@ export default {
       }
 
       // ======================================================================
-      // 4B. LOOTIFY BUILT-IN FAUCET CLAIM + FAUCETPAY PAYOUT (POST /api/faucet/claim)
-      // Cooldown: 30 Minutes per claim | Lucky Roll: 0000 - 9999
+      // 4B. LOOTIFY PROFIT-OPTIMIZED FAUCET (POST /api/faucet/claim)
+      // Economy:
+      // - Cooldown: 60 Minutes (Hourly Roll)
+      // - Base Roll: 1 Coin (₹0.01) -> Covered by 3 Banner Ad Impressions!
+      // - Profit Gate: First 2 Faucet Rolls are Free; after that, every 1 Offerwall
+      //   task completed unlocks 3 Faucet Rolls (100% Guaranteed Admin Profit!)
       // ======================================================================
       if (url.pathname === "/api/faucet/claim" && request.method === "POST") {
         const body = await request.json();
         const userId = String(body.userId || "").trim();
         const email = String(body.email || "").trim().toLowerCase();
-        const payoutMode = body.payoutMode === "faucetpay" ? "faucetpay" : "wallet";
-        const faucetpayAddress = String(body.faucetpayAddress || "").trim();
-        const currency = String(body.currency || "USDT").toUpperCase();
 
         let user = userId
           ? await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first()
@@ -924,7 +925,7 @@ export default {
           );
         }
 
-        const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
+        const COOLDOWN_MS = 60 * 60 * 1000; // 60 minutes (Hourly Faucet)
         if (user.last_faucet_claim_at) {
           const lastClaimTime = new Date(user.last_faucet_claim_at).getTime();
           const elapsed = Date.now() - lastClaimTime;
@@ -932,7 +933,7 @@ export default {
             const waitMins = Math.ceil((COOLDOWN_MS - elapsed) / 60000);
             return Response.json(
               {
-                error: `Faucet cooldown active! Please wait ${waitMins} min(s) before rolling again.`,
+                error: `Hourly Faucet cooldown active! Please wait ${waitMins} min(s) before rolling again.`,
                 nextClaimAt: new Date(lastClaimTime + COOLDOWN_MS).toISOString(),
               },
               { status: 429, headers: corsHeaders }
@@ -940,58 +941,38 @@ export default {
           }
         }
 
-        // Fair Lucky Roll 0 - 9999
-        const rollNumber = Math.floor(Math.random() * 10000);
-        let rewardCoins = 5;
-        if (rollNumber >= 9998) {
-          rewardCoins = 250;
-        } else if (rollNumber >= 9986) {
-          rewardCoins = 50;
-        } else if (rollNumber >= 9886) {
-          rewardCoins = 15;
+        // Profit Protection Gate: First 2 rolls are free; after that, each Offerwall task unlocks +3 Faucet rolls
+        const claimsSoFar = Number(user.faucet_claims_count) || 0;
+        const offerwallsDone = Number(user.offerwalls_completed) || 0;
+        const maxAllowedRolls = 2 + offerwallsDone * 3;
+        if (claimsSoFar >= maxAllowedRolls) {
+          return Response.json(
+            {
+              error:
+                "⚡ Faucet Energy Recharged via Offerwalls! Complete 1 quick task, PTC ad, or shortlink on Offerwall.me to unlock 3 more Free Faucet Rolls!",
+              requiresOfferwall: true,
+            },
+            { status: 403, headers: corsHeaders }
+          );
         }
 
-        let finalMode = "wallet";
-        let faucetpayTxId = "";
-        let faucetpayMessage = "";
-
-        if (payoutMode === "faucetpay" && faucetpayAddress) {
-          try {
-            const fpResult = await sendFaucetPayPayout(
-              env,
-              faucetpayAddress,
-              rewardCoins,
-              currency,
-              false
-            );
-            if (fpResult && Number(fpResult.status) === 200) {
-              finalMode = "faucetpay";
-              faucetpayTxId = String(fpResult.payout_id || fpResult.payout_user_hash || "fp_ok");
-              faucetpayMessage = `Instant FaucetPay transfer sent (${currency})!`;
-            } else {
-              finalMode = "wallet";
-              faucetpayMessage =
-                "Credited directly to your Lootify Withdrawable Wallet (FaucetPay direct pool top-up pending).";
-            }
-          } catch {
-            finalMode = "wallet";
-          }
+        // Profit-Optimized Lucky Roll 0 - 9999 (Average cost ~1.03 Coins = ₹0.0103)
+        const rollNumber = Math.floor(Math.random() * 10000);
+        let rewardCoins = 1;
+        if (rollNumber >= 9998) {
+          rewardCoins = 50;
+        } else if (rollNumber >= 9986) {
+          rewardCoins = 10;
+        } else if (rollNumber >= 9886) {
+          rewardCoins = 3;
         }
 
         const nowIso = new Date().toISOString();
-        if (finalMode === "wallet") {
-          await env.DB.prepare(
-            "UPDATE users SET available_coins = available_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ?, faucet_claims_count = COALESCE(faucet_claims_count, 0) + 1, last_faucet_claim_at = ? WHERE id = ?"
-          )
-            .bind(rewardCoins, rewardCoins, nowIso, user.id)
-            .run();
-        } else {
-          await env.DB.prepare(
-            "UPDATE users SET lifetime_earned_coins = lifetime_earned_coins + ?, faucet_claims_count = COALESCE(faucet_claims_count, 0) + 1, last_faucet_claim_at = ? WHERE id = ?"
-          )
-            .bind(rewardCoins, nowIso, user.id)
-            .run();
-        }
+        await env.DB.prepare(
+          "UPDATE users SET available_coins = available_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ?, faucet_claims_count = COALESCE(faucet_claims_count, 0) + 1, last_faucet_claim_at = ? WHERE id = ?"
+        )
+          .bind(rewardCoins, rewardCoins, nowIso, user.id)
+          .run();
 
         await env.DB.prepare(
           "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'faucet', ?, ?, 'credited', ?, ?)"
@@ -1000,31 +981,12 @@ export default {
             "ldg_faucet_" + Date.now(),
             user.id,
             user.name,
-            `Faucet Roll #${String(rollNumber).padStart(4, "0")} (${
-              finalMode === "faucetpay" ? "FaucetPay Direct" : "Wallet Credit"
-            })`,
+            `Hourly Faucet Roll #${String(rollNumber).padStart(4, "0")}`,
             rewardCoins,
-            `${rollNumber}|${finalMode}|${faucetpayTxId}`,
+            `${rollNumber}|wallet|`,
             nowIso
           )
           .run();
-
-        // 10% Referral Commission on Faucet Claims
-        if (user.referred_by) {
-          const commission = Math.max(1, Math.floor(rewardCoins * 0.1));
-          const referrer = await env.DB.prepare(
-            "SELECT id FROM users WHERE referral_code = ?"
-          )
-            .bind(user.referred_by)
-            .first();
-          if (referrer) {
-            await env.DB.prepare(
-              "UPDATE users SET available_coins = available_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ? WHERE id = ?"
-            )
-              .bind(commission, commission, referrer.id)
-              .run();
-          }
-        }
 
         const updatedRow = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
           .bind(user.id)
@@ -1036,9 +998,8 @@ export default {
             ok: true,
             rollNumber,
             rewardCoins,
-            payoutMode: finalMode,
-            faucetpayTxId: faucetpayTxId || null,
-            notice: faucetpayMessage || null,
+            payoutMode: "wallet",
+            notice: `+${rewardCoins} Coin(s) added to your Lootify Wallet! Complete Offerwall tasks to earn up to 3,000 Coins instantly.`,
             user: player,
           },
           { status: 200, headers: corsHeaders }

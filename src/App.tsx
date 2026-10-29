@@ -285,15 +285,6 @@ export default function App() {
   const [payoutMessage, setPayoutMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   // Built-in Faucet state
-  const [faucetMode, setFaucetMode] = useState<'wallet' | 'faucetpay'>('wallet');
-  const [faucetPayAddress, setFaucetPayAddress] = useState<string>(() => {
-    try {
-      return localStorage.getItem('lootify_faucetpay_address') || '';
-    } catch {
-      return '';
-    }
-  });
-  const [faucetCurrency, setFaucetCurrency] = useState<'USDT' | 'TRX' | 'DOGE' | 'BTC'>('USDT');
   const [faucetMathA, setFaucetMathA] = useState<number>(() => Math.floor(3 + Math.random() * 9));
   const [faucetMathB, setFaucetMathB] = useState<number>(() => Math.floor(2 + Math.random() * 8));
   const [faucetMathInput, setFaucetMathInput] = useState<string>('');
@@ -432,12 +423,12 @@ export default function App() {
     }
   }, [isAdminRoute, adminLoggedIn, fetchAdminDashboard]);
 
-  // Faucet 30-min Cooldown & 5-sec Anti-Bot Timer
+  // Faucet 60-min (Hourly) Cooldown & 5-sec Anti-Bot Timer
   useEffect(() => {
     const updateTimers = () => {
       if (user?.lastFaucetClaimAt) {
         const lastMs = new Date(user.lastFaucetClaimAt).getTime();
-        const remMs = lastMs + 30 * 60 * 1000 - Date.now();
+        const remMs = lastMs + 60 * 60 * 1000 - Date.now();
         setFaucetCooldownSecs(remMs > 0 ? Math.ceil(remMs / 1000) : 0);
       } else {
         setFaucetCooldownSecs(0);
@@ -472,7 +463,7 @@ export default function App() {
     setFaucetLastResult(null);
 
     if (faucetCooldownSecs > 0) {
-      setFaucetError('Faucet is on 30-minute cooldown. Please wait for the timer.');
+      setFaucetError('Hourly Faucet is on 60-minute cooldown. Please wait for the timer or complete Offerwalls now!');
       return;
     }
     if (Number(faucetMathInput.trim()) !== faucetMathA + faucetMathB) {
@@ -483,16 +474,16 @@ export default function App() {
       setFaucetError('Please click "Verify Anti-Bot" and wait 5 seconds before rolling.');
       return;
     }
-    if (faucetMode === 'faucetpay' && !faucetPayAddress.trim()) {
-      setFaucetError('Please enter your FaucetPay Email or Crypto Address.');
+
+    const localClaims = Number(user.faucetClaimsCount) || 0;
+    const localOfferwalls = Math.max(0, (Number(user.questsCompleted) || 0) - localClaims);
+    const localMaxAllowed = 2 + localOfferwalls * 3;
+    if (localClaims >= localMaxAllowed) {
+      setFaucetError(
+        '⚡ Faucet Energy Empty! Complete 1 quick task, PTC ad, or shortlink on Offerwall.me to unlock +3 Free Faucet Rolls!'
+      );
       return;
     }
-
-    try {
-      if (faucetPayAddress.trim()) {
-        localStorage.setItem('lootify_faucetpay_address', faucetPayAddress.trim());
-      }
-    } catch {}
 
     setFaucetRolling(true);
     const base = getApiBaseUrl();
@@ -503,9 +494,7 @@ export default function App() {
         body: JSON.stringify({
           userId: user.id,
           email: user.email,
-          payoutMode: faucetMode,
-          faucetpayAddress: faucetPayAddress.trim(),
-          currency: faucetCurrency,
+          payoutMode: 'wallet',
         }),
       });
       const data = await res.json();
@@ -532,7 +521,7 @@ export default function App() {
       // Fallback local roll if offline
       const rollNumber = Math.floor(Math.random() * 10000);
       const rewardCoins =
-        rollNumber >= 9998 ? 250 : rollNumber >= 9986 ? 50 : rollNumber >= 9886 ? 15 : 5;
+        rollNumber >= 9998 ? 50 : rollNumber >= 9986 ? 10 : rollNumber >= 9886 ? 3 : 1;
       const nowIso = new Date().toISOString();
       const updated: PlayerUser = {
         ...user,
@@ -556,7 +545,7 @@ export default function App() {
       setFaucetLastResult({
         rollNumber,
         rewardCoins,
-        notice: 'Credited to your Lootify Withdrawable Wallet!',
+        notice: `+${rewardCoins} Coin(s) added to your Lootify Wallet!`,
       });
       setFaucetUnlocked(false);
       setFaucetMathInput('');
@@ -2890,10 +2879,10 @@ export default function App() {
                     </div>
                     <div>
                       <h2 className="font-display" style={{ fontSize: 21, fontWeight: 700, color: 'var(--txt)' }}>
-                        Lootify Lucky Faucet Roll
+                        Lootify Hourly Faucet Roll
                       </h2>
                       <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                        Claim Free Coins Every 30 Minutes • Instant Credit or FaucetPay
+                        Roll Every 60 Minutes • Credits Lootify Wallet Coins (Withdraw at ₹10 via UPI / FaucetPay)
                       </p>
                     </div>
                   </div>
@@ -2914,14 +2903,14 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Lucky Roll Payout Table */}
+                {/* Lucky Roll Payout Table (100% Profit Optimized: Base = 1 Coin = ₹0.01) */}
                 <div
                   style={{
                     background: 'var(--bg2)',
                     border: '1px solid var(--border)',
                     borderRadius: 12,
                     padding: 14,
-                    marginBottom: 18,
+                    marginBottom: 14,
                   }}
                 >
                   <div
@@ -2938,13 +2927,13 @@ export default function App() {
                     }}
                   >
                     <span>LUCKY NUMBER</span>
-                    <span>FAUCET REWARD</span>
+                    <span>LOOTIFY WALLET REWARD</span>
                   </div>
                   {[
-                    { range: '0000 – 9885', reward: '+5 Coins (₹0.05)', color: 'var(--txt)' },
-                    { range: '9886 – 9985', reward: '+15 Coins (₹0.15)', color: 'var(--green)' },
-                    { range: '9986 – 9997', reward: '+50 Coins (₹0.50)', color: 'var(--gold)' },
-                    { range: '9998 – 9999', reward: '+250 Coins JACKPOT (₹2.50)', color: 'var(--violet)' },
+                    { range: '0000 – 9885', reward: '+1 Coin (₹0.01)', color: 'var(--txt)' },
+                    { range: '9886 – 9985', reward: '+3 Coins (₹0.03)', color: 'var(--green)' },
+                    { range: '9986 – 9997', reward: '+10 Coins (₹0.10)', color: 'var(--gold)' },
+                    { range: '9998 – 9999', reward: '+50 Coins JACKPOT (₹0.50)', color: 'var(--violet)' },
                   ].map((row) => (
                     <div
                       key={row.range}
@@ -2962,98 +2951,54 @@ export default function App() {
                   ))}
                 </div>
 
+                {/* Faucet Energy / Offerwall Boost Banner */}
+                {(() => {
+                  const claimsUsed = Number(user.faucetClaimsCount) || 0;
+                  const offerwallTasks = Math.max(0, (Number(user.questsCompleted) || 0) - claimsUsed);
+                  const totalUnlockedRolls = 2 + offerwallTasks * 3;
+                  const remainingRolls = Math.max(0, totalUnlockedRolls - claimsUsed);
+                  return (
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        marginBottom: 16,
+                        background:
+                          remainingRolls > 0
+                            ? 'rgba(0,232,154,0.08)'
+                            : 'rgba(255,180,0,0.1)',
+                        border:
+                          remainingRolls > 0
+                            ? '1px solid rgba(0,232,154,0.3)'
+                            : '1px solid rgba(255,180,0,0.35)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 10,
+                      }}
+                    >
+                      <div>
+                        <div className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: remainingRolls > 0 ? 'var(--green)' : 'var(--gold)' }}>
+                          ⚡ Faucet Energy: {remainingRolls} Free Roll(s) Available
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                          Every 1 Offerwall task/shortlink completed unlocks <strong>+3 Free Faucet Rolls</strong> &amp; pays up to 3,000 Coins!
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => switchTab('quests')}
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: '6px 12px', fontSize: 11 }}
+                      >
+                        🚀 Recharge via Offerwalls (+3 Rolls) →
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 <form onSubmit={handleClaimFaucet} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Payout Mode Selector */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                      CHOOSE REWARD DESTINATION
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => setFaucetMode('wallet')}
-                        style={{
-                          padding: '10px',
-                          borderRadius: 9,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          background: faucetMode === 'wallet' ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
-                          border: faucetMode === 'wallet' ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                          color: faucetMode === 'wallet' ? 'var(--green)' : 'var(--txt)',
-                        }}
-                      >
-                        ⚡ Lootify Wallet Coins
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFaucetMode('faucetpay')}
-                        style={{
-                          padding: '10px',
-                          borderRadius: 9,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          background: faucetMode === 'faucetpay' ? 'rgba(255,180,0,0.12)' : 'var(--bg2)',
-                          border: faucetMode === 'faucetpay' ? '1.5px solid var(--gold)' : '1px solid var(--border)',
-                          color: faucetMode === 'faucetpay' ? 'var(--gold)' : 'var(--txt)',
-                        }}
-                      >
-                        🪙 FaucetPay Direct
-                      </button>
-                    </div>
-                  </div>
-
-                  {faucetMode === 'faucetpay' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
-                          FAUCETPAY EMAIL OR ADDRESS
-                        </label>
-                        <input
-                          type="text"
-                          value={faucetPayAddress}
-                          onChange={(e) => setFaucetPayAddress(e.target.value)}
-                          placeholder="Your FaucetPay email or wallet"
-                          style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            borderRadius: 8,
-                            background: 'var(--bg2)',
-                            border: '1px solid var(--border2)',
-                            color: 'var(--txt)',
-                            fontSize: 12,
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, color: 'var(--txt2)', marginBottom: 4 }}>
-                          COIN
-                        </label>
-                        <select
-                          value={faucetCurrency}
-                          onChange={(e) => setFaucetCurrency(e.target.value as any)}
-                          className="font-mono"
-                          style={{
-                            width: '100%',
-                            padding: '10px 8px',
-                            borderRadius: 8,
-                            background: 'var(--bg2)',
-                            border: '1px solid var(--border2)',
-                            color: 'var(--gold)',
-                            fontSize: 12,
-                            fontWeight: 700,
-                          }}
-                        >
-                          <option value="USDT">USDT</option>
-                          <option value="TRX">TRX</option>
-                          <option value="DOGE">DOGE</option>
-                          <option value="BTC">BTC</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Anti-Bot Math + 5s Security Verification */}
                   <div
                     style={{
@@ -3131,7 +3076,7 @@ export default function App() {
                       }}
                     >
                       <div className="font-mono" style={{ fontSize: 18, fontWeight: 700 }}>
-                        🎲 Lucky Roll #{String(faucetLastResult.rollNumber).padStart(4, '0')} → +{faucetLastResult.rewardCoins} Coins Won!
+                        🎲 Lucky Roll #{String(faucetLastResult.rollNumber).padStart(4, '0')} → +{faucetLastResult.rewardCoins} Coin(s) Won!
                       </div>
                       {faucetLastResult.notice && (
                         <div style={{ fontSize: 12, color: 'var(--txt)', marginTop: 4 }}>
@@ -3154,7 +3099,7 @@ export default function App() {
                       ? '🎲 Rolling Lucky Number...'
                       : faucetCooldownSecs > 0
                       ? `⏳ Cooldown (${Math.floor(faucetCooldownSecs / 60)}m ${faucetCooldownSecs % 60}s)`
-                      : '🎲 Step 2: Roll & Claim Free Reward!'}
+                      : '🎲 Step 2: Roll & Add Coins to Wallet!'}
                   </button>
                 </form>
               </div>

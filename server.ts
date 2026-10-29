@@ -354,9 +354,6 @@ async function startServer() {
     const body = req.body || {};
     const userId = String(body.userId || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
-    const payoutMode = body.payoutMode === 'faucetpay' ? 'faucetpay' : 'wallet';
-    const faucetpayAddress = String(body.faucetpayAddress || '').trim();
-    const currency = String(body.currency || 'USDT').toUpperCase();
 
     const user = db.users.find(
       (u) => (userId && u.id === userId) || (email && u.email.toLowerCase() === email)
@@ -366,56 +363,46 @@ async function startServer() {
       return;
     }
 
-    const COOLDOWN_MS = 30 * 60 * 1000;
+    const COOLDOWN_MS = 60 * 60 * 1000; // 60 minutes (Hourly Faucet)
     if (user.lastFaucetClaimAt) {
       const lastTime = new Date(user.lastFaucetClaimAt).getTime();
       const elapsed = Date.now() - lastTime;
       if (!Number.isNaN(lastTime) && elapsed < COOLDOWN_MS) {
         const waitMins = Math.ceil((COOLDOWN_MS - elapsed) / 60000);
         res.status(429).json({
-          error: `Faucet cooldown active! Please wait ${waitMins} min(s) before rolling again.`,
+          error: `Hourly Faucet cooldown active! Please wait ${waitMins} min(s) before rolling again.`,
           nextClaimAt: new Date(lastTime + COOLDOWN_MS).toISOString(),
         });
         return;
       }
     }
 
-    const rollNumber = Math.floor(Math.random() * 10000);
-    let rewardCoins = 5;
-    if (rollNumber >= 9998) {
-      rewardCoins = 250;
-    } else if (rollNumber >= 9986) {
-      rewardCoins = 50;
-    } else if (rollNumber >= 9886) {
-      rewardCoins = 15;
+    const claimsSoFar = Number(user.faucetClaimsCount) || 0;
+    const offerwallsDone = db.postbacks.filter(
+      (p) => p.user_id === user.id && p.source_type === 'offerwall'
+    ).length;
+    const maxAllowedRolls = 2 + offerwallsDone * 3;
+    if (claimsSoFar >= maxAllowedRolls) {
+      res.status(403).json({
+        error:
+          '⚡ Faucet Energy Recharged via Offerwalls! Complete 1 quick task, PTC ad, or shortlink on Offerwall.me to unlock 3 more Free Faucet Rolls!',
+        requiresOfferwall: true,
+      });
+      return;
     }
 
-    let finalMode: 'wallet' | 'faucetpay' = 'wallet';
-    let faucetpayTxId = '';
-    let faucetpayMessage = '';
-
-    if (payoutMode === 'faucetpay' && faucetpayAddress) {
-      try {
-        const fpResult = await sendFaucetPayPayout(faucetpayAddress, rewardCoins, currency, false);
-        if (fpResult && Number(fpResult.status) === 200) {
-          finalMode = 'faucetpay';
-          faucetpayTxId = String(fpResult.payout_id || fpResult.payout_user_hash || 'fp_ok');
-          faucetpayMessage = `Instant FaucetPay transfer sent (${currency})!`;
-        } else {
-          finalMode = 'wallet';
-          faucetpayMessage =
-            'Credited directly to your Lootify Withdrawable Wallet (FaucetPay direct pool top-up pending).';
-        }
-      } catch {
-        finalMode = 'wallet';
-      }
+    const rollNumber = Math.floor(Math.random() * 10000);
+    let rewardCoins = 1;
+    if (rollNumber >= 9998) {
+      rewardCoins = 50;
+    } else if (rollNumber >= 9986) {
+      rewardCoins = 10;
+    } else if (rollNumber >= 9886) {
+      rewardCoins = 3;
     }
 
     const nowIso = new Date().toISOString();
-    if (finalMode === 'wallet') {
-      user.availableCoins += rewardCoins;
-    }
-    user.questsCompleted += 1;
+    user.availableCoins += rewardCoins;
     user.faucetClaimsCount = (user.faucetClaimsCount || 0) + 1;
     user.lastFaucetClaimAt = nowIso;
 
@@ -424,32 +411,20 @@ async function startServer() {
       user_id: user.id,
       user_name: user.name,
       source_type: 'faucet',
-      title: `Faucet Roll #${String(rollNumber).padStart(4, '0')} (${
-        finalMode === 'faucetpay' ? 'FaucetPay Direct' : 'Wallet Credit'
-      })`,
+      title: `Hourly Faucet Roll #${String(rollNumber).padStart(4, '0')}`,
       amount_coins: rewardCoins,
       status: 'credited',
-      external_tx_id: `${rollNumber}|${finalMode}|${faucetpayTxId}`,
+      external_tx_id: `${rollNumber}|wallet|`,
       created_at: nowIso,
     });
-
-    if (user.referredBy) {
-      const referrer = db.users.find(
-        (r) => r.referralCode.toUpperCase() === user.referredBy?.toUpperCase()
-      );
-      if (referrer) {
-        referrer.availableCoins += Math.max(1, Math.floor(rewardCoins * 0.1));
-      }
-    }
 
     saveDB(db);
     res.json({
       ok: true,
       rollNumber,
       rewardCoins,
-      payoutMode: finalMode,
-      faucetpayTxId: faucetpayTxId || null,
-      notice: faucetpayMessage || null,
+      payoutMode: 'wallet',
+      notice: `+${rewardCoins} Coin(s) added to your Lootify Wallet! Complete Offerwall tasks to earn up to 3,000 Coins instantly.`,
       user: buildPlayerResponse(db, user),
     });
   });
