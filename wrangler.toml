@@ -3,7 +3,7 @@ main = "functions/worker.js"
 compatibility_date = "2025-09-27"
 
 [build]
-command = "npx vite build"
+command = "npm run build"
 
 [assets]
 directory = "./dist"
