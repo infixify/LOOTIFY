@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "rm -f public/assets/lootify.js public/assets/lootify.css && vite build && mkdir -p assets public/assets site/assets && cp dist/assets/lootify.* assets/ && cp dist/assets/lootify.* public/assets/ && cp dist/assets/lootify.* site/assets/ && cp index.html site/index.html && cp 404.html site/404.html",
+    "build": "vite build && mkdir -p assets public/assets site/assets && (cp dist/assets/* assets/ 2>/dev/null || true) && (cp dist/assets/* public/assets/ 2>/dev/null || true) && (cp dist/assets/* site/assets/ 2>/dev/null || true) && (cp index.html site/index.html 2>/dev/null || true)",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
