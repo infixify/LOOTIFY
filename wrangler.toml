@@ -1,4 +1,4 @@
-name = "lootify"
+name = "lootify-api"
 main = "functions/worker.js"
 compatibility_date = "2025-09-27"
 
