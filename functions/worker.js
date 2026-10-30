@@ -704,6 +704,17 @@ export default {
 
     try {
       if (!env || !env.DB) {
+        if (url.pathname === "/api/system/db-check") {
+          return Response.json(
+            {
+              ok: false,
+              db_bound: false,
+              database_id: "bf233ddf-ad43-46cf-af5d-b0e66e1fb9d0",
+              message: "D1 database binding 'DB' is not connected to this Worker environment yet.",
+            },
+            { status: 200, headers: corsHeaders }
+          );
+        }
         if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
           return new Response("ok", {
             status: 200,
@@ -881,6 +892,27 @@ export default {
         }
       } else {
         await ensureSchema(env.DB);
+      }
+
+      if (url.pathname === "/api/system/db-check") {
+        if (env && env.DB) {
+          await ensureSchema(env.DB);
+          const tblRes = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC").all();
+          const usersCnt = await env.DB.prepare("SELECT COUNT(*) as cnt FROM users").first();
+          const configs = await env.DB.prepare("SELECT provider_id, name, enabled FROM offerwall_configs").all();
+          return Response.json(
+            {
+              ok: true,
+              db_bound: true,
+              database_id: "bf233ddf-ad43-46cf-af5d-b0e66e1fb9d0",
+              tables: ((tblRes && tblRes.results) || []).map((t) => t.name),
+              total_users: (usersCnt && usersCnt.cnt) || 0,
+              offerwalls: (configs && configs.results) || [],
+              status: "D1 Connected & Fully Migrated",
+            },
+            { status: 200, headers: corsHeaders }
+          );
+        }
       }
 
       // ======================================================================

@@ -1,0 +1,19 @@
+name = "lootify"
+main = "functions/worker.js"
+compatibility_date = "2025-09-27"
+
+[build]
+command = "npm install && npm run build"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lootify-db"
+database_id = "bf233ddf-ad43-46cf-af5d-b0e66e1fb9d0"

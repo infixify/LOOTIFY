@@ -527,6 +527,10 @@ export async function onRequest(context) {
     );
   }
 
+  if (url.pathname === "/api/system/db-check") {
+    return await worker.fetch(request, context.env);
+  }
+
   // 2B. Direct D1 Execution when Cloudflare D1 binding (`DB`) is connected in Dashboard
   if (url.pathname.startsWith("/api/") && context.env && context.env.DB) {
     return await worker.fetch(request, context.env);
