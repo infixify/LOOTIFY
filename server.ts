@@ -51,7 +51,7 @@ async function sendFaucetPayPayout(
 function signOfferwallMeUrl(publicKey: string, userId: string, secretKey: string): string {
   const pub = String(publicKey || 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd').trim();
   const uid = String(userId || '').trim();
-  const expires = String(Math.floor(Date.now() / 1000) + 3600);
+  const expires = String(Math.floor(Date.now() / 1000) + 43200);
   const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
   const signature = crypto.createHmac('sha256', secretKey).update(message, 'utf8').digest('hex');
   return `https://offerwall.me/offerwall/${encodeURIComponent(pub)}/${encodeURIComponent(

@@ -287,7 +287,7 @@ async function sendFaucetPayPayout(env, toAddress, coinsAmount, currency = "USDT
 async function signOfferwallMeUrl(publicKey, userId, secretKey) {
   const pub = String(publicKey || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd").trim();
   const uid = String(userId || "").trim();
-  const expires = String(Math.floor(Date.now() / 1000) + 3600);
+  const expires = String(Math.floor(Date.now() / 1000) + 43200);
   const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
@@ -628,6 +628,92 @@ export default {
               "x-lootify-notice": "D1 DB binding required for persistence",
             },
           });
+        }
+        if (url.pathname === "/api/offerwalls/signed-url" && request.method === "GET") {
+          const reqUserId = (
+            url.searchParams.get("user_id") ||
+            request.headers.get("x-user-id") ||
+            ""
+          ).trim();
+          const providerId = (url.searchParams.get("provider_id") || "offerwallme")
+            .trim()
+            .toLowerCase();
+          const reqTheme = (url.searchParams.get("theme") || "dark").trim();
+          if (!reqUserId) {
+            return Response.json({ error: "user_id is required" }, { status: 400, headers: corsHeaders });
+          }
+          if (providerId === "pubcrypto") {
+            const pubApiKey = getPubCryptoPublisherApiKey(env, "");
+            const signedUrl = await createPubCryptoSignedEmbedUrl(
+              "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
+              reqUserId,
+              pubApiKey,
+              reqTheme
+            );
+            return Response.json(
+              { ok: true, provider_id: "pubcrypto", signed_iframe_url: signedUrl, server_time: Math.floor(Date.now() / 1000) },
+              { status: 200, headers: corsHeaders }
+            );
+          }
+          const secret = getOfferwallMeSecret(env, "");
+          const signedUrl = await signOfferwallMeUrl("PQhx5BxXulHlM6PxZx81pZgIs2nyRd", reqUserId, secret);
+          return Response.json(
+            { ok: true, provider_id: "offerwallme", signed_iframe_url: signedUrl, server_time: Math.floor(Date.now() / 1000) },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+        if (url.pathname === "/api/offerwalls" && request.method === "GET") {
+          const reqUserId = (
+            url.searchParams.get("user_id") ||
+            request.headers.get("x-user-id") ||
+            ""
+          ).trim();
+          const reqTheme = (url.searchParams.get("theme") || "dark").trim();
+          const secret = getOfferwallMeSecret(env, "");
+          const owmSigned = reqUserId
+            ? await signOfferwallMeUrl("PQhx5BxXulHlM6PxZx81pZgIs2nyRd", reqUserId, secret)
+            : "";
+          const pubApiKey = getPubCryptoPublisherApiKey(env, "");
+          const pcSigned = reqUserId
+            ? await createPubCryptoSignedEmbedUrl(
+                "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
+                reqUserId,
+                pubApiKey,
+                reqTheme
+              )
+            : "";
+          return Response.json(
+            {
+              ok: true,
+              server_time: Math.floor(Date.now() / 1000),
+              offerwalls: [
+                {
+                  provider_id: "offerwallme",
+                  name: "Offerwall.me",
+                  badge: "PTC, Shortlinks, Surveys & Tasks",
+                  enabled: 1,
+                  app_id: "PQhx5BxXulHlM6PxZx81pZgIs2nyRd",
+                  iframe_url_template: "https://offerwall.me/offerwall/{app_id}/{user_id}",
+                  signed_iframe_url: owmSigned,
+                  hold_days: 0,
+                  postback_macro_query: "?user_id={subid}&amount={reward}&txn_id={transId}&status={status}",
+                },
+                {
+                  provider_id: "pubcrypto",
+                  name: "PubCrypto",
+                  badge: "Shortlinks, PTC, Tasks & Offerwalls",
+                  enabled: 1,
+                  app_id: "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
+                  iframe_url_template:
+                    "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
+                  signed_iframe_url: pcSigned,
+                  hold_days: 0,
+                  postback_macro_query: "",
+                },
+              ],
+            },
+            { status: 200, headers: corsHeaders }
+          );
         }
         if (url.pathname.startsWith("/api/")) {
           return Response.json(

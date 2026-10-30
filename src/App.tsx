@@ -4,7 +4,7 @@ import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ThemeMode, Wi
 const STORAGE_USER_KEY = 'lootify_player_user';
 const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
 const STORAGE_API_BASE_KEY = 'lootify_api_base_url';
-const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v6';
+const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v7';
 
 const OFFERWALLME_PUBLIC_KEY = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
 const PUBCRYPTO_SITE_KEY = 'site_b233010ad04bdeea470d1114a38e6d0b05839e4a';
@@ -50,31 +50,137 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
   postback_macro_query: '',
 };
 
-async function buildSignedOfferwallMeUrl(publicKey: string, userId: string, customSecret?: string): Promise<string> {
+let _cachedServerTimeOffsetSec = 0;
+
+function sha256BytesSync(asciiIn: number[]): number[] {
+  function rightRotate(value: number, amount: number): number {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  const maxWord = Math.pow(2, 32);
+  let i = 0;
+  let j = 0;
+  const result: number[] = [];
+  const words: number[] = [];
+  const asciiBitLength = asciiIn.length * 8;
+  let hash: number[] = [];
+  const k: number[] = [];
+  let primeCounter = 0;
+  const isComposite: Record<number, number> = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (i = 0; i < 313; i += candidate) {
+        isComposite[i] = candidate;
+      }
+      hash[primeCounter] = (Math.pow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (Math.pow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+  const ascii = asciiIn.slice();
+  ascii.push(0x80);
+  while ((ascii.length % 64) - 56 !== 0) ascii.push(0);
+  for (i = 0; i < ascii.length; i++) {
+    j = ascii[i];
+    words[i >> 2] = (words[i >> 2] || 0) | (j << ((3 - (i % 4)) * 8));
+  }
+  words[words.length] = (asciiBitLength / maxWord) | 0;
+  words[words.length] = asciiBitLength;
+  for (j = 0; j < words.length; ) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = hash.slice(0);
+    for (i = 0; i < 64; i++) {
+      const w15 = w[i - 15];
+      const w2 = w[i - 2];
+      const a = hash[0];
+      const e = hash[4];
+      const temp1 =
+        hash[7] +
+        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+        ((e & hash[5]) ^ (~e & hash[6])) +
+        k[i] +
+        (w[i] =
+          i < 16
+            ? w[i]
+            : (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
+      const temp2 =
+        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+        ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+      hash.pop();
+    }
+    for (i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+  for (i = 0; i < 8; i++) {
+    for (j = 3; j + 1; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result.push(b);
+    }
+  }
+  return result;
+}
+
+function hmacSha256HexSync(keyStr: string, messageStr: string): string {
+  const enc = new TextEncoder();
+  let keyBytes = Array.from(enc.encode(keyStr));
+  const msgBytes = Array.from(enc.encode(messageStr));
+  if (keyBytes.length > 64) keyBytes = sha256BytesSync(keyBytes);
+  while (keyBytes.length < 64) keyBytes.push(0);
+  const oKeyPad = keyBytes.map((b) => b ^ 0x5c);
+  const iKeyPad = keyBytes.map((b) => b ^ 0x36);
+  const innerHash = sha256BytesSync(iKeyPad.concat(msgBytes));
+  const outerHash = sha256BytesSync(oKeyPad.concat(innerHash));
+  return outerHash.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function buildSignedOfferwallMeUrlSync(
+  publicKey: string,
+  userId: string,
+  customSecret?: string,
+  baseUnixSeconds?: number
+): string {
   const pub = (publicKey || OFFERWALLME_PUBLIC_KEY).trim();
   const uid = (userId || '').trim();
-  const expires = String(Math.floor(Date.now() / 1000) + 3600);
+  if (!uid) return '';
+  const nowSec =
+    typeof baseUnixSeconds === 'number' && baseUnixSeconds > 1000000000
+      ? Math.floor(baseUnixSeconds)
+      : Math.floor(Date.now() / 1000) + _cachedServerTimeOffsetSec;
+  const expires = String(nowSec + 43200);
   const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
-  const secretKey = (customSecret && customSecret.trim().length > 8)
-    ? customSecret.trim()
-    : 'f25hoUjdRBQpUbbogHGU4aObX1lb7W24';
-  const enc = new TextEncoder();
-  const cryptoKey = await window.crypto.subtle.importKey(
-    'raw',
-    enc.encode(secretKey),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const sigBuf = await window.crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
-  const signature = Array.from(new Uint8Array(sigBuf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  const secretKey =
+    customSecret && customSecret.trim().length > 8
+      ? customSecret.trim()
+      : 'f25hoUjdRBQpUbbogHGU4aObX1lb7W24';
+  const signature = hmacSha256HexSync(secretKey, message);
   return `https://offerwall.me/offerwall/${encodeURIComponent(pub)}/${encodeURIComponent(
     uid
   )}?identityExpires=${encodeURIComponent(expires)}&identitySignature=${encodeURIComponent(
     signature
   )}`;
+}
+
+async function buildSignedOfferwallMeUrl(
+  publicKey: string,
+  userId: string,
+  customSecret?: string
+): Promise<string> {
+  try {
+    const headRes = await fetch(`/?_ts=${Date.now()}`, { method: 'HEAD', cache: 'no-store' });
+    const dateStr = headRes.headers.get('date');
+    if (dateStr) {
+      const serverSec = Math.floor(new Date(dateStr).getTime() / 1000);
+      if (!Number.isNaN(serverSec) && serverSec > 1000000000) {
+        _cachedServerTimeOffsetSec = serverSec - Math.floor(Date.now() / 1000);
+      }
+    }
+  } catch {}
+  return buildSignedOfferwallMeUrlSync(publicKey, userId, customSecret);
 }
 
 function OfferwallMeBanner({ size }: { size: '728x90' | '468x60' | '300x250' }) {
@@ -152,13 +258,18 @@ function loadCachedOfferwalls(): OfferwallConfig[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        if (!parsed.some((w: OfferwallConfig) => w.provider_id === 'offerwallme')) {
-          parsed.unshift({ ...DEFAULT_OFFERWALLME_WALL });
+        const cleaned = parsed.map((w: OfferwallConfig) => {
+          const copy = { ...w };
+          delete copy.signed_iframe_url;
+          return copy;
+        });
+        if (!cleaned.some((w: OfferwallConfig) => w.provider_id === 'offerwallme')) {
+          cleaned.unshift({ ...DEFAULT_OFFERWALLME_WALL });
         }
-        if (!parsed.some((w: OfferwallConfig) => w.provider_id === 'pubcrypto')) {
-          parsed.push({ ...DEFAULT_PUBCRYPTO_WALL });
+        if (!cleaned.some((w: OfferwallConfig) => w.provider_id === 'pubcrypto')) {
+          cleaned.push({ ...DEFAULT_PUBCRYPTO_WALL });
         }
-        return parsed;
+        return cleaned;
       }
     }
   } catch {}
@@ -167,7 +278,12 @@ function loadCachedOfferwalls(): OfferwallConfig[] {
 
 function saveCachedOfferwalls(walls: OfferwallConfig[]) {
   try {
-    localStorage.setItem(STORAGE_OFFERWALLS_CACHE_KEY, JSON.stringify(walls));
+    const cleaned = walls.map((w) => {
+      const copy = { ...w };
+      delete copy.signed_iframe_url;
+      return copy;
+    });
+    localStorage.setItem(STORAGE_OFFERWALLS_CACHE_KEY, JSON.stringify(cleaned));
   } catch {}
 }
 
@@ -288,7 +404,12 @@ export default function App() {
   // Dynamic Offerwalls state (Offerwall.me & PubCrypto active by default)
   const [offerwalls, setOfferwalls] = useState<OfferwallConfig[]>(() => loadCachedOfferwalls());
   const [selectedWallId, setSelectedWallId] = useState<string>('offerwallme');
-  const [signedOfferwallMeUrl, setSignedOfferwallMeUrl] = useState<string>('');
+  const [signedOfferwallMeUrl, setSignedOfferwallMeUrl] = useState<string>(() => {
+    const initialUser = loadCurrentUser();
+    return initialUser?.id
+      ? buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, initialUser.id)
+      : '';
+  });
   const [signedPubCryptoUrl, setSignedPubCryptoUrl] = useState<string>('');
   const [pubCryptoIframeHeight, setPubCryptoIframeHeight] = useState<number>(800);
   const [syncingWallet, setSyncingWallet] = useState(false);
@@ -416,9 +537,33 @@ export default function App() {
     async (uid?: string) => {
       const activeUid = uid || user?.id || loadCurrentUser()?.id || '';
       if (!activeUid) return;
+      // 1. Set instant synchronous signed URL first
+      const syncUrl = buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, activeUid);
+      if (syncUrl) setSignedOfferwallMeUrl(syncUrl);
+
+      // 2. Try same-origin Cloudflare Pages Edge endpoint for server-clock-verified URL
+      try {
+        const edgeRes = await fetch(
+          `/api/offerwalls/signed-url?provider_id=offerwallme&user_id=${encodeURIComponent(
+            activeUid
+          )}`
+        );
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json();
+          if (edgeData && typeof edgeData.server_time === 'number') {
+            _cachedServerTimeOffsetSec = edgeData.server_time - Math.floor(Date.now() / 1000);
+          }
+          if (edgeData && edgeData.signed_iframe_url) {
+            setSignedOfferwallMeUrl(edgeData.signed_iframe_url);
+            return;
+          }
+        }
+      } catch {}
+
+      // 3. Fallback to HTTP Date header clock-synced signature
       try {
         const url = await buildSignedOfferwallMeUrl(OFFERWALLME_PUBLIC_KEY, activeUid);
-        setSignedOfferwallMeUrl(url);
+        if (url) setSignedOfferwallMeUrl(url);
       } catch {}
     },
     [user?.id]
@@ -527,6 +672,7 @@ export default function App() {
       localStorage.removeItem('lootify_offerwalls_cache_v1');
       localStorage.removeItem('lootify_offerwalls_dynamic_v4');
       localStorage.removeItem('lootify_offerwalls_dynamic_v5');
+      localStorage.removeItem('lootify_offerwalls_dynamic_v6');
     } catch {}
 
     const initialUser = loadCurrentUser();
@@ -2326,16 +2472,20 @@ export default function App() {
               .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || PUBCRYPTO_SITE_KEY).trim()))
               .replace(/\{user_id\}/g, encodeURIComponent(user.id))
           : `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent((selectedWall?.app_id || PUBCRYPTO_SITE_KEY).trim())}&sub_id=${encodeURIComponent(user.id)}&theme=dark`)
-      : useDirectOfferwallMe
-        ? `https://offerwall.me/offerwall/${encodeURIComponent((selectedWall?.app_id || OFFERWALLME_PUBLIC_KEY).trim())}/${encodeURIComponent(user.id)}`
+      : selectedWall?.provider_id === 'offerwallme' ||
+          String(selectedWall?.iframe_url_template || '').includes('offerwall.me')
+        ? signedOfferwallMeUrl ||
+          buildSignedOfferwallMeUrlSync(
+            selectedWall?.app_id || OFFERWALLME_PUBLIC_KEY,
+            user.id,
+            selectedWall?.secret_key
+          )
         : selectedWall?.signed_iframe_url ||
-          (selectedWall?.provider_id === 'offerwallme' && signedOfferwallMeUrl
-            ? signedOfferwallMeUrl
-            : selectedWall && selectedWall.iframe_url_template
-              ? selectedWall.iframe_url_template
-                  .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || OFFERWALLME_PUBLIC_KEY).trim()))
-                  .replace(/\{user_id\}/g, encodeURIComponent(user.id))
-              : `https://offerwall.me/offerwall/${encodeURIComponent((selectedWall?.app_id || OFFERWALLME_PUBLIC_KEY).trim())}/${encodeURIComponent(user.id)}`);
+          (selectedWall && selectedWall.iframe_url_template
+            ? selectedWall.iframe_url_template
+                .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || OFFERWALLME_PUBLIC_KEY).trim()))
+                .replace(/\{user_id\}/g, encodeURIComponent(user.id))
+            : '');
 
   return (
     <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
