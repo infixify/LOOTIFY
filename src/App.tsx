@@ -610,6 +610,10 @@ export default function App() {
       if (!resolved) {
         try {
           const apiKey = getClientPubCryptoApiKey();
+          const targetOrigin =
+            typeof window !== 'undefined' && window.location.origin
+              ? window.location.origin
+              : 'https://lootify.eternant.c0m.to';
           const resp = await fetch('https://pub.cryptolinkforearn.com/api/publisher/embed-tokens', {
             method: 'POST',
             headers: {
@@ -619,7 +623,7 @@ export default function App() {
             body: JSON.stringify({
               site_key: PUBCRYPTO_SITE_KEY,
               sub_id: activeUid,
-              origin: 'https://lootify.eternant.c0m.to',
+              origin: targetOrigin,
               theme: currentTheme,
             }),
           });

@@ -208,11 +208,12 @@ function getPubCryptoPublisherApiKey(env, dbSecret) {
   return "pub_5f8efe776555857eb579136cf163ba5cbfca66b8eaabed7d";
 }
 
-async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark") {
+async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark", requestOrigin = "") {
   const sKey = String(siteKey || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198").trim();
   const uid = String(userId || "").trim();
   const apiKey = String(publisherApiKey || "").trim();
   const cleanTheme = theme === "light" ? "light" : "dark";
+  const originUrl = requestOrigin || "https://lootify.eternant.c0m.to";
   if (apiKey && uid) {
     try {
       const resp = await fetch("https://pub.cryptolinkforearn.com/api/publisher/embed-tokens", {
@@ -224,7 +225,7 @@ async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, t
         body: JSON.stringify({
           site_key: sKey,
           sub_id: uid,
-          origin: "https://lootify.eternant.c0m.to",
+          origin: originUrl,
           theme: cleanTheme,
         }),
       });
@@ -729,11 +730,13 @@ export default {
           }
           if (providerId === "pubcrypto") {
             const pubApiKey = getPubCryptoPublisherApiKey(env, "");
+            const reqOrigin = request.headers.get("origin") || ("https://" + url.host);
             const signedUrl = await createPubCryptoSignedEmbedUrl(
               "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
               reqUserId,
               pubApiKey,
-              reqTheme
+              reqTheme,
+              reqOrigin
             );
             return Response.json(
               { ok: true, provider_id: "pubcrypto", signed_iframe_url: signedUrl, server_time: Math.floor(Date.now() / 1000) },
@@ -759,12 +762,14 @@ export default {
             ? await signOfferwallMeUrl("PQhx5BxXulHlM6PxZx81pZgIs2nyRd", reqUserId, secret)
             : "";
           const pubApiKey = getPubCryptoPublisherApiKey(env, "");
+          const reqOrigin = request.headers.get("origin") || ("https://" + url.host);
           const pcSigned = reqUserId
             ? await createPubCryptoSignedEmbedUrl(
                 "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
                 reqUserId,
                 pubApiKey,
-                reqTheme
+                reqTheme,
+                reqOrigin
               )
             : "";
           return Response.json(
@@ -1330,11 +1335,13 @@ export default {
           const siteKey =
             (cfg && cfg.app_id) || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198";
           const pubApiKey = getPubCryptoPublisherApiKey(env, cfg && cfg.secret_key);
+          const reqOrigin = request.headers.get("origin") || ("https://" + url.host);
           const signedUrl = await createPubCryptoSignedEmbedUrl(
             siteKey,
             reqUserId,
             pubApiKey,
-            reqTheme
+            reqTheme,
+            reqOrigin
           );
           return Response.json(
             {
