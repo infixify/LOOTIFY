@@ -51,6 +51,7 @@ export interface PlayerUser {
   withdrawals: WithdrawalRecord[];
   heldRewards?: HeldRewardRecord[];
   faucetHistory?: FaucetClaimRecord[];
+  creditedTxIds?: string[];
 }
 
 export interface OfferwallConfig {

@@ -1,7 +1,81 @@
 {
-  "users": [],
+  "users": [
+    {
+      "id": "plr_c2fydghha3",
+      "name": "Sarthak",
+      "email": "sarthaksinghyadav1@gmail.com",
+      "authProvider": "google",
+      "referralCode": "SARTH647",
+      "referredBy": null,
+      "availableCoins": 3.25,
+      "pendingCoins": 0,
+      "questsCompleted": 5,
+      "referralsCount": 0,
+      "joinedAt": "2026-10-30"
+    }
+  ],
   "withdrawals": [],
   "postbacks": [
+    {
+      "id": "ldg_1793334357300_105",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): ZerAds PTC",
+      "amount_coins": 0.08,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793232014703-7589",
+      "created_at": "2026-10-29T00:00:14.703Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793334357300_930",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Sands of Freedom",
+      "amount_coins": 1.05,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793265550977-7341",
+      "created_at": "2026-10-29T09:19:10.977Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793334357300_535",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): gift",
+      "amount_coins": 0.02,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793301590623-1407",
+      "created_at": "2026-10-29T19:19:50.623Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793334357300_600",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Lightning Miner",
+      "amount_coins": 1.05,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793302286809-5392",
+      "created_at": "2026-10-29T19:31:26.809Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793334357300_768",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): New Dogecoin Mining Site",
+      "amount_coins": 1.05,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793332719316-9855",
+      "created_at": "2026-10-30T03:58:39.316Z",
+      "unlocks_at": null
+    },
     {
       "id": "ldg_test_1793266044347",
       "user_id": "test_plr",

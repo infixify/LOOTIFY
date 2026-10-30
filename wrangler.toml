@@ -1,8 +1,0 @@
-name = "lootify-api"
-main = "functions/worker.js"
-compatibility_date = "2024-11-01"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "lootify-db"
-database_id = "cb661717-370a-4784-b172-5023482ca6e2"

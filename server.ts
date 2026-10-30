@@ -61,6 +61,79 @@ function signOfferwallMeUrl(publicKey: string, userId: string, secretKey: string
   )}`;
 }
 
+async function fetchOfferwallMeHistoryForUser(userId: string, secretKey: string): Promise<any[]> {
+  const uid = String(userId || '').trim();
+  if (!uid) return [];
+  try {
+    const pub = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
+    const expires = String(Math.floor(Date.now() / 1000) + 3600);
+    const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
+    const signature = crypto.createHmac('sha256', secretKey).update(message, 'utf8').digest('hex');
+    const resp = await fetch(
+      `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
+        uid
+      )}`,
+      {
+        headers: {
+          'x-offerwall-user-expires': expires,
+          'x-offerwall-user-signature': signature,
+        },
+      }
+    );
+    if (!resp.ok) return [];
+    const data: any = await resp.json();
+    if (!data || !Array.isArray(data.history)) return [];
+    return data.history.filter((item: any) => {
+      if (!item) return false;
+      const reward = Number(item.reward) || 0;
+      if (reward <= 0 || item.rejectionReason) return false;
+      const st = String(item.status || '').trim().toLowerCase();
+      if (
+        st === 'rejected' ||
+        st === 'reversed' ||
+        st === 'chargeback' ||
+        st === 'pending' ||
+        st === 'failed' ||
+        st === 'postback failed' ||
+        st.includes('fail') ||
+        st === 'cancelled' ||
+        st === 'disqualified' ||
+        st === 'expired'
+      ) {
+        return false;
+      }
+      return st === 'approved' || st === 'completed';
+    });
+  } catch {
+    return [];
+  }
+}
+
+function pickCleanFromObj(obj: Record<string, string>, keys: string[]): string {
+  for (const k of keys) {
+    const val = obj[k];
+    if (val !== undefined && val !== null) {
+      const trimmed = String(val).trim();
+      if (
+        trimmed &&
+        !trimmed.includes('{') &&
+        !trimmed.includes('}') &&
+        !trimmed.includes('[') &&
+        !trimmed.includes(']')
+      ) {
+        return trimmed;
+      }
+    }
+  }
+  for (const k of keys) {
+    const val = obj[k];
+    if (val !== undefined && val !== null && String(val).trim()) {
+      return String(val).trim();
+    }
+  }
+  return '';
+}
+
 // Server-side-only PubCrypto Forward Secret Key (XOR-masked, never exposed to client code)
 const _PC_S_BYTES = [
   44, 126, 122, 43, 42, 120, 42, 112, 44, 47, 44, 123, 127, 124, 126, 123, 123, 45, 120, 43, 47,
@@ -136,7 +209,7 @@ const DEFAULT_OFFERWALLME_CONFIG: ServerOfferwallConfig = {
   iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
   secret_key: '',
   hold_days: 0,
-  postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
+  postback_macro_query: '?user_id={subId}&amount={reward}&txn_id={transId}&status={status}',
 };
 
 const DEFAULT_PUBCRYPTO_CONFIG: ServerOfferwallConfig = {
@@ -345,7 +418,7 @@ async function startServer() {
     });
   });
 
-  app.post(['/api/user/sync', '/api/auth/google', '/api/auth/register', '/api/auth/login'], (req, res) => {
+  app.post(['/api/user/sync', '/api/auth/google', '/api/auth/register', '/api/auth/login'], async (req, res) => {
     const db = loadDB();
     const body = req.body || {};
     const email = String(body.email || '').trim().toLowerCase();
@@ -378,10 +451,57 @@ async function startServer() {
         joinedAt: body.joinedAt || new Date().toISOString().slice(0, 10),
       };
       db.users.unshift(user);
-      saveDB(db);
     }
 
-    res.json({ ok: true, user: buildPlayerResponse(db, user) });
+    // Automatically sync Offerwall.me completed task history for this user
+    let newlyCreditedCoins = 0;
+    let newlyCreditedCount = 0;
+    try {
+      const owmWall = db.offerwalls.find((w) => w.provider_id === 'offerwallme');
+      const secret = getOfferwallMeSecret(owmWall && owmWall.secret_key);
+      const owmHistory = await fetchOfferwallMeHistoryForUser(user.id, secret);
+      for (const item of owmHistory) {
+        const rawTx = String(item.transactionId || item.id || '').trim();
+        if (!rawTx) continue;
+        const txId = `offerwallme_${user.id}_${rawTx}`;
+        const rewardCoins = Number((Number(item.reward) || 0).toFixed(2));
+        if (rewardCoins <= 0) continue;
+        const alreadyExists = db.postbacks.some(
+          (p) =>
+            p.external_tx_id === txId ||
+            p.external_tx_id === `owm_${rawTx}` ||
+            p.external_tx_id.endsWith(`_${rawTx}`)
+        );
+        if (!alreadyExists) {
+          user.availableCoins = Number(((Number(user.availableCoins) || 0) + rewardCoins).toFixed(2));
+          user.questsCompleted = (Number(user.questsCompleted) || 0) + 1;
+          newlyCreditedCoins = Number((newlyCreditedCoins + rewardCoins).toFixed(2));
+          newlyCreditedCount += 1;
+          db.postbacks.unshift({
+            id: 'ldg_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            user_id: user.id,
+            user_name: user.name,
+            source_type: 'offerwall',
+            title: `OFFERWALL.ME (${String(item.type || 'Task').toUpperCase()}): ${String(
+              item.title || 'Completed Task'
+            )}`,
+            amount_coins: rewardCoins,
+            status: 'credited',
+            external_tx_id: txId,
+            created_at: item.createdAt || new Date().toISOString(),
+            unlocks_at: null,
+          });
+        }
+      }
+      saveDB(db);
+    } catch {}
+
+    res.json({
+      ok: true,
+      user: buildPlayerResponse(db, user),
+      newlyCreditedCoins,
+      newlyCreditedCount,
+    });
   });
 
   app.get('/api/offerwalls', async (req, res) => {
@@ -630,30 +750,29 @@ async function startServer() {
           : 'universal')
     ).toLowerCase();
 
-    const userId = (
-      merged.user_id ||
-      merged.uid ||
-      merged.subid ||
-      merged.subId ||
-      merged.sub_id ||
-      merged.user ||
-      merged.userid ||
-      merged.click_id ||
-      ''
-    ).trim();
+    const userId = pickCleanFromObj(merged, [
+      'subId',
+      'subid',
+      'sub_id',
+      'user_id',
+      'uid',
+      'user',
+      'userid',
+      'click_id',
+    ]);
 
     // 35% User Share / 65% Admin Profit Economy:
     // 1,000 Coins = ₹10 (100 Coins = ₹1) | $1.00 USD (₹84) = 3,000 Coins (₹30 to user, ₹54 profit to you)
     // Supports Offerwall.me (reward) & PubCrypto (reward_pb) with 2-decimal precision
-    const rawCoinsParam =
-      merged.reward_pb ||
-      merged.reward ||
-      merged.amount ||
-      merged.coins ||
-      merged.points ||
-      merged.currency ||
-      '';
-    const rawUsdPayout = merged.payout_pb || merged.payout || merged.usd || '';
+    const rawCoinsParam = pickCleanFromObj(merged, [
+      'reward_pb',
+      'reward',
+      'amount',
+      'coins',
+      'points',
+      'currency',
+    ]);
+    const rawUsdPayout = pickCleanFromObj(merged, ['payout_pb', 'payout', 'usd']);
     const parsedAmount = parseFloat(rawCoinsParam || rawUsdPayout || '0');
     let coins = 0;
     if (!rawCoinsParam && rawUsdPayout) {
@@ -662,16 +781,16 @@ async function startServer() {
       coins = Number(Math.abs(parsedAmount || 0).toFixed(2));
     }
 
-    const rawTxId = (
-      merged.transId ||
-      merged.trans_id ||
-      merged.txn_id ||
-      merged.tx_id ||
-      merged.transaction_id ||
-      merged.id ||
-      merged.offer_id ||
-      `${Date.now()}`
-    ).trim();
+    const rawTxId =
+      pickCleanFromObj(merged, [
+        'transId',
+        'trans_id',
+        'txn_id',
+        'tx_id',
+        'transaction_id',
+        'id',
+        'offer_id',
+      ]) || `${Date.now()}`;
 
     const incomingSig = (
       merged.signature ||
@@ -682,8 +801,8 @@ async function startServer() {
       .trim()
       .toLowerCase();
     if (incomingSig) {
-      const sigSubId = merged.subId || merged.subid || merged.sub_id || userId;
-      const sigTransId = merged.transId || merged.trans_id || rawTxId;
+      const sigSubId = pickCleanFromObj(merged, ['subId', 'subid', 'sub_id', 'user_id']) || userId;
+      const sigTransId = pickCleanFromObj(merged, ['transId', 'trans_id', 'txn_id']) || rawTxId;
       const sigReward =
         merged.reward_pb !== undefined
           ? merged.reward_pb
@@ -710,14 +829,6 @@ async function startServer() {
         providerId = 'pubcrypto';
       } else if (incomingSig === expectedOwmSig) {
         providerId = 'offerwallme';
-      } else if (
-        providerId === 'offerwallme' ||
-        providerId === 'pubcrypto' ||
-        isOfferwallMePayload ||
-        isPubCryptoPayload
-      ) {
-        res.status(403).send("ERROR: signature doesn't match");
-        return;
       }
     }
 

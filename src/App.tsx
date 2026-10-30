@@ -35,7 +35,7 @@ const DEFAULT_OFFERWALLME_WALL: OfferwallConfig = {
   app_id: OFFERWALLME_PUBLIC_KEY,
   iframe_url_template: 'https://offerwall.me/offerwall/{app_id}/{user_id}',
   hold_days: 0,
-  postback_macro_query: '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}',
+  postback_macro_query: '?user_id={subId}&amount={reward}&txn_id={transId}&status={status}',
 };
 
 const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
@@ -235,20 +235,23 @@ function OfferwallMeBanner({ size }: { size: '728x90' | '468x60' | '300x250' }) 
 }
 
 function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
+    try {
+      const saved = localStorage.getItem(STORAGE_API_BASE_KEY);
+      if (saved && saved.trim()) {
+        return saved.trim().replace(/\/+$/, '');
+      }
+    } catch {}
+    return 'https://lootify-api.sarthaksinghyadav1.workers.dev';
+  }
   try {
     const saved = localStorage.getItem(STORAGE_API_BASE_KEY);
-    if (saved && saved.trim()) {
+    if (saved && saved.includes('workers.dev')) {
+      localStorage.removeItem(STORAGE_API_BASE_KEY);
+    } else if (saved && saved.trim()) {
       return saved.trim().replace(/\/+$/, '');
     }
   } catch {}
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname.includes('github.io') ||
-      window.location.hostname.includes('c0m.to') ||
-      window.location.hostname.includes('lootify'))
-  ) {
-    return 'https://lootify-api.sarthaksinghyadav1.workers.dev';
-  }
   return '';
 }
 
@@ -261,6 +264,9 @@ function loadCachedOfferwalls(): OfferwallConfig[] {
         const cleaned = parsed.map((w: OfferwallConfig) => {
           const copy = { ...w };
           delete copy.signed_iframe_url;
+          if (copy.provider_id === 'offerwallme' && copy.postback_macro_query) {
+            copy.postback_macro_query = copy.postback_macro_query.replace('{subid}', '{subId}');
+          }
           return copy;
         });
         if (!cleaned.some((w: OfferwallConfig) => w.provider_id === 'offerwallme')) {
@@ -310,6 +316,7 @@ function loadCurrentUser(): PlayerUser | null {
       withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
       heldRewards: Array.isArray(parsed.heldRewards) ? parsed.heldRewards : [],
       faucetHistory: Array.isArray(parsed.faucetHistory) ? parsed.faucetHistory : [],
+      creditedTxIds: Array.isArray(parsed.creditedTxIds) ? parsed.creditedTxIds : [],
     };
   } catch {
     return null;
@@ -479,7 +486,12 @@ export default function App() {
         if (data && data.user) {
           saveCurrentUser(data.user);
           setUser(data.user);
-          if (showFeedback) {
+          if (Number(data.newlyCreditedCoins) > 0) {
+            setSyncStatusMsg(
+              `🎉 +${data.newlyCreditedCoins} Coins credited from Offerwall.me! Balance: ${data.user.availableCoins} Coins`
+            );
+            setTimeout(() => setSyncStatusMsg(null), 5000);
+          } else if (showFeedback) {
             setSyncStatusMsg(`✅ Synced! Balance: ${data.user.availableCoins} Available Coins`);
             setTimeout(() => setSyncStatusMsg(null), 3500);
           }
@@ -722,6 +734,30 @@ export default function App() {
     const intervalId = window.setInterval(doRefresh, 10 * 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, [user?.id, selectedWallId, activeTab, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
+
+  // Automatic Offerwall & Wallet sync on window focus / visibilitychange & every 12s on Quests tab
+  useEffect(() => {
+    const syncLatestBalance = () => {
+      const current = loadCurrentUser();
+      if (current) {
+        syncUserWithBackend(current, false);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncLatestBalance();
+      }
+    };
+    window.addEventListener('focus', syncLatestBalance);
+    document.addEventListener('visibilitychange', onVisibility);
+    const pollMs = activeTab === 'quests' ? 12000 : 30000;
+    const pollId = window.setInterval(syncLatestBalance, pollMs);
+    return () => {
+      window.removeEventListener('focus', syncLatestBalance);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(pollId);
+    };
+  }, [activeTab, syncUserWithBackend]);
 
   useEffect(() => {
     if (isAdminRoute && adminLoggedIn) {

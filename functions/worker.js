@@ -128,7 +128,7 @@ async function ensureSchema(db) {
           'https://offerwall.me/offerwall/{app_id}/{user_id}',
           '',
           0,
-          '?user_id={subid}&amount={reward}&txn_id={transId}&status={status}'
+          '?user_id={subId}&amount={reward}&txn_id={transId}&status={status}'
         )`
       )
       .run();
@@ -161,7 +161,7 @@ async function ensureSchema(db) {
         .run();
       await db
         .prepare(
-          "UPDATE offerwall_configs SET secret_key = 'f25hoUjdRBQpUbbogHGU4aObX1lb7W24', hold_days = 0 WHERE provider_id = 'offerwallme'"
+          "UPDATE offerwall_configs SET secret_key = 'f25hoUjdRBQpUbbogHGU4aObX1lb7W24', hold_days = 0, postback_macro_query = '?user_id={subId}&amount={reward}&txn_id={transId}&status={status}' WHERE provider_id = 'offerwallme'"
         )
         .run();
       // Release any previously held coins from artificial 7-day holds
@@ -306,6 +306,90 @@ async function signOfferwallMeUrl(publicKey, userId, secretKey) {
   )}?identityExpires=${encodeURIComponent(expires)}&identitySignature=${encodeURIComponent(
     signature
   )}`;
+}
+
+async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU4aObX1lb7W24") {
+  const uid = String(userId || "").trim();
+  if (!uid) return [];
+  try {
+    const pub = "PQhx5BxXulHlM6PxZx81pZgIs2nyRd";
+    const expires = String(Math.floor(Date.now() / 1000) + 3600);
+    const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
+    const enc = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secretKey || "f25hoUjdRBQpUbbogHGU4aObX1lb7W24"),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sigBuf = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
+    const signature = Array.from(new Uint8Array(sigBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const resp = await fetch(
+      `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
+        uid
+      )}`,
+      {
+        headers: {
+          "x-offerwall-user-expires": expires,
+          "x-offerwall-user-signature": signature,
+        },
+      }
+    );
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    if (!data || !Array.isArray(data.history)) return [];
+    return data.history.filter((item) => {
+      if (!item) return false;
+      const reward = Number(item.reward) || 0;
+      if (reward <= 0 || item.rejectionReason) return false;
+      const st = String(item.status || "").trim().toLowerCase();
+      if (
+        st === "rejected" ||
+        st === "reversed" ||
+        st === "chargeback" ||
+        st === "pending" ||
+        st === "failed" ||
+        st === "postback failed" ||
+        st.includes("fail") ||
+        st === "cancelled" ||
+        st === "disqualified" ||
+        st === "expired"
+      ) {
+        return false;
+      }
+      return st === "approved" || st === "completed";
+    });
+  } catch {
+    return [];
+  }
+}
+
+function pickCleanParam(params, keys) {
+  for (const k of keys) {
+    const val = params.get(k);
+    if (val !== null && val !== undefined) {
+      const trimmed = String(val).trim();
+      if (
+        trimmed &&
+        !trimmed.includes("{") &&
+        !trimmed.includes("}") &&
+        !trimmed.includes("[") &&
+        !trimmed.includes("]")
+      ) {
+        return trimmed;
+      }
+    }
+  }
+  for (const k of keys) {
+    const val = params.get(k);
+    if (val !== null && val !== undefined && String(val).trim()) {
+      return String(val).trim();
+    }
+  }
+  return "";
 }
 
 // Pure-JS MD5 helper for Offerwall.me S2S Postback Signature verification: md5(subId + transId + reward + secretKey)
@@ -696,7 +780,7 @@ export default {
                   iframe_url_template: "https://offerwall.me/offerwall/{app_id}/{user_id}",
                   signed_iframe_url: owmSigned,
                   hold_days: 0,
-                  postback_macro_query: "?user_id={subid}&amount={reward}&txn_id={transId}&status={status}",
+                  postback_macro_query: "?user_id={subId}&amount={reward}&txn_id={transId}&status={status}",
                 },
                 {
                   provider_id: "pubcrypto",
@@ -711,6 +795,80 @@ export default {
                   postback_macro_query: "",
                 },
               ],
+            },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+        if (
+          (url.pathname === "/api/user/sync" ||
+            url.pathname === "/api/auth/google" ||
+            url.pathname === "/api/auth/login" ||
+            url.pathname === "/api/auth/register") &&
+          request.method === "POST"
+        ) {
+          let body = {};
+          try {
+            body = await request.json();
+          } catch {}
+          const email = String(body.email || "").trim().toLowerCase();
+          const name = String(body.name || email.split("@")[0] || "Player").trim();
+          const userId = String(body.id || "").trim() || "plr_demo";
+          const creditedSet = new Set(Array.isArray(body.creditedTxIds) ? body.creditedTxIds : []);
+          const heldMap = new Map();
+          for (const h of Array.isArray(body.heldRewards) ? body.heldRewards : []) {
+            if (h && h.id) {
+              heldMap.set(h.id, h);
+              if (String(h.id).startsWith("owm_")) creditedSet.add(String(h.id));
+            }
+          }
+          let availableCoins = Number((Number(body.availableCoins) || 0).toFixed(2));
+          let questsCompleted = Number(body.questsCompleted) || 0;
+          const owmHistory = await fetchOfferwallMeHistory(userId, getOfferwallMeSecret(env, ""));
+          let newlyCreditedCoins = 0;
+          let newlyCreditedCount = 0;
+          for (const item of owmHistory) {
+            const rawTx = String(item.transactionId || item.id || "").trim();
+            if (!rawTx) continue;
+            const st = String(item.status || "").trim().toLowerCase();
+            if (st === "postback failed" || st.includes("fail")) continue;
+            if (item.rejectionReason || (st !== "approved" && st !== "completed")) continue;
+            const txKey = `owm_${rawTx}`;
+            const rewardCoins = Number((Number(item.reward) || 0).toFixed(2));
+            if (rewardCoins <= 0) continue;
+            if (!creditedSet.has(txKey)) {
+              creditedSet.add(txKey);
+              availableCoins = Number((availableCoins + rewardCoins).toFixed(2));
+              questsCompleted += 1;
+              newlyCreditedCoins = Number((newlyCreditedCoins + rewardCoins).toFixed(2));
+              newlyCreditedCount += 1;
+              heldMap.set(txKey, {
+                id: txKey,
+                title: `OFFERWALL.ME (${String(item.type || "Task").toUpperCase()}): ${String(
+                  item.title || "Completed Task"
+                )}`,
+                coins: rewardCoins,
+                amountInr: Number((rewardCoins / 100).toFixed(4)),
+                status: "credited",
+                createdAt: String(item.createdAt || new Date().toISOString()).slice(0, 10),
+                unlocksAt: null,
+              });
+            }
+          }
+          return Response.json(
+            {
+              ok: true,
+              newlyCreditedCoins,
+              newlyCreditedCount,
+              user: {
+                ...body,
+                id: userId,
+                name,
+                email,
+                availableCoins,
+                questsCompleted: Math.max(questsCompleted, creditedSet.size),
+                heldRewards: Array.from(heldMap.values()),
+                creditedTxIds: Array.from(creditedSet),
+              },
             },
             { status: 200, headers: corsHeaders }
           );
@@ -872,54 +1030,109 @@ export default {
             .first();
         }
 
-        if (existingUser) {
-          const player = await formatPlayerPayload(env.DB, existingUser);
-          return Response.json(
-            { ok: true, user: player, isNewUser: false },
-            { status: 200, headers: corsHeaders }
-          );
-        }
+        if (!existingUser) {
+          const userId = preferredId || "plr_" + Date.now().toString(36);
+          const cleanPrefix = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 5) || "LOOT";
+          const referralCode =
+            body.referralCode || cleanPrefix + Math.floor(100 + Math.random() * 900);
+          const passwordHash = await hashPassword("oauth_" + email);
 
-        const userId = preferredId || "plr_" + Date.now().toString(36);
-        const cleanPrefix = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 5) || "LOOT";
-        const referralCode =
-          body.referralCode || cleanPrefix + Math.floor(100 + Math.random() * 900);
-        const passwordHash = await hashPassword("oauth_" + email);
-
-        let referredByCode = null;
-        if (referralCodeInput) {
-          const referrer = await env.DB.prepare(
-            "SELECT id, referral_code FROM users WHERE referral_code = ?"
-          )
-            .bind(referralCodeInput)
-            .first();
-
-          if (referrer && referrer.id !== userId) {
-            referredByCode = referrer.referral_code;
-            await env.DB.prepare(
-              "INSERT INTO referrals (id, referrer_id, invitee_id, invitee_name, invitee_email, activated, flat_bonus_coins, total_commission_coins) VALUES (?, ?, ?, ?, ?, 0, 0, 0)"
+          let referredByCode = null;
+          if (referralCodeInput) {
+            const referrer = await env.DB.prepare(
+              "SELECT id, referral_code FROM users WHERE referral_code = ?"
             )
-              .bind("ref_" + Date.now(), referrer.id, userId, name, email)
-              .run();
+              .bind(referralCodeInput)
+              .first();
+
+            if (referrer && referrer.id !== userId) {
+              referredByCode = referrer.referral_code;
+              await env.DB.prepare(
+                "INSERT INTO referrals (id, referrer_id, invitee_id, invitee_name, invitee_email, activated, flat_bonus_coins, total_commission_coins) VALUES (?, ?, ?, ?, ?, 0, 0, 0)"
+              )
+                .bind("ref_" + Date.now(), referrer.id, userId, name, email)
+                .run();
+            }
           }
+
+          await env.DB.prepare(
+            `INSERT INTO users (
+              id, name, email, password_hash, role, referral_code, referred_by,
+              available_coins, pending_coins, lifetime_earned_coins
+            ) VALUES (?, ?, ?, ?, 'earner', ?, ?, 0, 0, 0)`
+          )
+            .bind(userId, name, email, passwordHash, referralCode, referredByCode)
+            .run();
+
+          existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+            .bind(userId)
+            .first();
         }
 
-        await env.DB.prepare(
-          `INSERT INTO users (
-            id, name, email, password_hash, role, referral_code, referred_by,
-            available_coins, pending_coins, lifetime_earned_coins
-          ) VALUES (?, ?, ?, ?, 'earner', ?, ?, 0, 0, 0)`
-        )
-          .bind(userId, name, email, passwordHash, referralCode, referredByCode)
-          .run();
+        // Sync any Approved Offerwall.me conversions into D1 (strictly skipping Postback Failed)
+        let newlyCreditedCoins = 0;
+        let newlyCreditedCount = 0;
+        if (existingUser) {
+          try {
+            const owmCfg = await env.DB.prepare(
+              "SELECT secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
+            ).first();
+            const owmSecret = getOfferwallMeSecret(env, owmCfg && owmCfg.secret_key);
+            const owmHistory = await fetchOfferwallMeHistory(existingUser.id, owmSecret);
+            for (const item of owmHistory) {
+              const rawTx = String(item.transactionId || item.id || "").trim();
+              if (!rawTx) continue;
+              const st = String(item.status || "").trim().toLowerCase();
+              if (st === "postback failed" || st.includes("fail")) continue;
+              if (item.rejectionReason || (st !== "approved" && st !== "completed")) continue;
+              const rewardCoins = Number(Math.abs(Number(item.reward) || 0).toFixed(2));
+              if (rewardCoins <= 0) continue;
 
-        const createdUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
-          .bind(userId)
-          .first();
+              const txId = `offerwallme_${existingUser.id}_${rawTx}`;
+              const dupRow = await env.DB.prepare(
+                "SELECT id FROM ledger_entries WHERE external_tx_id = ? OR external_tx_id = ?"
+              )
+                .bind(txId, `owm_${rawTx}`)
+                .first();
+              if (!dupRow) {
+                const taskType = String(item.type || "Task").toUpperCase();
+                const taskTitle = String(item.title || "Completed Offer");
+                await env.DB.prepare(
+                  "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
+                )
+                  .bind(rewardCoins, rewardCoins, existingUser.id)
+                  .run();
+                await env.DB.prepare(
+                  "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
+                )
+                  .bind(
+                    "ldg_owm_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                    existingUser.id,
+                    existingUser.name,
+                    `OFFERWALL.ME (${taskType}): ${taskTitle}`,
+                    rewardCoins,
+                    txId,
+                    item.createdAt || new Date().toISOString()
+                  )
+                  .run();
+                newlyCreditedCoins = Number((newlyCreditedCoins + rewardCoins).toFixed(2));
+                newlyCreditedCount += 1;
+              }
+            }
+            existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+              .bind(existingUser.id)
+              .first();
+          } catch {}
+        }
 
-        const player = await formatPlayerPayload(env.DB, createdUser);
+        const player = await formatPlayerPayload(env.DB, existingUser);
         return Response.json(
-          { ok: true, user: player, isNewUser: true },
+          {
+            ok: true,
+            user: player,
+            newlyCreditedCoins,
+            newlyCreditedCount,
+          },
           { status: 200, headers: corsHeaders }
         );
       }
@@ -1276,39 +1489,36 @@ export default {
           .trim()
           .toLowerCase();
 
-        // Normalize User ID across ALL offerwall networks
-        const userId = (
-          params.get("user_id") ||
-          params.get("uid") ||
-          params.get("subid") ||
-          params.get("subId") ||
-          params.get("sub_id") ||
-          params.get("user") ||
-          params.get("userid") ||
-          params.get("click_id") ||
-          ""
-        ).trim();
+        // Normalize User ID across ALL offerwall networks (skipping unexpanded macros like "{subid}")
+        const userId = pickCleanParam(params, [
+          "subId",
+          "subid",
+          "sub_id",
+          "user_id",
+          "uid",
+          "user",
+          "userid",
+          "click_id",
+        ]);
 
         // Normalize Reward / Amount (35% User Share: $1 USD = 3,000 Coins = ₹30)
         // Supports Offerwall.me (reward) & PubCrypto (reward_pb) with 2-decimal precision
-        const rawPayoutUsd =
-          params.get("payout_pb") || params.get("payout") || params.get("usd") || "";
+        const rawPayoutUsd = pickCleanParam(params, ["payout_pb", "payout", "usd"]);
         const hasExplicitCoinParam = Boolean(
-          params.get("reward_pb") ||
-            params.get("reward") ||
-            params.get("coins") ||
-            params.get("points") ||
-            params.get("amount")
+          pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"])
         );
         const rawAmount =
-          params.get("reward_pb") ||
-          params.get("reward") ||
-          params.get("amount") ||
-          params.get("coins") ||
-          params.get("points") ||
-          params.get("currency") ||
-          rawPayoutUsd ||
-          "0";
+          pickCleanParam(params, [
+            "reward_pb",
+            "reward",
+            "amount",
+            "coins",
+            "points",
+            "currency",
+            "payout_pb",
+            "payout",
+            "usd",
+          ]) || "0";
         const parsedAmount = parseFloat(rawAmount);
 
         const coins =
@@ -1317,18 +1527,18 @@ export default {
             : Number(Math.abs(parsedAmount || 0).toFixed(2));
 
         // Normalize Transaction ID
-        const rawTxId = (
-          params.get("transId") ||
-          params.get("trans_id") ||
-          params.get("txn_id") ||
-          params.get("tx_id") ||
-          params.get("transaction_id") ||
-          params.get("id") ||
-          params.get("offer_id") ||
-          `tx_${Date.now()}`
-        ).trim();
+        const rawTxId =
+          pickCleanParam(params, [
+            "transId",
+            "trans_id",
+            "txn_id",
+            "tx_id",
+            "transaction_id",
+            "id",
+            "offer_id",
+          ]) || `tx_${Date.now()}`;
 
-        // Verify Offerwall.me OR PubCrypto MD5 signature (`md5(subId + transId + reward + secretKey)`)
+        // Detect Offerwall.me OR PubCrypto MD5 signature (`md5(subId + transId + reward + secretKey)`)
         const incomingSig = (
           params.get("signature") ||
           params.get("sig") ||
@@ -1339,8 +1549,8 @@ export default {
           .toLowerCase();
         if (incomingSig) {
           const sigSubId =
-            params.get("subId") || params.get("subid") || params.get("sub_id") || userId;
-          const sigTransId = params.get("transId") || params.get("trans_id") || rawTxId;
+            pickCleanParam(params, ["subId", "subid", "sub_id", "user_id"]) || userId;
+          const sigTransId = pickCleanParam(params, ["transId", "trans_id", "txn_id"]) || rawTxId;
           const sigReward =
             params.get("reward_pb") !== null
               ? params.get("reward_pb")
@@ -1364,16 +1574,6 @@ export default {
             providerId = "pubcrypto";
           } else if (incomingSig === expectedOwmSig) {
             providerId = "offerwallme";
-          } else if (
-            providerId === "offerwallme" ||
-            providerId === "pubcrypto" ||
-            isOfferwallMePayload ||
-            isPubCryptoPayload
-          ) {
-            return new Response("ERROR: signature doesn't match", {
-              status: 403,
-              headers: corsHeaders,
-            });
           }
         }
 

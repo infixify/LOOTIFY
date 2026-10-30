@@ -1,8 +1,9 @@
-// Cloudflare Pages Function Proxy for all /api/* routes
-// Seamlessly forwards requests to Worker API backend
+// Cloudflare Pages Function for all /api/* routes
+// Uses bound D1 database (context.env.DB) directly when available, with Worker fallback
+import worker from "../worker.js";
 
 export async function onRequest(context) {
-  const { request } = context;
+  const { request, env } = context;
   const url = new URL(request.url);
 
   const corsHeaders = {
@@ -17,21 +18,33 @@ export async function onRequest(context) {
 
   // Handle /api/postback specially with immediate "ok"
   if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
-    const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
-    
-    let requestInit = {
-      method: request.method,
-      headers: request.headers,
-    };
-
+    let bodyText = "";
     if (request.method === "POST" || request.method === "PUT") {
       try {
-        requestInit.body = await request.clone().text();
+        bodyText = await request.clone().text();
       } catch {}
     }
 
     context.waitUntil(
-      fetch(workerTargetUrl.toString(), requestInit).catch(() => {})
+      (async () => {
+        try {
+          if (env && env.DB) {
+            const d1Req = new Request(request.url, {
+              method: request.method,
+              headers: request.headers,
+              body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
+            });
+            await worker.fetch(d1Req, env);
+          } else {
+            const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
+            await fetch(workerTargetUrl.toString(), {
+              method: request.method,
+              headers: request.headers,
+              body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
+            });
+          }
+        } catch {}
+      })()
     );
 
     return new Response("ok", {
@@ -40,7 +53,11 @@ export async function onRequest(context) {
     });
   }
 
-  // Proxy all other /api/* calls to Cloudflare Worker
+  if (env && env.DB) {
+    return await worker.fetch(request, env);
+  }
+
+  // Fallback proxy to Cloudflare Worker
   const targetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
   
   let reqInit = {
@@ -67,3 +84,4 @@ export async function onRequest(context) {
     return Response.json({ error: "API proxy error: " + err.message }, { status: 502, headers: corsHeaders });
   }
 }
+

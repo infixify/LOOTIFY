@@ -1,5 +1,6 @@
 // Cloudflare Pages Function for Universal Postback (/api/postback)
-// Accepts GET & POST requests, credits D1 database, and returns "ok"
+// Accepts GET & POST requests, credits D1 database (context.env.DB), and returns "ok"
+import worker from "../worker.js";
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -17,25 +18,34 @@ export async function onRequest(context) {
   }
 
   try {
-    // Forward postback payload asynchronously to main Worker D1 Backend
-    const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev/api/postback");
-    workerTargetUrl.search = url.search;
-
-    let requestInit = {
-      method: request.method,
-      headers: request.headers,
-    };
-
-    if (request.method === "POST") {
+    let bodyText = "";
+    if (request.method === "POST" || request.method === "PUT") {
       try {
-        const bodyText = await request.clone().text();
-        requestInit.body = bodyText;
+        bodyText = await request.clone().text();
       } catch {}
     }
 
-    // Fire and forget fetch to Worker so DB is updated
     context.waitUntil(
-      fetch(workerTargetUrl.toString(), requestInit).catch(() => {})
+      (async () => {
+        try {
+          if (env && env.DB) {
+            const d1Req = new Request(request.url, {
+              method: request.method,
+              headers: request.headers,
+              body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
+            });
+            await worker.fetch(d1Req, env);
+          } else {
+            const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev/api/postback");
+            workerTargetUrl.search = url.search;
+            await fetch(workerTargetUrl.toString(), {
+              method: request.method,
+              headers: request.headers,
+              body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
+            });
+          }
+        } catch {}
+      })()
     );
 
     // Return immediate HTTP 200 OK "ok" to Offerwall verifiers
@@ -44,3 +54,4 @@ export async function onRequest(context) {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
 }
+
