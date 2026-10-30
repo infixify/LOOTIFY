@@ -156,7 +156,7 @@ async function ensureSchema(db) {
     try {
       await db
         .prepare(
-          "UPDATE offerwall_configs SET app_id = 'site_b233010ad04bdeea470d1114a38e6d0b05839e4a', secret_key = 'c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919', hold_days = 0 WHERE provider_id = 'pubcrypto'"
+          "UPDATE offerwall_configs SET app_id = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198', secret_key = 'e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23', hold_days = 0 WHERE provider_id = 'pubcrypto'"
         )
         .run();
       await db
@@ -200,26 +200,16 @@ function getOfferwallMeSecret(env, dbSecret) {
 function getPubCryptoSecret(env, dbSecret) {
   if (dbSecret && String(dbSecret).trim().length > 8) return String(dbSecret).trim();
   if (env && env.PUBCRYPTO_SECRET_KEY) return String(env.PUBCRYPTO_SECRET_KEY).trim();
-  return "c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919";
+  return "e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23";
 }
 
-const _PC_API_BYTES = [
-  57, 60, 43, 22, 124, 47, 113, 44, 47, 44, 126, 126, 127, 124, 124, 124, 113, 124, 126, 44, 43,
-  124, 126, 112, 120, 122, 127, 42, 47, 120, 127, 122, 43, 40, 124, 42, 43, 47, 42, 40, 127, 127,
-  43, 113, 44, 40, 40, 43, 44, 45, 126, 45,
-];
-
 function getPubCryptoPublisherApiKey(env, dbSecret) {
-  const forwardSecret = getPubCryptoSecret(env, dbSecret);
-  const candidate = String(dbSecret || (env && env.PUBCRYPTO_PUBLISHER_API_KEY) || "").trim();
-  if (candidate && candidate !== forwardSecret && candidate.length > 8) {
-    return candidate;
-  }
-  return String.fromCharCode(..._PC_API_BYTES.map((b) => b ^ 73));
+  if (env && env.PUBCRYPTO_PUBLISHER_API_KEY) return String(env.PUBCRYPTO_PUBLISHER_API_KEY).trim();
+  return "pub_5f8efe776555857eb579136cf163ba5cbfca66b8eaabed7d";
 }
 
 async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark") {
-  const sKey = String(siteKey || "site_b233010ad04bdeea470d1114a38e6d0b05839e4a").trim();
+  const sKey = String(siteKey || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198").trim();
   const uid = String(userId || "").trim();
   const apiKey = String(publisherApiKey || "").trim();
   const cleanTheme = theme === "light" ? "light" : "dark";

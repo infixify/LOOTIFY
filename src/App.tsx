@@ -7,7 +7,7 @@ const STORAGE_API_BASE_KEY = 'lootify_api_base_url';
 const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v7';
 
 const OFFERWALLME_PUBLIC_KEY = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
-const PUBCRYPTO_SITE_KEY = 'site_b233010ad04bdeea470d1114a38e6d0b05839e4a';
+const PUBCRYPTO_SITE_KEY = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198';
 const _OWM_S_BYTES = [
   47, 123, 124, 33, 38, 28, 35, 45, 27, 11, 24, 57, 28, 43, 43, 38, 46, 1, 14, 28, 125, 40, 6, 43,
   17, 120, 37, 43, 126, 30, 123, 125,
