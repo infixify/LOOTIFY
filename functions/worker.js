@@ -133,7 +133,7 @@ async function ensureSchema(db) {
       )
       .run();
 
-    // Auto-seed approved PubCrypto placement (Site Key: site_b233010ad04bdeea470d1114a38e6d0b05839e4a)
+    // Auto-seed approved PubCrypto placement (Site Key: site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198)
     await db
       .prepare(
         `INSERT OR IGNORE INTO offerwall_configs (
@@ -143,9 +143,9 @@ async function ensureSchema(db) {
           'PubCrypto',
           'Shortlinks, PTC, Tasks & Offerwalls',
           1,
-          'site_b233010ad04bdeea470d1114a38e6d0b05839e4a',
+          'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198',
           'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
-          'c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919',
+          'e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23',
           0,
           ''
         )`
@@ -730,7 +730,7 @@ export default {
           if (providerId === "pubcrypto") {
             const pubApiKey = getPubCryptoPublisherApiKey(env, "");
             const signedUrl = await createPubCryptoSignedEmbedUrl(
-              "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
+              "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
               reqUserId,
               pubApiKey,
               reqTheme
@@ -761,7 +761,7 @@ export default {
           const pubApiKey = getPubCryptoPublisherApiKey(env, "");
           const pcSigned = reqUserId
             ? await createPubCryptoSignedEmbedUrl(
-                "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
+                "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
                 reqUserId,
                 pubApiKey,
                 reqTheme
@@ -788,7 +788,7 @@ export default {
                   name: "PubCrypto",
                   badge: "Shortlinks, PTC, Tasks & Offerwalls",
                   enabled: 1,
-                  app_id: "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
+                  app_id: "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
                   iframe_url_template:
                     "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
                   signed_iframe_url: pcSigned,
