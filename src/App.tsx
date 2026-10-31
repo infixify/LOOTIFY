@@ -488,9 +488,9 @@ export default function App() {
           setUser(data.user);
           if (Number(data.newlyCreditedCoins) > 0) {
             setSyncStatusMsg(
-              `🎉 +${data.newlyCreditedCoins} Coins credited from Offerwall.me! Balance: ${data.user.availableCoins} Coins`
+              `🎉 +${data.newlyCreditedCoins} Coins credited from Offerwall Task! Balance: ${data.user.availableCoins} Coins`
             );
-            setTimeout(() => setSyncStatusMsg(null), 5000);
+            setTimeout(() => setSyncStatusMsg(null), 6000);
           } else if (showFeedback) {
             setSyncStatusMsg(`✅ Synced! Balance: ${data.user.availableCoins} Available Coins`);
             setTimeout(() => setSyncStatusMsg(null), 3500);

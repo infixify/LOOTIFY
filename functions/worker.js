@@ -36,8 +36,10 @@ function pushPendingPostback(userId, txId, coins, offerName, providerLabel) {
   });
 }
 
-function processPendingPostbacksForUser(userId, currentAvailableCoins, currentCreditedTxIds, currentHeldRewards) {
-  const uid = String(userId || "").trim();
+function processPendingPostbacksForUser(userId, userEmail, currentAvailableCoins, currentCreditedTxIds, currentHeldRewards) {
+  const uid = String(userId || "").trim().toLowerCase();
+  const uemail = String(userEmail || "").trim().toLowerCase();
+
   const creditedSet = new Set(Array.isArray(currentCreditedTxIds) ? currentCreditedTxIds : []);
   const heldMap = new Map();
   for (const h of Array.isArray(currentHeldRewards) ? currentHeldRewards : []) {
@@ -48,27 +50,34 @@ function processPendingPostbacksForUser(userId, currentAvailableCoins, currentCr
   let newlyCount = 0;
   let updatedAvailable = Number(currentAvailableCoins) || 0;
 
-  if (uid) {
-    for (const [key, pb] of globalThis.__LOOTIFY_PENDING_POSTBACKS__.entries()) {
-      if (pb && (pb.userId === uid || pb.userId.toLowerCase() === uid.toLowerCase())) {
-        const txKey = pb.txId;
-        if (!creditedSet.has(txKey)) {
-          creditedSet.add(txKey);
-          updatedAvailable = Number((updatedAvailable + pb.coins).toFixed(2));
-          newlyCoins = Number((newlyCoins + pb.coins).toFixed(2));
-          newlyCount += 1;
-          heldMap.set(txKey, {
-            id: txKey,
-            title: `${pb.providerLabel}: ${pb.offerName}`,
-            coins: pb.coins,
-            amountInr: Number((pb.coins / 100).toFixed(4)),
-            status: "credited",
-            createdAt: pb.createdAt || new Date().toISOString().slice(0, 10),
-            unlocksAt: null,
-          });
-        }
-        globalThis.__LOOTIFY_PENDING_POSTBACKS__.delete(key);
+  for (const [key, pb] of globalThis.__LOOTIFY_PENDING_POSTBACKS__.entries()) {
+    if (!pb) continue;
+    const pUid = String(pb.userId || "").trim().toLowerCase();
+    const isMatch =
+      (uid && pUid === uid) ||
+      (uemail && pUid === uemail) ||
+      (pUid.includes("@") && uemail && pUid === uemail) ||
+      (uid && pUid.startsWith("plr_")) ||
+      (uid.startsWith("usr_g_") && pUid.startsWith("plr_"));
+
+    if (isMatch) {
+      const txKey = pb.txId;
+      if (!creditedSet.has(txKey)) {
+        creditedSet.add(txKey);
+        updatedAvailable = Number((updatedAvailable + pb.coins).toFixed(2));
+        newlyCoins = Number((newlyCoins + pb.coins).toFixed(2));
+        newlyCount += 1;
+        heldMap.set(txKey, {
+          id: txKey,
+          title: `${pb.providerLabel}: ${pb.offerName}`,
+          coins: pb.coins,
+          amountInr: Number((pb.coins / 100).toFixed(4)),
+          status: "credited",
+          createdAt: pb.createdAt || new Date().toISOString().slice(0, 10),
+          unlocksAt: null,
+        });
       }
+      globalThis.__LOOTIFY_PENDING_POSTBACKS__.delete(key);
     }
   }
 
@@ -972,6 +981,7 @@ export default {
 
           const pendingRes = processPendingPostbacksForUser(
             userId,
+            email,
             availableCoins,
             Array.from(creditedSet),
             Array.from(heldMap.values())
@@ -1268,6 +1278,7 @@ export default {
             }
             const pendingRes = processPendingPostbacksForUser(
               existingUser.id,
+              existingUser.email,
               existingUser.available_coins,
               [],
               []
@@ -1306,6 +1317,67 @@ export default {
                 .bind(existingUser.id)
                 .first();
             }
+
+            // Auto-merge any orphan guest accounts (e.g. plr_... or *@lootify.local) into existingUser
+            try {
+              const orphanUsers = await env.DB.prepare(
+                "SELECT id, available_coins, pending_coins FROM users WHERE id != ? AND (id LIKE 'plr_%' OR email LIKE '%@lootify.local')"
+              )
+                .bind(existingUser.id)
+                .all();
+
+              for (const orphan of (orphanUsers && orphanUsers.results) || []) {
+                const orphanAvail = Number(orphan.available_coins) || 0;
+                const orphanPend = Number(orphan.pending_coins) || 0;
+                if (orphanAvail > 0 || orphanPend > 0) {
+                  await env.DB.prepare(
+                    "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), pending_coins = ROUND(pending_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2) WHERE id = ?"
+                  )
+                    .bind(orphanAvail, orphanPend, orphanAvail + orphanPend, existingUser.id)
+                    .run();
+
+                  await env.DB.prepare(
+                    "UPDATE ledger_entries SET user_id = ?, user_name = ? WHERE user_id = ?"
+                  )
+                    .bind(existingUser.id, existingUser.name, orphan.id)
+                    .run();
+
+                  await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(orphan.id).run();
+
+                  newlyCreditedCoins = Number((newlyCreditedCoins + orphanAvail).toFixed(2));
+                  newlyCreditedCount += 1;
+                }
+              }
+              if (orphanUsers && orphanUsers.results && orphanUsers.results.length > 0) {
+                existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+                  .bind(existingUser.id)
+                  .first();
+              }
+            } catch {}
+
+            // Detect recent unacknowledged credits in ledger_entries to trigger newlyCreditedCoins UI alert
+            try {
+              const clientTxSet = new Set(Array.isArray(body.creditedTxIds) ? body.creditedTxIds : []);
+              for (const h of body.heldRewards || []) {
+                if (h && h.id) clientTxSet.add(h.id);
+              }
+              const recentCredits = await env.DB.prepare(
+                "SELECT id, external_tx_id, amount_coins FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status = 'credited' ORDER BY created_at DESC LIMIT 10"
+              )
+                .bind(existingUser.id)
+                .all();
+
+              for (const rc of (recentCredits && recentCredits.results) || []) {
+                const extId = rc.external_tx_id || rc.id;
+                if (extId && !clientTxSet.has(extId)) {
+                  const amt = Number(rc.amount_coins) || 0;
+                  if (amt > 0) {
+                    newlyCreditedCoins = Number((newlyCreditedCoins + amt).toFixed(2));
+                    newlyCreditedCount += 1;
+                  }
+                }
+              }
+            } catch {}
           } catch {}
         }
 
