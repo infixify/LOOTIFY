@@ -50,6 +50,63 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
   postback_macro_query: '?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}',
 };
 
+function formatIstDate(dateInput?: string | number | Date | null): string {
+  if (!dateInput) {
+    return (
+      new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }) + ' IST'
+    );
+  }
+  try {
+    let d: Date;
+    if (typeof dateInput === 'number') {
+      d = dateInput < 10000000000 ? new Date(dateInput * 1000) : new Date(dateInput);
+    } else {
+      const str = String(dateInput).trim();
+      if (!str || str.startsWith('1970') || str === '0' || str === 'null' || str === 'undefined') {
+        d = new Date();
+      } else if (str.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        d = new Date(`${str}T12:00:00Z`);
+      } else {
+        d = new Date(str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') + 'Z' : str);
+      }
+    }
+    if (Number.isNaN(d.getTime()) || d.getTime() < 86400000) {
+      d = new Date();
+    }
+    return (
+      d.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }) + ' IST'
+    );
+  } catch {
+    return (
+      new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }) + ' IST'
+    );
+  }
+}
+
 let _cachedServerTimeOffsetSec = 0;
 
 function sha256BytesSync(asciiIn: number[]): number[] {
@@ -319,7 +376,7 @@ function loadCurrentUser(): PlayerUser | null {
             coins: log.coins,
             amountInr: Number((log.coins / 100).toFixed(4)),
             status: 'credited',
-            createdAt: new Date().toISOString().slice(0, 10),
+            createdAt: new Date().toISOString(),
             unlocksAt: null,
           });
         }
@@ -3027,7 +3084,7 @@ export default function App() {
                           {w.methodLabel} — ₹{w.amountInr}
                         </div>
                         <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                          {w.destination} • {w.createdAt}
+                          {w.destination} • {formatIstDate(w.createdAt)}
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -3624,7 +3681,7 @@ export default function App() {
                               Roll #{String(fc.rollNumber).padStart(4, '0')}
                             </div>
                             <div className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)' }}>
-                              {fc.createdAt} • {fc.payoutMode === 'faucetpay' ? 'FaucetPay' : 'Wallet'}
+                              {formatIstDate(fc.createdAt)} • {fc.payoutMode === 'faucetpay' ? 'FaucetPay' : 'Wallet'}
                             </div>
                           </div>
                           <span className="font-mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
@@ -4027,8 +4084,8 @@ export default function App() {
                                 {item.title}
                               </div>
                               <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                                Earned: {item.createdAt}
-                                {isHeld && item.unlocksAt ? ` • Auto-Release: ${item.unlocksAt}` : ''}
+                                Earned: {formatIstDate(item.createdAt)}
+                                {isHeld && item.unlocksAt ? ` • Auto-Release: ${formatIstDate(item.unlocksAt)}` : ''}
                               </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4106,7 +4163,7 @@ export default function App() {
                               ₹{w.amountInr} — {w.methodLabel}
                             </div>
                             <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                              {w.destination} • {w.createdAt}
+                              {w.destination} • {formatIstDate(w.createdAt)}
                             </div>
                           </div>
                           <span
