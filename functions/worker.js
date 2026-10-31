@@ -831,7 +831,7 @@ export default {
             { status: 200, headers: corsHeaders }
           );
         }
-        if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
+        if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback")) {
           const params = new URLSearchParams(url.search);
           if (request.method === "POST") {
             try {
@@ -1765,7 +1765,7 @@ export default {
       // 35% User Share / 65% Admin Profit -> $1 USD (₹84) = 3,000 Coins (₹30)
       // Works for ALL Ad Networks on ONE single URL (/api/postback)!
       // ======================================================================
-      if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
+      if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback")) {
         const params = new URLSearchParams(url.search);
         if (request.method === "POST") {
           try {
