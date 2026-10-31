@@ -228,7 +228,7 @@ async function ensureSchema(db) {
           'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
           'e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23',
           0,
-          ''
+          '?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}'
         )`
       )
       .run();
@@ -237,7 +237,7 @@ async function ensureSchema(db) {
     try {
       await db
         .prepare(
-          "UPDATE offerwall_configs SET app_id = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198', secret_key = 'e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23', hold_days = 0 WHERE provider_id = 'pubcrypto'"
+          "UPDATE offerwall_configs SET app_id = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198', secret_key = 'e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23', hold_days = 0, postback_macro_query = '?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}' WHERE provider_id = 'pubcrypto'"
         )
         .run();
       await db
@@ -669,7 +669,7 @@ async function formatPlayerPayload(db, userRow) {
     const withdrawnTotal = Number(wdSumRow && wdSumRow.total_withdrawn) || 0;
     const calculatedAvail = Math.max(0, Number((creditedTotal - withdrawnTotal).toFixed(2)));
 
-    if (calculatedAvail > (Number(userRow.available_coins) || 0)) {
+    if (calculatedAvail !== (Number(userRow.available_coins) || 0)) {
       await db
         .prepare(
           "UPDATE users SET available_coins = ?, lifetime_earned_coins = MAX(COALESCE(lifetime_earned_coins, 0), ?) WHERE id = ?"
@@ -946,7 +946,7 @@ export default {
                     "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
                   signed_iframe_url: pcSigned,
                   hold_days: 0,
-                  postback_macro_query: "",
+                  postback_macro_query: "?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}",
                 },
               ],
             },

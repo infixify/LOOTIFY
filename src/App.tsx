@@ -47,7 +47,7 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
   iframe_url_template:
     'https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark',
   hold_days: 0,
-  postback_macro_query: '',
+  postback_macro_query: '?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}',
 };
 
 let _cachedServerTimeOffsetSec = 0;
