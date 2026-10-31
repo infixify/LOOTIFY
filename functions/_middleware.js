@@ -231,14 +231,16 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Delegate all /api/* routes to worker.js (D1 SQL Backend) or proxy to lootify-api
+  // Delegate all /api/* routes to worker.js (if D1 DB bound) or proxy to primary Worker endpoint
   if (url.pathname.startsWith("/api/")) {
-    try {
-      const resp = await worker.fetch(request, context.env);
-      if (resp && resp.status !== 503) {
-        return resp;
-      }
-    } catch {}
+    if (context.env && context.env.DB) {
+      try {
+        const resp = await worker.fetch(request, context.env);
+        if (resp && resp.status !== 503) {
+          return resp;
+        }
+      } catch {}
+    }
 
     // Proxy fallback to primary Worker endpoint if Pages context lacks DB
     try {

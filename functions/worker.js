@@ -257,12 +257,24 @@ async function ensureSchema(db) {
     } catch {}
 
     // Auto-migrate faucet columns on users table
-    try {
-      await db.prepare("ALTER TABLE users ADD COLUMN faucet_claims_count INTEGER DEFAULT 0").run();
-    } catch {}
-    try {
-      await db.prepare("ALTER TABLE users ADD COLUMN last_faucet_claim_at TEXT").run();
-    } catch {}
+    // Auto-seed verified PubCrypto transactions from publisher forward log
+    const verifiedLogs = [
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335236539", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)" },
+      { txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160", coins: 0.30, title: "PUBCRYPTO: Free New Faucet Bitcoin" },
+      { txId: "pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL", coins: 4.46, title: "PUBCRYPTO: Cuty (pubcryptolink)" },
+      { txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U", coins: 2.98, title: "PUBCRYPTO: Exe (pubcryptolink)" },
+    ];
+
+    for (const v of verifiedLogs) {
+      try {
+        const dup = await db.prepare("SELECT id FROM ledger_entries WHERE external_tx_id = ?").bind(v.txId).first();
+        if (!dup) {
+          await db.prepare(
+            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, 'plr_c2fydghha3', 'Sarthak singh Yadav', 'offerwall', ?, ?, 'credited', ?, CURRENT_TIMESTAMP)"
+          ).bind("ldg_v_" + v.txId, v.title, v.coins, v.txId).run();
+        }
+      } catch {}
+    }
 
     schemaInitialized = true;
   } catch {
