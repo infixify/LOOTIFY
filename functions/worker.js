@@ -1266,9 +1266,46 @@ export default {
                 newlyCreditedCount += 1;
               }
             }
-            existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
-              .bind(existingUser.id)
-              .first();
+            const pendingRes = processPendingPostbacksForUser(
+              existingUser.id,
+              existingUser.available_coins,
+              [],
+              []
+            );
+            if (pendingRes.newlyCreditedCoins > 0) {
+              for (const h of pendingRes.heldMap.values()) {
+                const dupCheck = await env.DB.prepare(
+                  "SELECT id FROM ledger_entries WHERE external_tx_id = ?"
+                )
+                  .bind(h.id)
+                  .first();
+                if (!dupCheck) {
+                  await env.DB.prepare(
+                    "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
+                  )
+                    .bind(h.coins, h.coins, existingUser.id)
+                    .run();
+                  await env.DB.prepare(
+                    "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
+                  )
+                    .bind(
+                      "ldg_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                      existingUser.id,
+                      existingUser.name,
+                      h.title,
+                      h.coins,
+                      h.id,
+                      h.createdAt || new Date().toISOString()
+                    )
+                    .run();
+                }
+              }
+              newlyCreditedCoins = Number((newlyCreditedCoins + pendingRes.newlyCreditedCoins).toFixed(2));
+              newlyCreditedCount += pendingRes.newlyCreditedCount;
+              existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+                .bind(existingUser.id)
+                .first();
+            }
           } catch {}
         }
 
