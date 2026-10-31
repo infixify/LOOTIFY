@@ -782,12 +782,18 @@ export default {
           const params = new URLSearchParams(url.search);
           if (request.method === "POST") {
             try {
-              const contentType = request.headers.get("content-type") || "";
-              if (contentType.includes("application/json")) {
-                const jsonBody = await request.json();
-                Object.entries(jsonBody || {}).forEach(([k, v]) => params.set(k, String(v)));
-              } else {
-                const textBody = await request.text();
+              const textBody = (await request.text() || "").trim();
+              if (textBody.startsWith("{") && textBody.endsWith("}")) {
+                try {
+                  const jsonBody = JSON.parse(textBody);
+                  Object.entries(jsonBody || {}).forEach(([k, v]) => {
+                    if (v !== null && v !== undefined) params.set(k, String(v));
+                  });
+                } catch {
+                  const bodyParams = new URLSearchParams(textBody);
+                  bodyParams.forEach((v, k) => params.set(k, v));
+                }
+              } else if (textBody) {
                 const bodyParams = new URLSearchParams(textBody);
                 bodyParams.forEach((v, k) => params.set(k, v));
               }
@@ -1596,13 +1602,19 @@ export default {
       if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
         const params = new URLSearchParams(url.search);
         if (request.method === "POST") {
-          const contentType = request.headers.get("content-type") || "";
           try {
-            if (contentType.includes("application/json")) {
-              const jsonBody = await request.json();
-              Object.entries(jsonBody || {}).forEach(([k, v]) => params.set(k, String(v)));
-            } else {
-              const textBody = await request.text();
+            const textBody = (await request.text() || "").trim();
+            if (textBody.startsWith("{") && textBody.endsWith("}")) {
+              try {
+                const jsonBody = JSON.parse(textBody);
+                Object.entries(jsonBody || {}).forEach(([k, v]) => {
+                  if (v !== null && v !== undefined) params.set(k, String(v));
+                });
+              } catch {
+                const bodyParams = new URLSearchParams(textBody);
+                bodyParams.forEach((v, k) => params.set(k, v));
+              }
+            } else if (textBody) {
               const bodyParams = new URLSearchParams(textBody);
               bodyParams.forEach((v, k) => params.set(k, v));
             }
