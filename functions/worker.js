@@ -1782,12 +1782,23 @@ export default {
           }
         } catch {}
 
-        // Find user by ID or Email
+        // Find user by ID (exact or case-insensitive) or Email
         let user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
         if (!user) {
-          user = await env.DB.prepare("SELECT * FROM users WHERE email = ?")
+          user = await env.DB.prepare("SELECT * FROM users WHERE LOWER(id) = LOWER(?)")
+            .bind(userId)
+            .first();
+        }
+        if (!user) {
+          user = await env.DB.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)")
             .bind(userId.toLowerCase())
             .first();
+        }
+
+        // Always push to in-memory queue for instant zero-delay client auto-sync
+        pushPendingPostback(userId, txId, coins, offerName, providerLabel);
+        if (user && user.id !== userId) {
+          pushPendingPostback(user.id, txId, coins, offerName, providerLabel);
         }
 
         // Auto-create user if not in DB yet so coins are NEVER lost

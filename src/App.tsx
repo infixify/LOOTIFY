@@ -755,7 +755,7 @@ export default function App() {
     };
     window.addEventListener('focus', syncLatestBalance);
     document.addEventListener('visibilitychange', onVisibility);
-    const pollMs = activeTab === 'quests' ? 12000 : 30000;
+    const pollMs = activeTab === 'quests' ? 3000 : 12000;
     const pollId = window.setInterval(syncLatestBalance, pollMs);
     return () => {
       window.removeEventListener('focus', syncLatestBalance);
