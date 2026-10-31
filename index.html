@@ -15,14 +15,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
-  // Handle /api/postback requests immediately with "ok" and forward to Cloudflare Worker
-  if (window.location.pathname.indexOf('/api/postback') !== -1) {
-    var workerUrl = 'https://lootify-api.sarthaksinghyadav1.workers.dev/api/postback' + window.location.search;
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(workerUrl);
-    } else {
-      fetch(workerUrl, { mode: 'no-cors' }).catch(function(){});
-    }
+  // Universal S2S Postback proxy fallback for static hosts / Cloudflare Pages
+  if (window.location.pathname.indexOf('/api/postback') !== -1 || window.location.pathname.indexOf('/api/') !== -1 && window.location.pathname.indexOf('postback') !== -1) {
+    var workerUrl = 'https://lootify-api.sarthaksinghyadav1.workers.dev' + window.location.pathname + window.location.search;
+    try {
+      fetch(workerUrl, { method: 'POST', mode: 'cors' }).catch(function(){});
+    } catch(e) {}
     document.write('ok');
     document.close();
     if (window.stop) window.stop();

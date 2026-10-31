@@ -263,6 +263,8 @@ async function ensureSchema(db) {
       { txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160", coins: 0.30, title: "PUBCRYPTO: Free New Faucet Bitcoin" },
       { txId: "pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL", coins: 4.46, title: "PUBCRYPTO: Cuty (pubcryptolink)" },
       { txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U", coins: 2.98, title: "PUBCRYPTO: Exe (pubcryptolink)" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335257770", coins: 0.45, title: "PUBCRYPTO: Best Faucet (ptc)" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335257525", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)" },
     ];
 
     for (const v of verifiedLogs) {
