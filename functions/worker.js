@@ -649,6 +649,36 @@ async function formatPlayerPayload(db, userRow) {
   if (!userRow) return null;
   await releaseMaturedHoldCoins(db, userRow.id);
 
+  // Recalculate available_coins dynamically from ledger_entries sum to prevent DB desync
+  try {
+    const sumRow = await db
+      .prepare(
+        "SELECT SUM(amount_coins) as total_credited FROM ledger_entries WHERE user_id = ? AND status = 'credited'"
+      )
+      .bind(userRow.id)
+      .first();
+
+    const wdSumRow = await db
+      .prepare(
+        "SELECT SUM(coins_deducted) as total_withdrawn FROM withdrawals WHERE user_id = ? AND status IN ('pending', 'completed')"
+      )
+      .bind(userRow.id)
+      .first();
+
+    const creditedTotal = Number(sumRow && sumRow.total_credited) || 0;
+    const withdrawnTotal = Number(wdSumRow && wdSumRow.total_withdrawn) || 0;
+    const calculatedAvail = Math.max(0, Number((creditedTotal - withdrawnTotal).toFixed(2)));
+
+    if (calculatedAvail > (Number(userRow.available_coins) || 0)) {
+      await db
+        .prepare(
+          "UPDATE users SET available_coins = ?, lifetime_earned_coins = MAX(COALESCE(lifetime_earned_coins, 0), ?) WHERE id = ?"
+        )
+        .bind(calculatedAvail, creditedTotal, userRow.id)
+        .run();
+    }
+  } catch {}
+
   const freshUser = await db
     .prepare("SELECT * FROM users WHERE id = ?")
     .bind(userRow.id)
