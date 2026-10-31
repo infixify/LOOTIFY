@@ -235,23 +235,21 @@ function OfferwallMeBanner({ size }: { size: '728x90' | '468x60' | '300x250' }) 
 }
 
 function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
-    try {
-      const saved = localStorage.getItem(STORAGE_API_BASE_KEY);
-      if (saved && saved.trim()) {
-        return saved.trim().replace(/\/+$/, '');
-      }
-    } catch {}
-    return 'https://lootify-api.sarthaksinghyadav1.workers.dev';
-  }
   try {
     const saved = localStorage.getItem(STORAGE_API_BASE_KEY);
-    if (saved && saved.includes('workers.dev')) {
-      localStorage.removeItem(STORAGE_API_BASE_KEY);
-    } else if (saved && saved.trim()) {
+    if (saved && saved.trim()) {
       return saved.trim().replace(/\/+$/, '');
     }
   } catch {}
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname.includes('github.io') ||
+      window.location.hostname.includes('eternant.c0m.to') ||
+      window.location.hostname.includes('localhost') ||
+      window.location.port === '3000')
+  ) {
+    return 'https://lootify-api.sarthaksinghyadav1.workers.dev';
+  }
   return '';
 }
 
@@ -474,13 +472,23 @@ export default function App() {
   const syncUserWithBackend = useCallback(async (currentUser: PlayerUser | null, showFeedback = false) => {
     if (!currentUser) return;
     if (showFeedback) setSyncingWallet(true);
-    const base = getApiBaseUrl();
+    let base = getApiBaseUrl();
     try {
-      const res = await fetch(`${base}/api/user/sync`, {
+      let res = await fetch(`${base}/api/user/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentUser),
       });
+
+      if (!res.ok && (res.status === 405 || res.status === 404) && base !== 'https://lootify-api.sarthaksinghyadav1.workers.dev') {
+        base = 'https://lootify-api.sarthaksinghyadav1.workers.dev';
+        res = await fetch(`${base}/api/user/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentUser),
+        });
+      }
+
       if (res.ok) {
         const data = await res.json();
         if (data && data.user) {
@@ -498,6 +506,20 @@ export default function App() {
         }
       }
     } catch {
+      try {
+        const fallbackRes = await fetch(`https://lootify-api.sarthaksinghyadav1.workers.dev/api/user/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentUser),
+        });
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          if (data && data.user) {
+            saveCurrentUser(data.user);
+            setUser(data.user);
+          }
+        }
+      } catch {}
       if (showFeedback) {
         setSyncStatusMsg('⚡ Using local wallet cache');
         setTimeout(() => setSyncStatusMsg(null), 3500);
