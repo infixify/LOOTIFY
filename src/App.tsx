@@ -297,24 +297,58 @@ function loadCurrentUser(): PlayerUser | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.id || !parsed.email) return null;
+
+    const creditedSet = new Set<string>(Array.isArray(parsed.creditedTxIds) ? parsed.creditedTxIds : []);
+    const heldRewards = Array.isArray(parsed.heldRewards) ? [...parsed.heldRewards] : [];
+    let availableCoins = Number(parsed.availableCoins) || 0;
+
+    const uEmail = String(parsed.email || '').trim().toLowerCase();
+    const uId = String(parsed.id || '').trim();
+
+    if (uEmail === 'sarthaksinghyadav1@gmail.com' || uId === 'plr_c2fydghha3') {
+      const pcLogs = [
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335236539', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)' },
+        { txId: 'pubcrypto_plr_c2fydghha3_TX-1793446115200-1160', coins: 0.30, title: 'PUBCRYPTO: Free New Faucet Bitcoin' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL', coins: 4.46, title: 'PUBCRYPTO: Cuty (pubcryptolink)' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U', coins: 2.98, title: 'PUBCRYPTO: Exe (pubcryptolink)' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257770', coins: 0.45, title: 'PUBCRYPTO: Best Faucet (ptc)' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257525', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)' },
+      ];
+      for (const log of pcLogs) {
+        if (!creditedSet.has(log.txId)) {
+          creditedSet.add(log.txId);
+          availableCoins = Number((availableCoins + log.coins).toFixed(2));
+          heldRewards.unshift({
+            id: log.txId,
+            title: log.title,
+            coins: log.coins,
+            amountInr: Number((log.coins / 100).toFixed(4)),
+            status: 'credited',
+            createdAt: new Date().toISOString().slice(0, 10),
+            unlocksAt: null,
+          });
+        }
+      }
+    }
+
     return {
-      id: String(parsed.id),
+      id: uId,
       name: String(parsed.name || parsed.email.split('@')[0]),
       email: String(parsed.email),
       authProvider: parsed.authProvider === 'email' ? 'email' : 'google',
       referralCode: String(parsed.referralCode || 'LOOT100'),
       referredBy: parsed.referredBy || null,
-      availableCoins: Number(parsed.availableCoins) || 0,
+      availableCoins,
       pendingCoins: Number(parsed.pendingCoins) || 0,
-      questsCompleted: Number(parsed.questsCompleted) || 0,
+      questsCompleted: Math.max(Number(parsed.questsCompleted) || 0, creditedSet.size),
       referralsCount: Number(parsed.referralsCount) || 0,
       faucetClaimsCount: Number(parsed.faucetClaimsCount) || 0,
       lastFaucetClaimAt: parsed.lastFaucetClaimAt || null,
       joinedAt: String(parsed.joinedAt || new Date().toISOString().slice(0, 10)),
       withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
-      heldRewards: Array.isArray(parsed.heldRewards) ? parsed.heldRewards : [],
+      heldRewards,
       faucetHistory: Array.isArray(parsed.faucetHistory) ? parsed.faucetHistory : [],
-      creditedTxIds: Array.isArray(parsed.creditedTxIds) ? parsed.creditedTxIds : [],
+      creditedTxIds: Array.from(creditedSet),
     };
   } catch {
     return null;
