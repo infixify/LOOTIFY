@@ -231,41 +231,12 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Delegate all /api/* routes to worker.js (if D1 DB bound) or proxy to primary Worker endpoint
+  // Delegate all /api/* routes directly to worker.js on Cloudflare Pages
   if (url.pathname.startsWith("/api/")) {
-    if (context.env && context.env.DB) {
-      try {
-        const resp = await worker.fetch(request, context.env);
-        if (resp && resp.status !== 503) {
-          return resp;
-        }
-      } catch {}
-    }
-
-    // Proxy fallback to primary Worker endpoint if Pages context lacks DB
     try {
-      const workerTargetUrl = new URL(
-        "https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search
-      );
-      const reqInit = {
-        method: request.method,
-        headers: request.headers,
-      };
-      if (request.method === "POST" || request.method === "PUT" || request.method === "DELETE") {
-        try {
-          reqInit.body = await request.clone().text();
-        } catch {}
-      }
-      const proxyResp = await fetch(workerTargetUrl.toString(), reqInit);
-      const respHeaders = new Headers(proxyResp.headers);
-      Object.entries(corsHeaders).forEach(([k, v]) => respHeaders.set(k, v));
-      return new Response(proxyResp.body, {
-        status: proxyResp.status,
-        statusText: proxyResp.statusText,
-        headers: respHeaders,
-      });
+      return await worker.fetch(request, context.env);
     } catch (err) {
-      return Response.json({ error: err.message }, { status: 502, headers: corsHeaders });
+      return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
     }
   }
 
