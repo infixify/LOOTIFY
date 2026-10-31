@@ -589,24 +589,25 @@ export default function App() {
       const currentTheme =
         document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
-      // 1. Try server signed URL endpoint first
       let resolved = false;
+      // 1. Try server signed URL endpoint first
       try {
         const res = await fetch(
           `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
             activeUid
           )}&theme=${encodeURIComponent(currentTheme)}`
         );
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
-          if (data && data.signed_iframe_url) {
+          if (data && data.signed_iframe_url && data.signed_iframe_url.includes('embed_token=')) {
             setSignedPubCryptoUrl(data.signed_iframe_url);
             resolved = true;
           }
         }
       } catch {}
 
-      // 2. Direct client-side fallback (e.g., static hosting on GitHub Pages)
+      // 2. Direct client-side fallback to PubCrypto API (guarantees signed embed token)
       if (!resolved) {
         try {
           const apiKey = getClientPubCryptoApiKey();
@@ -629,7 +630,7 @@ export default function App() {
           });
           if (resp.ok) {
             const data = await resp.json();
-            if (data && data.iframe_url) {
+            if (data && data.iframe_url && data.iframe_url.includes('embed_token=')) {
               setSignedPubCryptoUrl(data.iframe_url);
             }
           }
@@ -2506,12 +2507,9 @@ export default function App() {
 
   const resolvedIframeUrl =
     selectedWall?.provider_id === 'pubcrypto'
-      ? signedPubCryptoUrl ||
-        (selectedWall && selectedWall.iframe_url_template
-          ? selectedWall.iframe_url_template
-              .replace(/\{app_id\}/g, encodeURIComponent((selectedWall.app_id || PUBCRYPTO_SITE_KEY).trim()))
-              .replace(/\{user_id\}/g, encodeURIComponent(user.id))
-          : `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent((selectedWall?.app_id || PUBCRYPTO_SITE_KEY).trim())}&sub_id=${encodeURIComponent(user.id)}&theme=dark`)
+      ? signedPubCryptoUrl && signedPubCryptoUrl.includes('embed_token=')
+        ? signedPubCryptoUrl
+        : ''
       : selectedWall?.provider_id === 'offerwallme' ||
           String(selectedWall?.iframe_url_template || '').includes('offerwall.me')
         ? signedOfferwallMeUrl ||
