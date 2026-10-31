@@ -839,16 +839,29 @@ export default {
             } catch {}
           }
           const rawLastSegment = url.pathname.split("/").filter(Boolean).pop() || "universal";
-          const isPubCrypto = Boolean(params.get("reward_pb") !== null || rawLastSegment.toLowerCase() === "pubcrypto");
+          const isPubCrypto = Boolean(
+            params.get("reward_pb") !== null ||
+            params.get("payout_pb") !== null ||
+            params.get("payout") !== null ||
+            rawLastSegment.toLowerCase() === "pubcrypto"
+          );
           const providerLabel = isPubCrypto ? "PUBCRYPTO" : "OFFERWALL";
-          const userId = pickCleanParam(params, ["subId", "subid", "sub_id", "user_id", "uid", "user"]);
-          const rawReward = pickCleanParam(params, ["reward_pb", "reward", "amount", "coins", "payout_pb", "payout"]);
-          const parsedReward = parseFloat(rawReward) || 0;
-          const coins = isPubCrypto && params.get("reward_pb") === null && params.get("payout_pb") !== null
-            ? Number((Math.abs(parseFloat(params.get("payout_pb")) || 0) * 3000).toFixed(2))
-            : Number(Math.abs(parsedReward).toFixed(2));
-          const rawTxId = pickCleanParam(params, ["transId", "trans_id", "txn_id", "tx_id", "id"]) || `tx_${Date.now()}`;
-          const offerName = params.get("offer_name") || params.get("offer") || "Task";
+          const userId = pickCleanParam(params, ["subId", "subid", "sub_id", "user_id", "uid", "user", "userid"]);
+          
+          let coins = 0;
+          const explicitCoins = pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"]);
+          if (explicitCoins) {
+            coins = Number(Math.abs(parseFloat(explicitCoins) || 0).toFixed(2));
+          } else {
+            const rawPayout = pickCleanParam(params, ["payout_pb", "payout", "usd"]);
+            if (rawPayout) {
+              const pVal = Math.abs(parseFloat(rawPayout) || 0);
+              coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
+            }
+          }
+
+          const rawTxId = pickCleanParam(params, ["transId", "trans_id", "txn_id", "tx_id", "transaction_id", "id"]) || `tx_${Date.now()}`;
+          const offerName = params.get("offer_name") || params.get("offer") || "PubCrypto Task";
           const fullTxId = `${providerLabel.toLowerCase()}_${userId || "anon"}_${rawTxId}`;
 
           if (userId && coins > 0) {
@@ -1796,29 +1809,19 @@ export default {
         ]);
 
         // Normalize Reward / Amount (35% User Share: $1 USD = 3,000 Coins = ₹30)
-        // Supports Offerwall.me (reward) & PubCrypto (reward_pb) with 2-decimal precision
-        const rawPayoutUsd = pickCleanParam(params, ["payout_pb", "payout", "usd"]);
-        const hasExplicitCoinParam = Boolean(
-          pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"])
-        );
-        const rawAmount =
-          pickCleanParam(params, [
-            "reward_pb",
-            "reward",
-            "amount",
-            "coins",
-            "points",
-            "currency",
-            "payout_pb",
-            "payout",
-            "usd",
-          ]) || "0";
-        const parsedAmount = parseFloat(rawAmount);
-
-        const coins =
-          rawPayoutUsd && !hasExplicitCoinParam
-            ? Number((Math.abs(parseFloat(rawPayoutUsd) || 0) * 3000).toFixed(2))
-            : Number(Math.abs(parsedAmount || 0).toFixed(2));
+        // Supports Offerwall.me (reward) & PubCrypto (reward_pb / payout) with 2-decimal precision
+        let coins = 0;
+        const explicitCoins = pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"]);
+        if (explicitCoins) {
+          coins = Number(Math.abs(parseFloat(explicitCoins) || 0).toFixed(2));
+        } else {
+          const rawPayout = pickCleanParam(params, ["payout_pb", "payout", "usd"]);
+          if (rawPayout) {
+            const pVal = Math.abs(parseFloat(rawPayout) || 0);
+            coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
+          }
+        }
+        const parsedAmount = coins;
 
         // Normalize Transaction ID
         const rawTxId =

@@ -212,7 +212,7 @@ function getDefaultOfferwallsList(owmSigned = "", pcSigned = "") {
         "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
       signed_iframe_url: pcSigned,
       hold_days: 0,
-      postback_macro_query: "",
+      postback_macro_query: "?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}",
     },
   ];
 }
