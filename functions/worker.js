@@ -413,11 +413,36 @@ async function ensureSchema(db) {
         const dup = await db.prepare("SELECT id FROM ledger_entries WHERE external_tx_id = ?").bind(v.txId).first();
         if (!dup) {
           await db.prepare(
-            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, 'plr_c2fydghha3', 'Sarthak singh Yadav', 'offerwall', ?, ?, 'credited', ?, ?)"
+            "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, 'plr_c2fydghha3', 'Sarthak singh Yadav', 'offerwall', ?, ?, 'credited', ?, ?)"
           ).bind("ldg_v_" + v.txId, v.title, v.coins, v.txId, v.createdAt).run();
         }
       } catch {}
     }
+
+    // Deduplicate any historical concurrent offerwall entries with identical (user_id, external_tx_id)
+    try {
+      await db
+        .prepare(
+          `DELETE FROM ledger_entries
+           WHERE source_type = 'offerwall'
+             AND external_tx_id IS NOT NULL
+             AND external_tx_id != ''
+             AND rowid NOT IN (
+               SELECT MIN(rowid)
+               FROM ledger_entries
+               WHERE source_type = 'offerwall'
+                 AND external_tx_id IS NOT NULL
+                 AND external_tx_id != ''
+               GROUP BY user_id, external_tx_id
+             )`
+        )
+        .run();
+      await db
+        .prepare(
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_user_ext_tx ON ledger_entries(user_id, external_tx_id) WHERE external_tx_id IS NOT NULL AND external_tx_id != ''"
+        )
+        .run();
+    } catch {}
 
     schemaInitialized = true;
   } catch {
@@ -820,11 +845,41 @@ async function formatPlayerPayload(db, userRow) {
   if (!userRow) return null;
   await releaseMaturedHoldCoins(db, userRow.id);
 
+  // Clean up any duplicate offerwall ledger rows for this user before summing
+  try {
+    await db
+      .prepare(
+        `DELETE FROM ledger_entries
+         WHERE user_id = ?
+           AND source_type = 'offerwall'
+           AND external_tx_id IS NOT NULL
+           AND external_tx_id != ''
+           AND rowid NOT IN (
+             SELECT MIN(rowid)
+             FROM ledger_entries
+             WHERE user_id = ?
+               AND source_type = 'offerwall'
+               AND external_tx_id IS NOT NULL
+               AND external_tx_id != ''
+             GROUP BY external_tx_id
+           )`
+      )
+      .bind(userRow.id, userRow.id)
+      .run();
+  } catch {}
+
   // Recalculate available_coins dynamically from ledger_entries sum to prevent DB desync
   try {
     const sumRow = await db
       .prepare(
         "SELECT SUM(amount_coins) as total_credited FROM ledger_entries WHERE user_id = ? AND status = 'credited'"
+      )
+      .bind(userRow.id)
+      .first();
+
+    const owCountRow = await db
+      .prepare(
+        "SELECT COUNT(*) as cnt FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status = 'credited'"
       )
       .bind(userRow.id)
       .first();
@@ -839,13 +894,17 @@ async function formatPlayerPayload(db, userRow) {
     const creditedTotal = Number(sumRow && sumRow.total_credited) || 0;
     const withdrawnTotal = Number(wdSumRow && wdSumRow.total_withdrawn) || 0;
     const calculatedAvail = Math.max(0, Number((creditedTotal - withdrawnTotal).toFixed(2)));
+    const exactOwCount = Number(owCountRow && owCountRow.cnt) || 0;
 
-    if (calculatedAvail !== (Number(userRow.available_coins) || 0)) {
+    if (
+      calculatedAvail !== (Number(userRow.available_coins) || 0) ||
+      exactOwCount !== (Number(userRow.offerwalls_completed) || 0)
+    ) {
       await db
         .prepare(
-          "UPDATE users SET available_coins = ?, lifetime_earned_coins = MAX(COALESCE(lifetime_earned_coins, 0), ?) WHERE id = ?"
+          "UPDATE users SET available_coins = ?, lifetime_earned_coins = ?, offerwalls_completed = ? WHERE id = ?"
         )
-        .bind(calculatedAvail, creditedTotal, userRow.id)
+        .bind(calculatedAvail, Number(creditedTotal.toFixed(2)), exactOwCount, userRow.id)
         .run();
     }
   } catch {}
@@ -878,19 +937,22 @@ async function formatPlayerPayload(db, userRow) {
 
   const heldRes = await db
     .prepare(
-      "SELECT id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status IN ('pending_hold', 'credited') ORDER BY created_at DESC LIMIT 30"
+      "SELECT id, external_tx_id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status IN ('pending_hold', 'credited') ORDER BY created_at DESC LIMIT 50"
     )
     .bind(userRow.id)
     .all();
 
+  const creditedTxIdsSet = new Set();
   const heldRewards = ((heldRes && heldRes.results) || []).map((h) => {
     const c = Number(Math.max(0, Number(h.amount_coins) || 0).toFixed(2));
     const rawCreated = String(h.created_at || "").trim();
+    if (h.id) creditedTxIdsSet.add(String(h.id));
+    if (h.external_tx_id) creditedTxIdsSet.add(String(h.external_tx_id));
     return {
-      id: h.id,
+      id: h.external_tx_id || h.id,
       title: h.title || "Offerwall Task",
       coins: c,
-      amountInr: Number((c / 100).toFixed(2)),
+      amountInr: Number((c / 100).toFixed(4)),
       status: h.status || "pending_hold",
       createdAt: rawCreated || new Date().toISOString(),
       unlocksAt: h.unlocks_at ? String(h.unlocks_at) : null,
@@ -941,6 +1003,7 @@ async function formatPlayerPayload(db, userRow) {
     withdrawals,
     heldRewards,
     faucetHistory,
+    creditedTxIds: Array.from(creditedTxIdsSet),
   };
 }
 
@@ -1544,16 +1607,11 @@ export default {
               if (!dupRow) {
                 const taskType = String(item.type || "Task").toUpperCase();
                 const taskTitle = String(item.title || "Completed Offer");
-                await env.DB.prepare(
-                  "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
-                )
-                  .bind(rewardCoins, rewardCoins, existingUser.id)
-                  .run();
-                await env.DB.prepare(
-                  "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
+                const insRes = await env.DB.prepare(
+                  "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
                 )
                   .bind(
-                    "ldg_owm_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                    "ldg_" + txId,
                     existingUser.id,
                     existingUser.name,
                     `OFFERWALL.ME (${taskType}): ${taskTitle}`,
@@ -1562,8 +1620,15 @@ export default {
                     itemTime
                   )
                   .run();
-                newlyCreditedCoins = Number((newlyCreditedCoins + rewardCoins).toFixed(2));
-                newlyCreditedCount += 1;
+                if (insRes && insRes.meta && insRes.meta.changes > 0) {
+                  await env.DB.prepare(
+                    "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
+                  )
+                    .bind(rewardCoins, rewardCoins, existingUser.id)
+                    .run();
+                  newlyCreditedCoins = Number((newlyCreditedCoins + rewardCoins).toFixed(2));
+                  newlyCreditedCount += 1;
+                }
               } else if (dupRow && (!dupRow.created_at || String(dupRow.created_at).length <= 10) && itemTime.length > 10) {
                 await env.DB.prepare("UPDATE ledger_entries SET created_at = ? WHERE id = ?")
                   .bind(itemTime, dupRow.id)
@@ -1574,8 +1639,8 @@ export default {
               existingUser.id,
               existingUser.email,
               existingUser.available_coins,
-              [],
-              []
+              Array.isArray(body.creditedTxIds) ? body.creditedTxIds : [],
+              Array.isArray(body.heldRewards) ? body.heldRewards : []
             );
             if (pendingRes.newlyCreditedCoins > 0) {
               for (const h of pendingRes.heldMap.values()) {
@@ -1585,16 +1650,11 @@ export default {
                   .bind(h.id)
                   .first();
                 if (!dupCheck) {
-                  await env.DB.prepare(
-                    "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
-                  )
-                    .bind(h.coins, h.coins, existingUser.id)
-                    .run();
-                  await env.DB.prepare(
-                    "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
+                  const insPending = await env.DB.prepare(
+                    "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
                   )
                     .bind(
-                      "ldg_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                      "ldg_" + h.id,
                       existingUser.id,
                       existingUser.name,
                       h.title,
@@ -1603,10 +1663,17 @@ export default {
                       h.createdAt || new Date().toISOString()
                     )
                     .run();
+                  if (insPending && insPending.meta && insPending.meta.changes > 0) {
+                    await env.DB.prepare(
+                      "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
+                    )
+                      .bind(h.coins, h.coins, existingUser.id)
+                      .run();
+                    newlyCreditedCoins = Number((newlyCreditedCoins + h.coins).toFixed(2));
+                    newlyCreditedCount += 1;
+                  }
                 }
               }
-              newlyCreditedCoins = Number((newlyCreditedCoins + pendingRes.newlyCreditedCoins).toFixed(2));
-              newlyCreditedCount += pendingRes.newlyCreditedCount;
               existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
                 .bind(existingUser.id)
                 .first();
@@ -1636,30 +1703,6 @@ export default {
                   existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
                     .bind(existingUser.id)
                     .first();
-                }
-              }
-            } catch {}
-
-            // Detect recent unacknowledged credits in ledger_entries to trigger newlyCreditedCoins UI alert
-            try {
-              const clientTxSet = new Set(Array.isArray(body.creditedTxIds) ? body.creditedTxIds : []);
-              for (const h of body.heldRewards || []) {
-                if (h && h.id) clientTxSet.add(h.id);
-              }
-              const recentCredits = await env.DB.prepare(
-                "SELECT id, external_tx_id, amount_coins FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status = 'credited' ORDER BY created_at DESC LIMIT 10"
-              )
-                .bind(existingUser.id)
-                .all();
-
-              for (const rc of (recentCredits && recentCredits.results) || []) {
-                const extId = rc.external_tx_id || rc.id;
-                if (extId && !clientTxSet.has(extId)) {
-                  const amt = Number(rc.amount_coins) || 0;
-                  if (amt > 0) {
-                    newlyCreditedCoins = Number((newlyCreditedCoins + amt).toFixed(2));
-                    newlyCreditedCount += 1;
-                  }
                 }
               }
             } catch {}
@@ -2346,17 +2389,11 @@ export default {
         if (holdDays > 0 || isPendingStatus) {
           const effectiveHoldDays = holdDays > 0 ? holdDays : 7;
           const unlocksAt = new Date(Date.now() + effectiveHoldDays * 86400000).toISOString();
-          await env.DB.prepare(
-            "UPDATE users SET pending_coins = pending_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ?, offerwalls_completed = offerwalls_completed + 1 WHERE id = ?"
-          )
-            .bind(coins, coins, user.id)
-            .run();
-
-          await env.DB.prepare(
-            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, unlocks_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'pending_hold', ?, ?)"
+          const insHold = await env.DB.prepare(
+            "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, unlocks_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'pending_hold', ?, ?)"
           )
             .bind(
-              "ldg_" + Date.now(),
+              "ldg_" + txId,
               user.id,
               user.name,
               `${providerLabel}: ${offerName}`,
@@ -2365,18 +2402,20 @@ export default {
               unlocksAt
             )
             .run();
-        } else {
-          await env.DB.prepare(
-            "UPDATE users SET available_coins = available_coins + ?, lifetime_earned_coins = lifetime_earned_coins + ?, offerwalls_completed = offerwalls_completed + 1 WHERE id = ?"
-          )
-            .bind(coins, coins, user.id)
-            .run();
 
-          await env.DB.prepare(
-            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?)"
+          if (insHold && insHold.meta && insHold.meta.changes > 0) {
+            await env.DB.prepare(
+              "UPDATE users SET pending_coins = ROUND(pending_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
+            )
+              .bind(coins, coins, user.id)
+              .run();
+          }
+        } else {
+          const insCredit = await env.DB.prepare(
+            "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?)"
           )
             .bind(
-              "ldg_" + Date.now(),
+              "ldg_" + txId,
               user.id,
               user.name,
               `${providerLabel}: ${offerName}`,
@@ -2384,6 +2423,14 @@ export default {
               txId
             )
             .run();
+
+          if (insCredit && insCredit.meta && insCredit.meta.changes > 0) {
+            await env.DB.prepare(
+              "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
+            )
+              .bind(coins, coins, user.id)
+              .run();
+          }
         }
 
         // 10% Lifetime Referral Commission

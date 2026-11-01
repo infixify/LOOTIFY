@@ -358,41 +358,11 @@ function loadCurrentUser(): PlayerUser | null {
 
     const creditedSet = new Set<string>(Array.isArray(parsed.creditedTxIds) ? parsed.creditedTxIds : []);
     const heldRewards = Array.isArray(parsed.heldRewards) ? [...parsed.heldRewards] : [];
-    let availableCoins = Number(parsed.availableCoins) || 0;
-
-    const uEmail = String(parsed.email || '').trim().toLowerCase();
-    const uId = String(parsed.id || '').trim();
-
-    if (uEmail === 'sarthaksinghyadav1@gmail.com' || uId === 'plr_c2fydghha3') {
-      const pcLogs = [
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335591346', coins: 1.44, title: 'PUBCRYPTO: 🔥 382,850 SATOSHI 🔥', createdAt: '2026-11-01T09:35:51.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335565532', coins: 1.44, title: 'PUBCRYPTO: LOTS OF EARNINGS! WITHDRAWAL FROM 0.01 USD', createdAt: '2026-11-01T08:26:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335396491', coins: 1.44, title: 'PUBCRYPTO: LOTS OF EARNINGS! WI...', createdAt: '2026-10-31T20:41:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335396193', coins: 0.54, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T20:39:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335391249', coins: 0.54, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T20:35:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257770', coins: 0.45, title: 'PUBCRYPTO: Best Faucet (ptc)', createdAt: '2026-10-31T18:10:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257525', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T18:08:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335236539', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T17:15:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_TX-1793446115200-1160', coins: 0.30, title: 'PUBCRYPTO: Free New Faucet Bitcoin', createdAt: '2026-10-31T17:10:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL', coins: 4.46, title: 'PUBCRYPTO: Cuty (pubcryptolink)', createdAt: '2026-10-31T16:50:00.000Z' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U', coins: 2.98, title: 'PUBCRYPTO: Exe (pubcryptolink)', createdAt: '2026-10-31T16:30:00.000Z' },
-      ];
-      for (const log of pcLogs) {
-        if (!creditedSet.has(log.txId)) {
-          creditedSet.add(log.txId);
-          availableCoins = Number((availableCoins + log.coins).toFixed(2));
-          heldRewards.unshift({
-            id: log.txId,
-            title: log.title,
-            coins: log.coins,
-            amountInr: Number((log.coins / 100).toFixed(4)),
-            status: 'credited',
-            createdAt: log.createdAt,
-            unlocksAt: null,
-          });
-        }
-      }
+    for (const h of heldRewards) {
+      if (h && h.id) creditedSet.add(String(h.id));
     }
+    const availableCoins = Number((Number(parsed.availableCoins) || 0).toFixed(2));
+    const uId = String(parsed.id || '').trim();
 
     return {
       id: uId,
@@ -403,7 +373,7 @@ function loadCurrentUser(): PlayerUser | null {
       referredBy: parsed.referredBy || null,
       availableCoins,
       pendingCoins: Number(parsed.pendingCoins) || 0,
-      questsCompleted: Math.max(Number(parsed.questsCompleted) || 0, creditedSet.size),
+      questsCompleted: Math.max(Number(parsed.questsCompleted) || 0, heldRewards.length),
       referralsCount: Number(parsed.referralsCount) || 0,
       faucetClaimsCount: Number(parsed.faucetClaimsCount) || 0,
       lastFaucetClaimAt: parsed.lastFaucetClaimAt || null,
@@ -580,11 +550,22 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data && data.user) {
+          const prevAvail = Number(currentUser.availableCoins) || 0;
+          const nextAvail = Number(data.user.availableCoins) || 0;
+          const balanceIncrease = Number((nextAvail - prevAvail).toFixed(2));
+          const newlyCredited = Number(data.newlyCreditedCoins) || 0;
+          const diffCoins =
+            balanceIncrease > 0
+              ? newlyCredited > 0 && newlyCredited <= balanceIncrease
+                ? newlyCredited
+                : balanceIncrease
+              : 0;
+
           saveCurrentUser(data.user);
           setUser(data.user);
-          if (Number(data.newlyCreditedCoins) > 0) {
+          if (diffCoins > 0) {
             setSyncStatusMsg(
-              `🎉 +${data.newlyCreditedCoins} Coins credited from Offerwall Task! Balance: ${data.user.availableCoins} Coins`
+              `🎉 +${diffCoins} Coins credited from Offerwall Task! Balance: ${data.user.availableCoins} Coins`
             );
             setTimeout(() => setSyncStatusMsg(null), 6000);
           } else if (showFeedback) {
