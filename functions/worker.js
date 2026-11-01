@@ -964,21 +964,64 @@ export default {
       });
     }
 
-    if (
-      url.pathname === "/offerzono-fb89da80b263fe5a.html" ||
-      url.pathname === "/offerzono-fb89da80b263fe5a0f4eb2c10b141679.html"
-    ) {
-      return new Response(
-        "offerzono-site-verification: fb89da80b263fe5a0f4eb2c10b141679",
-        {
-          status: 200,
-          headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders },
-        }
-      );
-    }
+      if (
+        url.pathname === "/offerzono-fb89da80b263fe5a.html" ||
+        url.pathname === "/offerzono-fb89da80b263fe5a0f4eb2c10b141679.html"
+      ) {
+        return new Response(
+          "offerzono-site-verification: fb89da80b263fe5a0f4eb2c10b141679",
+          {
+            status: 200,
+            headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders },
+          }
+        );
+      }
 
-    try {
-      if (!env || !env.DB) {
+      // Serve static frontend assets directly via env.ASSETS for all non-API routes
+      if (!url.pathname.startsWith("/api/")) {
+        if (env && env.ASSETS && typeof env.ASSETS.fetch === "function") {
+          return await env.ASSETS.fetch(request);
+        }
+      }
+
+      try {
+        if (!env || !env.DB) {
+          // If running on Cloudflare Pages without D1 bound, transparently proxy /api/* to the D1-bound Worker
+          if (
+            url.pathname.startsWith("/api/") &&
+            !url.hostname.includes("workers.dev") &&
+            !request.headers.get("x-lootify-proxied")
+          ) {
+            try {
+              const targetUrl = new URL(
+                "https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search
+              );
+              let bodyText = undefined;
+              if (request.method !== "GET" && request.method !== "HEAD") {
+                try {
+                  bodyText = await request.clone().text();
+                } catch {}
+              }
+              const proxyHeaders = new Headers(request.headers);
+              proxyHeaders.set("x-lootify-proxied", "1");
+              proxyHeaders.set("x-forwarded-host", url.host);
+              const proxyResp = await fetch(targetUrl.toString(), {
+                method: request.method,
+                headers: proxyHeaders,
+                body: bodyText,
+              });
+              const cType = proxyResp.headers.get("content-type") || "";
+              if (proxyResp.status < 500 && proxyResp.status !== 405 && !cType.includes("text/html")) {
+                const respHeaders = new Headers(proxyResp.headers);
+                Object.entries(corsHeaders).forEach(([k, v]) => respHeaders.set(k, v));
+                return new Response(proxyResp.body, {
+                  status: proxyResp.status,
+                  statusText: proxyResp.statusText,
+                  headers: respHeaders,
+                });
+              }
+            } catch {}
+          }
         if (url.pathname === "/api/system/db-check") {
           return Response.json(
             {
@@ -2694,11 +2737,16 @@ export default {
         );
       }
 
-      // If anyone or Offerwall crawler visits root / frontend pages on the Worker URL,
-      // seamlessly proxy to your GitHub Pages website (sarthaksinghyadav1.github.io)
+      // Serve static frontend assets if env.ASSETS is bound
+      if (env && env.ASSETS && typeof env.ASSETS.fetch === "function") {
+        return await env.ASSETS.fetch(request);
+      }
+
+      // Fallback proxy to GitHub Pages if visited directly without ASSETS binding
       try {
         const ghUrl = new URL(request.url);
-        ghUrl.hostname = "sarthaksinghyadav1.github.io";
+        ghUrl.hostname = "infixify.github.io";
+        ghUrl.pathname = "/LOOTIFY" + (url.pathname === "/" ? "/index.html" : url.pathname);
         ghUrl.protocol = "https:";
         ghUrl.port = "";
         const ghReq = new Request(ghUrl.toString(), {
