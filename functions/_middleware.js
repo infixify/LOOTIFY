@@ -40,7 +40,9 @@ async function computeOfferwallMeSignature(publicKey, userId, expires, secretKey
 async function signOfferwallMeEdgeUrl(publicKey, userId, secretKey) {
   const pub = String(publicKey || OFFERWALLME_PUBLIC_KEY).trim();
   const uid = String(userId || "").trim();
-  const expires = String(Math.floor(Date.now() / 1000) + 43200);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const bucketSec = Math.floor(nowSec / 21600) * 21600;
+  const expires = String(bucketSec + 43200);
   const signature = await computeOfferwallMeSignature(pub, uid, expires, secretKey);
   return `https://offerwall.me/offerwall/${encodeURIComponent(pub)}/${encodeURIComponent(
     uid

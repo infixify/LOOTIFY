@@ -1186,29 +1186,33 @@ function faq(i) {
 }
 buildFAQ();
 
-// Static bundle loader for Player Hub routes (with cache-busting query string)
 function ensureStaticBundleLoaded() {
   if (window.__LOOTIFY_STATIC_LOADED__) return;
   if (window.__LOOTIFY_APP_MOUNTED__) return;
+  try {
+    localStorage.removeItem('lootify_offerwalls_dynamic_v4');
+    localStorage.removeItem('lootify_offerwalls_dynamic_v5');
+    localStorage.removeItem('lootify_offerwalls_dynamic_v6');
+  } catch (e) {}
+  var existingScript = document.querySelector('script[src*="lootify.js"], script[src*="main.tsx"]');
+  if (existingScript) {
+    window.__LOOTIFY_STATIC_LOADED__ = true;
+    return;
+  }
   if (
     window.location.hostname.indexOf('github.io') !== -1 ||
     window.location.hostname.indexOf('c0m.to') !== -1 ||
     window.location.hostname.indexOf('lootify') !== -1
   ) {
     window.__LOOTIFY_STATIC_LOADED__ = true;
-    try {
-      localStorage.removeItem('lootify_offerwalls_dynamic_v4');
-      localStorage.removeItem('lootify_offerwalls_dynamic_v5');
-      localStorage.removeItem('lootify_offerwalls_dynamic_v6');
-    } catch (e) {}
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = './assets/lootify.css?v=20261101v25';
+    link.href = './assets/lootify.css?v=20261102v26';
     document.head.appendChild(link);
 
     var s = document.createElement('script');
     s.type = 'module';
-    s.src = './assets/lootify.js?v=20261101v25';
+    s.src = './assets/lootify.js?v=20261102v26';
     document.body.appendChild(s);
   }
 }

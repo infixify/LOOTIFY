@@ -474,11 +474,37 @@ function getPubCryptoPublisherApiKey(env, dbSecret) {
   return "pub_5f8efe776555857eb579136cf163ba5cbfca66b8eaabed7d";
 }
 
-async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark", requestOrigin = "") {
+if (!globalThis.__PUBCRYPTO_TOKEN_CACHE__) {
+  globalThis.__PUBCRYPTO_TOKEN_CACHE__ = new Map();
+}
+
+async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark", requestOrigin = "", forceNew = false) {
   const sKey = String(siteKey || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198").trim();
   const uid = String(userId || "").trim();
   const apiKey = String(publisherApiKey || "").trim();
   const cleanTheme = theme === "light" ? "light" : "dark";
+  const cacheKey = `${sKey}_${uid}_${cleanTheme}`;
+
+  if (!forceNew && uid) {
+    const memCached = globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(cacheKey);
+    if (memCached && Date.now() - memCached.ts < 45000 && String(memCached.url).includes("embed_token=")) {
+      return memCached.url;
+    }
+    try {
+      if (typeof caches !== "undefined" && caches.default) {
+        const edgeReq = new Request(`https://edge-pc-token.lootify.internal/${encodeURIComponent(cacheKey)}`);
+        const edgeMatch = await caches.default.match(edgeReq);
+        if (edgeMatch) {
+          const edgeData = await edgeMatch.json();
+          if (edgeData && edgeData.url && Date.now() - Number(edgeData.ts || 0) < 45000) {
+            globalThis.__PUBCRYPTO_TOKEN_CACHE__.set(cacheKey, { url: edgeData.url, ts: edgeData.ts });
+            return String(edgeData.url);
+          }
+        }
+      }
+    } catch {}
+  }
+
   // Always use the registered publisher origin https://lootify.eternant.c0m.to so proxied Worker calls never fail origin validation
   const rawOrigin = String(requestOrigin || "").trim();
   const originUrl =
@@ -507,7 +533,27 @@ async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, t
       if (resp.ok) {
         const data = await resp.json();
         if (data && data.iframe_url) {
-          return String(data.iframe_url);
+          const finalUrl = String(data.iframe_url);
+          const nowTs = Date.now();
+          globalThis.__PUBCRYPTO_TOKEN_CACHE__.set(cacheKey, { url: finalUrl, ts: nowTs });
+          try {
+            if (typeof caches !== "undefined" && caches.default) {
+              const edgeReq = new Request(`https://edge-pc-token.lootify.internal/${encodeURIComponent(cacheKey)}`);
+              await caches.default.put(
+                edgeReq,
+                new Response(JSON.stringify({ url: finalUrl, ts: nowTs }), {
+                  status: 200,
+                  headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=45" },
+                })
+              );
+            }
+          } catch {}
+          return finalUrl;
+        }
+      } else {
+        const stale = globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(cacheKey);
+        if (stale && stale.url && String(stale.url).includes("embed_token=")) {
+          return stale.url;
         }
       }
     } catch {}
@@ -550,10 +596,13 @@ async function sendFaucetPayPayout(env, toAddress, coinsAmount, currency = "USDT
 
 // Offerwall.me Mandatory Signed User ID Generator (HMAC-SHA256)
 // Spec: "offerwall-user-v1\nPUBLIC_API_KEY\nEXACT_USER_ID\nEXPIRY_UNIX_SECONDS"
+// Uses a deterministic 6-hour bucket so the iframe URL never changes mid-session
 async function signOfferwallMeUrl(publicKey, userId, secretKey) {
   const pub = String(publicKey || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd").trim();
   const uid = String(userId || "").trim();
-  const expires = String(Math.floor(Date.now() / 1000) + 43200);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const bucketSec = Math.floor(nowSec / 21600) * 21600;
+  const expires = String(bucketSec + 43200);
   const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
@@ -582,7 +631,7 @@ async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU
   const uid = String(userId || "").trim();
   if (!uid) return [];
   const cached = globalThis.__OWM_HIST_CACHE__.get(uid);
-  if (cached && Date.now() - cached.ts < 25000) {
+  if (cached && Date.now() - cached.ts < 60000) {
     return cached.items;
   }
   try {
@@ -602,7 +651,7 @@ async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1800);
+    const timer = setTimeout(() => controller.abort(), 1100);
     const resp = await fetch(
       `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
         uid
@@ -872,29 +921,6 @@ async function releaseMaturedHoldCoins(db, userId) {
 async function formatPlayerPayload(db, userRow) {
   if (!userRow) return null;
   await releaseMaturedHoldCoins(db, userRow.id);
-
-  // Clean up any duplicate offerwall ledger rows for this user before summing
-  try {
-    await db
-      .prepare(
-        `DELETE FROM ledger_entries
-         WHERE user_id = ?
-           AND source_type = 'offerwall'
-           AND external_tx_id IS NOT NULL
-           AND external_tx_id != ''
-           AND rowid NOT IN (
-             SELECT MIN(rowid)
-             FROM ledger_entries
-             WHERE user_id = ?
-               AND source_type = 'offerwall'
-               AND external_tx_id IS NOT NULL
-               AND external_tx_id != ''
-             GROUP BY external_tx_id
-           )`
-      )
-      .bind(userRow.id, userRow.id)
-      .run();
-  } catch {}
 
   // Recalculate available_coins dynamically from ledger_entries sum to prevent DB desync
   try {
@@ -1218,12 +1244,14 @@ export default {
           if (providerId === "pubcrypto") {
             const pubApiKey = getPubCryptoPublisherApiKey(env, "");
             const reqOrigin = request.headers.get("origin") || ("https://" + url.host);
+            const forceNew = url.searchParams.get("force") === "1";
             const signedUrl = await createPubCryptoSignedEmbedUrl(
               "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
               reqUserId,
               pubApiKey,
               reqTheme,
-              reqOrigin
+              reqOrigin,
+              forceNew
             );
             return Response.json(
               { ok: true, provider_id: "pubcrypto", signed_iframe_url: signedUrl, server_time: Math.floor(Date.now() / 1000) },
@@ -1243,22 +1271,17 @@ export default {
             request.headers.get("x-user-id") ||
             ""
           ).trim();
-          const reqTheme = (url.searchParams.get("theme") || "dark").trim();
+          const reqTheme = (url.searchParams.get("theme") || "dark").trim() === "light" ? "light" : "dark";
           const secret = getOfferwallMeSecret(env, "");
           const owmSigned = reqUserId
             ? await signOfferwallMeUrl("PQhx5BxXulHlM6PxZx81pZgIs2nyRd", reqUserId, secret)
             : "";
-          const pubApiKey = getPubCryptoPublisherApiKey(env, "");
-          const reqOrigin = request.headers.get("origin") || ("https://" + url.host);
-          const pcSigned = reqUserId
-            ? await createPubCryptoSignedEmbedUrl(
-                "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
-                reqUserId,
-                pubApiKey,
-                reqTheme,
-                reqOrigin
+          const pcCached = reqUserId
+            ? globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(
+                `site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198_${reqUserId}_${reqTheme}`
               )
-            : "";
+            : null;
+          const pcSigned = pcCached && Date.now() - pcCached.ts < 45000 ? pcCached.url : "";
           return Response.json(
             {
               ok: true,
@@ -1606,15 +1629,42 @@ export default {
             .first();
         }
 
-        // Sync any Approved Offerwall.me conversions into D1 (strictly skipping Postback Failed)
+        // Sync any Approved Offerwall.me conversions into D1 (single batch lookup instead of N+1 queries)
         let newlyCreditedCoins = 0;
         let newlyCreditedCount = 0;
+        const clientKnownSet = new Set(Array.isArray(body.creditedTxIds) ? body.creditedTxIds : []);
+        for (const h of Array.isArray(body.heldRewards) ? body.heldRewards : []) {
+          if (h && h.id) clientKnownSet.add(String(h.id));
+        }
+
         if (existingUser) {
           try {
-            const owmCfg = await env.DB.prepare(
-              "SELECT secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
-            ).first();
-            const owmSecret = getOfferwallMeSecret(env, owmCfg && owmCfg.secret_key);
+            // 1. Single query to load all existing offerwall ledger entries for this user
+            const existingLedgerRes = await env.DB.prepare(
+              "SELECT id, external_tx_id, amount_coins, created_at FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall'"
+            )
+              .bind(existingUser.id)
+              .all();
+            const existingTxMap = new Map();
+            for (const row of (existingLedgerRes && existingLedgerRes.results) || []) {
+              if (row.external_tx_id) existingTxMap.set(String(row.external_tx_id), row);
+              if (row.id) existingTxMap.set(String(row.id), row);
+              // If an S2S postback arrived directly into D1 since the client's last sync, count it in newlyCreditedCoins
+              if (
+                clientKnownSet.size > 0 &&
+                row.external_tx_id &&
+                !clientKnownSet.has(String(row.external_tx_id)) &&
+                !clientKnownSet.has(String(row.id))
+              ) {
+                const cAmt = Number(row.amount_coins) || 0;
+                if (cAmt > 0) {
+                  newlyCreditedCoins = Number((newlyCreditedCoins + cAmt).toFixed(2));
+                  newlyCreditedCount += 1;
+                }
+              }
+            }
+
+            const owmSecret = getOfferwallMeSecret(env, "");
             const owmHistory = await fetchOfferwallMeHistory(existingUser.id, owmSecret);
             for (const item of owmHistory) {
               const rawTx = String(item.transactionId || item.id || "").trim();
@@ -1622,16 +1672,13 @@ export default {
               const st = String(item.status || "").trim().toLowerCase();
               if (st === "postback failed" || st.includes("fail")) continue;
               if (item.rejectionReason || (st !== "approved" && st !== "completed")) continue;
-              const rewardCoins = Number(Math.abs(Number(item.reward) || 0).toFixed(2));
+              const rawReward = Math.abs(Number(item.reward) || 0);
+              const rewardCoins = rawReward > 0 ? Number(Math.max(0.01, rawReward).toFixed(2)) : 0;
               if (rewardCoins <= 0) continue;
 
               const txId = `offerwallme_${existingUser.id}_${rawTx}`;
               const itemTime = String(item.createdAt || item.completedAt || item.updatedAt || new Date().toISOString());
-              const dupRow = await env.DB.prepare(
-                "SELECT id, created_at FROM ledger_entries WHERE external_tx_id = ? OR external_tx_id = ?"
-              )
-                .bind(txId, `owm_${rawTx}`)
-                .first();
+              const dupRow = existingTxMap.get(txId) || existingTxMap.get(`owm_${rawTx}`);
               if (!dupRow) {
                 const taskType = String(item.type || "Task").toUpperCase();
                 const taskTitle = String(item.title || "Completed Offer");
@@ -1649,6 +1696,7 @@ export default {
                   )
                   .run();
                 if (insRes && insRes.meta && insRes.meta.changes > 0) {
+                  existingTxMap.set(txId, { id: "ldg_" + txId, external_tx_id: txId, amount_coins: rewardCoins, created_at: itemTime });
                   await env.DB.prepare(
                     "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
                   )
@@ -1657,27 +1705,19 @@ export default {
                   newlyCreditedCoins = Number((newlyCreditedCoins + rewardCoins).toFixed(2));
                   newlyCreditedCount += 1;
                 }
-              } else if (dupRow && (!dupRow.created_at || String(dupRow.created_at).length <= 10) && itemTime.length > 10) {
-                await env.DB.prepare("UPDATE ledger_entries SET created_at = ? WHERE id = ?")
-                  .bind(itemTime, dupRow.id)
-                  .run();
               }
             }
+
             const pendingRes = await processPendingPostbacksForUser(
               existingUser.id,
               existingUser.email,
               existingUser.available_coins,
-              Array.isArray(body.creditedTxIds) ? body.creditedTxIds : [],
-              Array.isArray(body.heldRewards) ? body.heldRewards : []
+              Array.from(existingTxMap.keys()),
+              []
             );
             if (pendingRes.newlyCreditedCoins > 0) {
               for (const h of pendingRes.heldMap.values()) {
-                const dupCheck = await env.DB.prepare(
-                  "SELECT id FROM ledger_entries WHERE external_tx_id = ?"
-                )
-                  .bind(h.id)
-                  .first();
-                if (!dupCheck) {
+                if (!existingTxMap.has(h.id)) {
                   const insPending = await env.DB.prepare(
                     "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
                   )
@@ -1692,6 +1732,7 @@ export default {
                     )
                     .run();
                   if (insPending && insPending.meta && insPending.meta.changes > 0) {
+                    existingTxMap.set(h.id, { id: "ldg_" + h.id, external_tx_id: h.id, amount_coins: h.coins });
                     await env.DB.prepare(
                       "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), offerwalls_completed = COALESCE(offerwalls_completed, 0) + 1 WHERE id = ?"
                     )
@@ -1702,36 +1743,22 @@ export default {
                   }
                 }
               }
-              existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
-                .bind(existingUser.id)
-                .first();
             }
 
             // Strictly unify ONLY the current user's own preferredId (e.g. if a postback arrived before user sync using preferredId)
-            // Never merge other users' accounts!
             try {
               if (preferredId && preferredId !== existingUser.id) {
-                const movedLedger = await env.DB.prepare(
+                await env.DB.prepare(
                   "UPDATE ledger_entries SET user_id = ?, user_name = ? WHERE user_id = ?"
                 )
                   .bind(existingUser.id, existingUser.name, preferredId)
                   .run();
 
-                const sameUserTempRow = await env.DB.prepare(
-                  "SELECT id, available_coins, pending_coins FROM users WHERE id = ? AND email LIKE '%@lootify.local'"
+                await env.DB.prepare(
+                  "DELETE FROM users WHERE id = ? AND email LIKE '%@lootify.local'"
                 )
                   .bind(preferredId)
-                  .first();
-
-                if (sameUserTempRow) {
-                  await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(sameUserTempRow.id).run();
-                }
-
-                if ((movedLedger && movedLedger.meta && movedLedger.meta.changes > 0) || sameUserTempRow) {
-                  existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
-                    .bind(existingUser.id)
-                    .first();
-                }
+                  .run();
               }
             } catch {}
           } catch {}
@@ -1869,13 +1896,10 @@ export default {
             (w.provider_id === "pubcrypto" ||
               String(w.iframe_url_template || "").includes("pub.cryptolinkforearn.com"))
           ) {
-            const pubApiKey = getPubCryptoPublisherApiKey(env, w.secret_key);
-            signedIframeUrl = await createPubCryptoSignedEmbedUrl(
-              w.app_id || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
-              reqUserId,
-              pubApiKey,
-              reqTheme
-            );
+            const cleanT = reqTheme === "light" ? "light" : "dark";
+            const sKey = w.app_id || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198";
+            const pcCached = globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(`${sKey}_${reqUserId}_${cleanT}`);
+            signedIframeUrl = pcCached && Date.now() - pcCached.ts < 45000 ? pcCached.url : "";
           }
           publicWalls.push({
             provider_id: w.provider_id,
@@ -1906,6 +1930,7 @@ export default {
           .trim()
           .toLowerCase();
         const reqTheme = (url.searchParams.get("theme") || "dark").trim();
+        const forceNew = url.searchParams.get("force") === "1";
         if (!reqUserId) {
           return Response.json(
             { error: "user_id is required" },
@@ -1926,7 +1951,8 @@ export default {
             reqUserId,
             pubApiKey,
             reqTheme,
-            reqOrigin
+            reqOrigin,
+            forceNew
           );
           return Response.json(
             {

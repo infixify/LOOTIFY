@@ -214,7 +214,9 @@ function buildSignedOfferwallMeUrlSync(
     typeof baseUnixSeconds === 'number' && baseUnixSeconds > 1000000000
       ? Math.floor(baseUnixSeconds)
       : Math.floor(Date.now() / 1000) + _cachedServerTimeOffsetSec;
-  const expires = String(nowSec + 43200);
+  // Deterministic 6-hour bucket so the signed URL never changes mid-session and never reloads the iframe
+  const bucketSec = Math.floor(nowSec / 21600) * 21600;
+  const expires = String(bucketSec + 43200);
   const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
   const secretKey =
     customSecret && customSecret.trim().length > 8
@@ -233,17 +235,36 @@ async function buildSignedOfferwallMeUrl(
   userId: string,
   customSecret?: string
 ): Promise<string> {
+  return buildSignedOfferwallMeUrlSync(publicKey, userId, customSecret);
+}
+
+function loadCachedPubCryptoUrl(uid?: string, themeMode?: string): string {
+  if (!uid) return '';
+  const cleanTheme = themeMode === 'light' ? 'light' : 'dark';
+  const key = `lootify_pc_embed_v2_${uid}_${cleanTheme}`;
   try {
-    const headRes = await fetch(`/?_ts=${Date.now()}`, { method: 'HEAD', cache: 'no-store' });
-    const dateStr = headRes.headers.get('date');
-    if (dateStr) {
-      const serverSec = Math.floor(new Date(dateStr).getTime() / 1000);
-      if (!Number.isNaN(serverSec) && serverSec > 1000000000) {
-        _cachedServerTimeOffsetSec = serverSec - Math.floor(Date.now() / 1000);
-      }
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.url === 'string' &&
+      parsed.url.includes('embed_token=') &&
+      Date.now() - Number(parsed.ts || 0) < 4 * 60 * 60 * 1000
+    ) {
+      return parsed.url;
     }
   } catch {}
-  return buildSignedOfferwallMeUrlSync(publicKey, userId, customSecret);
+  return '';
+}
+
+function saveCachedPubCryptoUrl(uid: string, themeMode: string, url: string) {
+  if (!uid || !url || !url.includes('embed_token=')) return;
+  const cleanTheme = themeMode === 'light' ? 'light' : 'dark';
+  const key = `lootify_pc_embed_v2_${uid}_${cleanTheme}`;
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ url, ts: Date.now() }));
+  } catch {}
 }
 
 function OfferwallMeBanner({ size }: { size: '728x90' | '468x60' | '300x250' }) {
@@ -482,7 +503,12 @@ export default function App() {
       ? buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, initialUser.id)
       : '';
   });
-  const [signedPubCryptoUrl, setSignedPubCryptoUrl] = useState<string>('');
+  const [signedPubCryptoUrl, setSignedPubCryptoUrl] = useState<string>(() => {
+    const initialUser = loadCurrentUser();
+    const initialTheme =
+      document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    return loadCachedPubCryptoUrl(initialUser?.id, initialTheme);
+  });
   const [pubCryptoIframeHeight, setPubCryptoIframeHeight] = useState<number>(800);
   const [syncingWallet, setSyncingWallet] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
@@ -538,6 +564,7 @@ export default function App() {
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
+  const pubCryptoRefreshInFlightRef = useRef<boolean>(false);
 
   const syncUserWithBackend = useCallback(async (currentUser: PlayerUser | null, showFeedback = false) => {
     if (!currentUser) return;
@@ -563,12 +590,28 @@ export default function App() {
           const nextAvail = Number(data.user.availableCoins) || 0;
           const balanceIncrease = Number((nextAvail - prevAvail).toFixed(2));
           const newlyCredited = Number(data.newlyCreditedCoins) || 0;
+
+          // Also check if any new offerwall reward ID appeared compared to previous heldRewards
+          const prevHeldIds = new Set(
+            (Array.isArray(currentUser.heldRewards) ? currentUser.heldRewards : []).map((h) => String(h.id))
+          );
+          let newHeldCoins = 0;
+          if (prevHeldIds.size > 0 && Array.isArray(data.user.heldRewards)) {
+            for (const h of data.user.heldRewards) {
+              if (h && h.id && !prevHeldIds.has(String(h.id)) && Number(h.coins) > 0) {
+                newHeldCoins = Number((newHeldCoins + Number(h.coins)).toFixed(2));
+              }
+            }
+          }
+
           const diffCoins =
-            balanceIncrease > 0
-              ? newlyCredited > 0 && newlyCredited <= balanceIncrease
-                ? newlyCredited
-                : balanceIncrease
-              : 0;
+            newHeldCoins > 0
+              ? newHeldCoins
+              : balanceIncrease > 0
+                ? newlyCredited > 0 && newlyCredited <= balanceIncrease
+                  ? newlyCredited
+                  : balanceIncrease
+                : 0;
 
           saveCurrentUser(data.user);
           setUser(data.user);
@@ -599,9 +642,8 @@ export default function App() {
     const activeUid = uid || loadCurrentUser()?.id || '';
     const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
     if (activeUid) {
-      buildSignedOfferwallMeUrl(OFFERWALLME_PUBLIC_KEY, activeUid)
-        .then((signed) => setSignedOfferwallMeUrl(signed))
-        .catch(() => {});
+      const signed = buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, activeUid);
+      setSignedOfferwallMeUrl((prev) => (prev && prev.includes(`/${encodeURIComponent(activeUid)}?`) ? prev : signed));
     }
     try {
       const query = activeUid
@@ -619,28 +661,38 @@ export default function App() {
           saveCachedOfferwalls(mergedWalls);
           const owm = mergedWalls.find((w: OfferwallConfig) => w.provider_id === 'offerwallme');
           if (owm && owm.signed_iframe_url) {
-            setSignedOfferwallMeUrl(owm.signed_iframe_url);
+            setSignedOfferwallMeUrl((prev) =>
+              prev && prev.includes('identitySignature=') && prev.includes(`/${encodeURIComponent(activeUid)}?`)
+                ? prev
+                : String(owm.signed_iframe_url)
+            );
           }
           const pc = mergedWalls.find((w: OfferwallConfig) => w.provider_id === 'pubcrypto');
           if (pc && pc.signed_iframe_url && pc.signed_iframe_url.includes('embed_token=')) {
-            setSignedPubCryptoUrl(pc.signed_iframe_url);
+            saveCachedPubCryptoUrl(activeUid, currentTheme, pc.signed_iframe_url);
+            setSignedPubCryptoUrl((prev) => (prev && prev.includes('embed_token=') ? prev : String(pc.signed_iframe_url)));
           }
         }
       }
     } catch {
-      // Fallback to cached offerwalls + Web Crypto signed Offerwall.me URL
+      // Fallback to cached offerwalls + synchronous signed Offerwall.me URL
     }
   }, []);
 
   const refreshOfferwallMeSignedUrl = useCallback(
-    async (uid?: string) => {
+    async (uid?: string, forceNew = false) => {
       const activeUid = uid || user?.id || loadCurrentUser()?.id || '';
       if (!activeUid) return;
-      // 1. Set instant synchronous signed URL first
       const syncUrl = buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, activeUid);
-      if (syncUrl) setSignedOfferwallMeUrl(syncUrl);
+      if (!forceNew) {
+        setSignedOfferwallMeUrl((prev) =>
+          prev && prev.includes('identitySignature=') && prev.includes(`/${encodeURIComponent(activeUid)}?`)
+            ? prev
+            : syncUrl
+        );
+        return;
+      }
 
-      // 2. Try same-origin Cloudflare Pages Edge endpoint for server-clock-verified URL
       try {
         const edgeRes = await fetch(
           `/api/offerwalls/signed-url?provider_id=offerwallme&user_id=${encodeURIComponent(
@@ -658,75 +710,83 @@ export default function App() {
           }
         }
       } catch {}
-
-      // 3. Fallback to HTTP Date header clock-synced signature
-      try {
-        const url = await buildSignedOfferwallMeUrl(OFFERWALLME_PUBLIC_KEY, activeUid);
-        if (url) setSignedOfferwallMeUrl(url);
-      } catch {}
+      if (syncUrl) setSignedOfferwallMeUrl(syncUrl);
     },
     [user?.id]
   );
 
   const refreshPubCryptoSignedUrl = useCallback(
-    async (uid?: string) => {
+    async (uid?: string, forceNew = false) => {
       const activeUid = uid || user?.id || loadCurrentUser()?.id || '';
       if (!activeUid) return;
-      const base = getApiBaseUrl();
       const currentTheme =
         document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
-      let resolved = false;
-      // 1. Direct client-side call to PubCrypto API (fastest, guarantees embed_token= immediately)
-      try {
-        const apiKey = getClientPubCryptoApiKey();
-        const resp = await fetch('https://pub.cryptolinkforearn.com/api/publisher/embed-tokens', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            site_key: PUBCRYPTO_SITE_KEY,
-            sub_id: activeUid,
-            origin: 'https://lootify.eternant.c0m.to',
-            theme: currentTheme,
-          }),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data && data.iframe_url && String(data.iframe_url).includes('embed_token=')) {
-            setSignedPubCryptoUrl(String(data.iframe_url));
-            resolved = true;
-          }
+      // 1. Check sessionStorage cache first so we NEVER hit PubCrypto's 429 token limit!
+      if (!forceNew) {
+        const cached = loadCachedPubCryptoUrl(activeUid, currentTheme);
+        if (cached) {
+          setSignedPubCryptoUrl((prev) => (prev === cached ? prev : cached));
+          return;
         }
-      } catch {}
+      }
 
-      // 2. Server-side signed URL endpoint fallback
-      if (!resolved) {
+      if (pubCryptoRefreshInFlightRef.current) return;
+      pubCryptoRefreshInFlightRef.current = true;
+
+      const base = getApiBaseUrl();
+      let resolved = false;
+
+      try {
+        // 2. Request via our Edge/Worker endpoint first (which caches tokens across bursts)
         try {
           const res = await fetch(
             `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
               activeUid
-            )}&theme=${encodeURIComponent(currentTheme)}`
+            )}&theme=${encodeURIComponent(currentTheme)}${forceNew ? '&force=1' : ''}`
           );
           const contentType = res.headers.get('content-type') || '';
           if (res.ok && contentType.includes('application/json')) {
             const data = await res.json();
             if (data && data.signed_iframe_url && String(data.signed_iframe_url).includes('embed_token=')) {
-              setSignedPubCryptoUrl(String(data.signed_iframe_url));
+              const tokenUrl = String(data.signed_iframe_url);
+              saveCachedPubCryptoUrl(activeUid, currentTheme, tokenUrl);
+              setSignedPubCryptoUrl(tokenUrl);
               resolved = true;
             }
           }
         } catch {}
-      }
 
-      // 3. Final fallback so iframe never stays blank
-      if (!resolved) {
-        const fallbackUrl = `https://pub.cryptolinkforearn.com/offerwall/?site_key=${PUBCRYPTO_SITE_KEY}&sub_id=${encodeURIComponent(
-          activeUid
-        )}&theme=${encodeURIComponent(currentTheme)}`;
-        setSignedPubCryptoUrl((prev) => (prev && prev.includes('embed_token=') ? prev : fallbackUrl));
+        // 3. Direct client-side fallback ONLY if backend didn't return an embed_token
+        if (!resolved) {
+          try {
+            const apiKey = getClientPubCryptoApiKey();
+            const resp = await fetch('https://pub.cryptolinkforearn.com/api/publisher/embed-tokens', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                site_key: PUBCRYPTO_SITE_KEY,
+                sub_id: activeUid,
+                origin: 'https://lootify.eternant.c0m.to',
+                theme: currentTheme,
+              }),
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data && data.iframe_url && String(data.iframe_url).includes('embed_token=')) {
+                const tokenUrl = String(data.iframe_url);
+                saveCachedPubCryptoUrl(activeUid, currentTheme, tokenUrl);
+                setSignedPubCryptoUrl(tokenUrl);
+                resolved = true;
+              }
+            }
+          } catch {}
+        }
+      } finally {
+        pubCryptoRefreshInFlightRef.current = false;
       }
     },
     [user?.id]
@@ -790,7 +850,7 @@ export default function App() {
       syncUserWithBackend(initialUser, false);
     }
 
-    const syncFromEvents = () => {
+    const onAuthChanged = () => {
       const loaded = loadCurrentUser();
       setUser(loaded);
       if (loaded) {
@@ -804,31 +864,37 @@ export default function App() {
       setTheme(currentTheme);
     };
 
-    window.addEventListener('lootify-auth-changed', syncFromEvents);
-    window.addEventListener('hashchange', syncFromEvents);
-    window.addEventListener('popstate', syncFromEvents);
+    const onRouteChanged = () => {
+      setIsAdminRoute(isHashAdmin());
+      setAdminLoggedIn(loadAdminSession());
+      setActiveTab(getTabFromHash());
+      const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      setTheme(currentTheme);
+    };
+
+    window.addEventListener('lootify-auth-changed', onAuthChanged);
+    window.addEventListener('hashchange', onRouteChanged);
+    window.addEventListener('popstate', onRouteChanged);
     return () => {
-      window.removeEventListener('lootify-auth-changed', syncFromEvents);
-      window.removeEventListener('hashchange', syncFromEvents);
-      window.removeEventListener('popstate', syncFromEvents);
+      window.removeEventListener('lootify-auth-changed', onAuthChanged);
+      window.removeEventListener('hashchange', onRouteChanged);
+      window.removeEventListener('popstate', onRouteChanged);
     };
   }, [fetchOfferwallsFromBackend, syncUserWithBackend]);
 
   useEffect(() => {
     const doRefresh = () => {
       const activeUid = user?.id || loadCurrentUser()?.id;
-      if (activeUid) {
-        if (selectedWallId === 'offerwallme' || activeTab === 'quests') {
-          refreshOfferwallMeSignedUrl(activeUid);
-        }
-        if (selectedWallId === 'pubcrypto' || activeTab === 'quests') {
-          refreshPubCryptoSignedUrl(activeUid);
-        }
+      if (!activeUid) return;
+      if (activeTab === 'quests' && selectedWallId === 'offerwallme') {
+        refreshOfferwallMeSignedUrl(activeUid, false);
+      } else if (activeTab === 'quests' && selectedWallId === 'pubcrypto') {
+        refreshPubCryptoSignedUrl(activeUid, false);
       }
     };
 
     doRefresh();
-    const intervalId = window.setInterval(doRefresh, 10 * 60 * 1000);
+    const intervalId = window.setInterval(doRefresh, 15 * 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, [user?.id, selectedWallId, activeTab, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
 
@@ -3183,7 +3249,7 @@ export default function App() {
                         onClick={() => {
                           setSelectedWallId(wall.provider_id);
                           if (wall.provider_id === 'pubcrypto') {
-                            refreshPubCryptoSignedUrl(user.id);
+                            refreshPubCryptoSignedUrl(user.id, false);
                           }
                         }}
                         style={{
@@ -3247,6 +3313,15 @@ export default function App() {
                         </p>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {selectedWall.provider_id === 'pubcrypto' && (
+                          <button
+                            type="button"
+                            onClick={() => refreshPubCryptoSignedUrl(user.id, true)}
+                            className="btn btn-outline btn-sm"
+                          >
+                            🔄 Reload Session
+                          </button>
+                        )}
                         {resolvedIframeUrl && (
                           <a
                             href={resolvedIframeUrl}
@@ -3262,6 +3337,7 @@ export default function App() {
 
                     {resolvedIframeUrl ? (
                       <iframe
+                        key={`${selectedWall.provider_id}_${user.id}`}
                         data-pubcrypto-offerwall={selectedWall.provider_id === 'pubcrypto' ? true : undefined}
                         src={resolvedIframeUrl}
                         title={selectedWall.name}
@@ -3269,6 +3345,7 @@ export default function App() {
                         height={selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680}
                         frameBorder={0}
                         referrerPolicy={selectedWall.provider_id === 'pubcrypto' ? 'no-referrer' : undefined}
+                        allow="clipboard-write; fullscreen; popups"
                         style={{
                           display: 'block',
                           width: '100%',
@@ -3278,7 +3355,11 @@ export default function App() {
                           borderRadius: 12,
                           background: '#0B121E',
                         }}
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                        sandbox={
+                          selectedWall.provider_id === 'pubcrypto'
+                            ? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
+                            : undefined
+                        }
                       />
                     ) : selectedWall.provider_id === 'pubcrypto' ? (
                       <div
@@ -3299,7 +3380,7 @@ export default function App() {
                         </p>
                         <button
                           type="button"
-                          onClick={() => refreshPubCryptoSignedUrl(user.id)}
+                          onClick={() => refreshPubCryptoSignedUrl(user.id, true)}
                           className="btn btn-primary btn-sm"
                         >
                           🔄 Retry Session Generation
