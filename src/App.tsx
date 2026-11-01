@@ -536,8 +536,17 @@ export default function App() {
   } | null>(null);
   const [faucetError, setFaucetError] = useState<string | null>(null);
 
+  const syncInFlightRef = useRef<boolean>(false);
+  const lastAutoSyncAtRef = useRef<number>(0);
+
   const syncUserWithBackend = useCallback(async (currentUser: PlayerUser | null, showFeedback = false) => {
     if (!currentUser) return;
+    if (syncInFlightRef.current && !showFeedback) return;
+    const now = Date.now();
+    if (!showFeedback && now - lastAutoSyncAtRef.current < 4000) return;
+
+    syncInFlightRef.current = true;
+    lastAutoSyncAtRef.current = now;
     if (showFeedback) setSyncingWallet(true);
     const base = getApiBaseUrl();
     try {
@@ -580,6 +589,7 @@ export default function App() {
         setTimeout(() => setSyncStatusMsg(null), 3500);
       }
     } finally {
+      syncInFlightRef.current = false;
       if (showFeedback) setSyncingWallet(false);
     }
   }, []);
@@ -612,7 +622,7 @@ export default function App() {
             setSignedOfferwallMeUrl(owm.signed_iframe_url);
           }
           const pc = mergedWalls.find((w: OfferwallConfig) => w.provider_id === 'pubcrypto');
-          if (pc && pc.signed_iframe_url) {
+          if (pc && pc.signed_iframe_url && pc.signed_iframe_url.includes('embed_token=')) {
             setSignedPubCryptoUrl(pc.signed_iframe_url);
           }
         }
@@ -666,58 +676,57 @@ export default function App() {
       const currentTheme =
         document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
-      // Immediate fallback to ensure offerwall never gets stuck loading
-      const fallbackUrl = `https://pub.cryptolinkforearn.com/offerwall/?site_key=${PUBCRYPTO_SITE_KEY}&sub_id=${encodeURIComponent(
-        activeUid
-      )}&theme=${encodeURIComponent(currentTheme)}`;
-      setSignedPubCryptoUrl(fallbackUrl);
-
       let resolved = false;
-      // 1. Try server signed URL endpoint first
+      // 1. Direct client-side call to PubCrypto API (fastest, guarantees embed_token= immediately)
       try {
-        const res = await fetch(
-          `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
-            activeUid
-          )}&theme=${encodeURIComponent(currentTheme)}`
-        );
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data && data.signed_iframe_url) {
-            setSignedPubCryptoUrl(data.signed_iframe_url);
+        const apiKey = getClientPubCryptoApiKey();
+        const resp = await fetch('https://pub.cryptolinkforearn.com/api/publisher/embed-tokens', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            site_key: PUBCRYPTO_SITE_KEY,
+            sub_id: activeUid,
+            origin: 'https://lootify.eternant.c0m.to',
+            theme: currentTheme,
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.iframe_url && String(data.iframe_url).includes('embed_token=')) {
+            setSignedPubCryptoUrl(String(data.iframe_url));
             resolved = true;
           }
         }
       } catch {}
 
-      // 2. Direct client-side fallback to PubCrypto API (guarantees signed embed token)
+      // 2. Server-side signed URL endpoint fallback
       if (!resolved) {
         try {
-          const apiKey = getClientPubCryptoApiKey();
-          const targetOrigin =
-            typeof window !== 'undefined' && window.location.origin
-              ? window.location.origin
-              : 'https://lootify.eternant.c0m.to';
-          const resp = await fetch('https://pub.cryptolinkforearn.com/api/publisher/embed-tokens', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              site_key: PUBCRYPTO_SITE_KEY,
-              sub_id: activeUid,
-              origin: targetOrigin,
-              theme: currentTheme,
-            }),
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data && data.iframe_url) {
-              setSignedPubCryptoUrl(data.iframe_url);
+          const res = await fetch(
+            `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+              activeUid
+            )}&theme=${encodeURIComponent(currentTheme)}`
+          );
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data && data.signed_iframe_url && String(data.signed_iframe_url).includes('embed_token=')) {
+              setSignedPubCryptoUrl(String(data.signed_iframe_url));
+              resolved = true;
             }
           }
         } catch {}
+      }
+
+      // 3. Final fallback so iframe never stays blank
+      if (!resolved) {
+        const fallbackUrl = `https://pub.cryptolinkforearn.com/offerwall/?site_key=${PUBCRYPTO_SITE_KEY}&sub_id=${encodeURIComponent(
+          activeUid
+        )}&theme=${encodeURIComponent(currentTheme)}`;
+        setSignedPubCryptoUrl((prev) => (prev && prev.includes('embed_token=') ? prev : fallbackUrl));
       }
     },
     [user?.id]
@@ -2590,9 +2599,7 @@ export default function App() {
 
   const resolvedIframeUrl =
     selectedWall?.provider_id === 'pubcrypto'
-      ? signedPubCryptoUrl && signedPubCryptoUrl.includes('embed_token=')
-        ? signedPubCryptoUrl
-        : ''
+      ? signedPubCryptoUrl || ''
       : selectedWall?.provider_id === 'offerwallme' ||
           String(selectedWall?.iframe_url_template || '').includes('offerwall.me')
         ? signedOfferwallMeUrl ||

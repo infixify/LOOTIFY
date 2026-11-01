@@ -442,6 +442,11 @@ async function ensureSchema(db) {
           "CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_user_ext_tx ON ledger_entries(user_id, external_tx_id) WHERE external_tx_id IS NOT NULL AND external_tx_id != ''"
         )
         .run();
+      await db
+        .prepare(
+          "UPDATE ledger_entries SET amount_coins = 0.01 WHERE external_tx_id = 'offerwallme_plr_c2fydghha3_TX-1793560650309-2595' AND amount_coins > 1"
+        )
+        .run();
     } catch {}
 
     schemaInitialized = true;
@@ -474,7 +479,16 @@ async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, t
   const uid = String(userId || "").trim();
   const apiKey = String(publisherApiKey || "").trim();
   const cleanTheme = theme === "light" ? "light" : "dark";
-  const originUrl = requestOrigin || "https://lootify.eternant.c0m.to";
+  // Always use the registered publisher origin https://lootify.eternant.c0m.to so proxied Worker calls never fail origin validation
+  const rawOrigin = String(requestOrigin || "").trim();
+  const originUrl =
+    rawOrigin &&
+    !rawOrigin.includes("workers.dev") &&
+    !rawOrigin.includes("pages.dev") &&
+    !rawOrigin.includes("run.app") &&
+    !rawOrigin.includes("localhost")
+      ? rawOrigin
+      : "https://lootify.eternant.c0m.to";
   if (apiKey && uid) {
     try {
       const resp = await fetch("https://pub.cryptolinkforearn.com/api/publisher/embed-tokens", {
@@ -560,9 +574,17 @@ async function signOfferwallMeUrl(publicKey, userId, secretKey) {
   )}`;
 }
 
+if (!globalThis.__OWM_HIST_CACHE__) {
+  globalThis.__OWM_HIST_CACHE__ = new Map();
+}
+
 async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU4aObX1lb7W24") {
   const uid = String(userId || "").trim();
   if (!uid) return [];
+  const cached = globalThis.__OWM_HIST_CACHE__.get(uid);
+  if (cached && Date.now() - cached.ts < 25000) {
+    return cached.items;
+  }
   try {
     const pub = "PQhx5BxXulHlM6PxZx81pZgIs2nyRd";
     const expires = String(Math.floor(Date.now() / 1000) + 3600);
@@ -579,6 +601,8 @@ async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU
     const signature = Array.from(new Uint8Array(sigBuf))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1800);
     const resp = await fetch(
       `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
         uid
@@ -588,12 +612,14 @@ async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU
           "x-offerwall-user-expires": expires,
           "x-offerwall-user-signature": signature,
         },
+        signal: controller.signal,
       }
     );
-    if (!resp.ok) return [];
+    clearTimeout(timer);
+    if (!resp.ok) return cached ? cached.items : [];
     const data = await resp.json();
     if (!data || !Array.isArray(data.history)) return [];
-    return data.history.filter((item) => {
+    const items = data.history.filter((item) => {
       if (!item) return false;
       const reward = Number(item.reward) || 0;
       if (reward <= 0 || item.rejectionReason) return false;
@@ -614,8 +640,10 @@ async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU
       }
       return st === "approved" || st === "completed";
     });
+    globalThis.__OWM_HIST_CACHE__.set(uid, { ts: Date.now(), items });
+    return items;
   } catch {
-    return [];
+    return cached ? cached.items : [];
   }
 }
 
@@ -1141,10 +1169,10 @@ export default {
           const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
           const explicitCoins = pickCleanParam(params, ["reward", "coins", "points", "amount"]);
           if (explicitRewardPb && Number(explicitRewardPb) > 0) {
-            coins = Number(Math.abs(parseFloat(explicitRewardPb)).toFixed(2));
+            coins = Number(Math.max(0.01, Math.abs(parseFloat(explicitRewardPb))).toFixed(2));
           } else if (explicitCoins && Number(explicitCoins) > 0) {
             const parsed = Math.abs(parseFloat(explicitCoins) || 0);
-            coins = parsed > 0 && parsed < 0.02 ? Number((parsed * 3600).toFixed(2)) : Number(parsed.toFixed(2));
+            coins = Number(Math.max(0.01, parsed).toFixed(2));
           } else {
             const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
             const rawPayout = pickCleanParam(params, ["payout", "usd", "publisher_earned"]);
@@ -1153,10 +1181,10 @@ export default {
               coins = pVal < 1.0 ? Number((pVal * 9000).toFixed(2)) : Number(pVal.toFixed(2));
             } else if (rawPayout && Number(rawPayout) > 0) {
               const pVal = Math.abs(parseFloat(rawPayout) || 0);
-              coins = pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
+              coins = pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
             }
           }
-          if (coins < 0.05 && coins > 0) coins = 0.05;
+          if (coins < 0.01 && coins > 0) coins = 0.01;
 
           const rawTxId = pickCleanParam(params, ["transId", "trans_id", "txn_id", "tx_id", "transaction_id", "id"]) || `tx_${Date.now()}`;
           const offerName = pickCleanParam(params, ["offer_name", "offer", "task"]) || "PubCrypto Task";
@@ -2070,23 +2098,26 @@ export default {
 
         const rawLastSegment = url.pathname.split("/").filter(Boolean).pop() || "universal";
         const isPubCryptoPayload = Boolean(
-          params.get("reward_pb") !== null ||
-            params.get("payout_pb") !== null ||
-            params.get("reward_name") !== null
+          params.get("reward_pb") !== null || params.get("payout_pb") !== null
         );
         const isOfferwallMePayload =
           !isPubCryptoPayload &&
-          Boolean(params.get("subId") || params.get("transId") || params.get("offer_type"));
+          Boolean(
+            params.get("subId") ||
+              params.get("transId") ||
+              params.get("reward_value") ||
+              params.get("subid1") ||
+              params.get("offer_type")
+          );
         let providerId = (
           params.get("network") ||
-          params.get("provider") ||
           (rawLastSegment.toLowerCase() !== "postback"
             ? rawLastSegment
             : isPubCryptoPayload
             ? "pubcrypto"
             : isOfferwallMePayload
             ? "offerwallme"
-            : "universal")
+            : params.get("provider") || "universal")
         )
           .trim()
           .toLowerCase();
@@ -2104,16 +2135,16 @@ export default {
           "click_id",
         ]);
 
-        // Normalize Reward / Amount (35% User Share: $1 USD = 3,000 Coins = ₹30)
-        // Supports all PubCrypto sub-providers (Bitcotask, Cuty, Exe, Sproutdirect, PTC, Shortlinks, etc.)
+        // Normalize Reward / Amount
+        // Both PubCrypto (reward_pb) and Offerwall.me (reward) pass the exact Coins amount directly
         let coins = 0;
         const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
         const explicitCoins = pickCleanParam(params, ["reward", "coins", "points", "amount"]);
         if (explicitRewardPb && Number(explicitRewardPb) > 0) {
-          coins = Number(Math.abs(parseFloat(explicitRewardPb)).toFixed(2));
+          coins = Number(Math.max(0.01, Math.abs(parseFloat(explicitRewardPb))).toFixed(2));
         } else if (explicitCoins && Number(explicitCoins) > 0) {
           const parsed = Math.abs(parseFloat(explicitCoins) || 0);
-          coins = parsed > 0 && parsed < 0.02 ? Number((parsed * 3600).toFixed(2)) : Number(parsed.toFixed(2));
+          coins = Number(Math.max(0.01, parsed).toFixed(2));
         } else {
           const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
           const rawPayout = pickCleanParam(params, ["payout", "usd", "publisher_earned"]);
@@ -2122,11 +2153,16 @@ export default {
             coins = pVal < 1.0 ? Number((pVal * 9000).toFixed(2)) : Number(pVal.toFixed(2));
           } else if (rawPayout && Number(rawPayout) > 0) {
             const pVal = Math.abs(parseFloat(rawPayout) || 0);
-            coins = pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
+            coins = pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
           }
         }
-        if (coins < 0.05 && coins > 0) coins = 0.05;
+        if (coins < 0.01 && coins > 0) coins = 0.01;
         const parsedAmount = coins;
+
+        // Clear Offerwall.me memory cache for this user so next sync reflects the new postback immediately
+        if (userId && globalThis.__OWM_HIST_CACHE__) {
+          globalThis.__OWM_HIST_CACHE__.delete(userId);
+        }
 
         // Normalize Transaction ID
         const rawTxId =
