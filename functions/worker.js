@@ -1994,6 +1994,19 @@ export default {
             "offer_id",
           ]) || `tx_${Date.now()}`;
 
+        try {
+          await env.DB.prepare(
+            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id) VALUES (?, ?, ?, 'debug_postback', ?, ?, 'received', ?)"
+          ).bind(
+            "dbg_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+            userId || "UNKNOWN",
+            "Postback Debugger",
+            `POSTBACK: ${url.pathname}?${url.search.slice(1)} | Coins: ${coins} | Raw: ${JSON.stringify(Object.fromEntries(params.entries()))}`,
+            coins || 0,
+            rawTxId
+          ).run();
+        } catch {}
+
         // Detect Offerwall.me OR PubCrypto MD5 signature (`md5(subId + transId + reward + secretKey)`)
         const incomingSig = (
           params.get("signature") ||
@@ -2012,7 +2025,7 @@ export default {
               ? params.get("reward_pb")
               : params.get("reward") !== null
               ? params.get("reward")
-              : rawAmount;
+              : coins;
 
           const owmCfg = await env.DB.prepare(
             "SELECT secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
