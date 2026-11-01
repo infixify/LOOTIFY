@@ -16,7 +16,7 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Handle /api/postback specially with immediate "ok"
+  // Handle /api/postback with guaranteed D1 write before returning "ok"
   if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
     let bodyText = "";
     if (request.method === "POST" || request.method === "PUT") {
@@ -25,27 +25,23 @@ export async function onRequest(context) {
       } catch {}
     }
 
-    context.waitUntil(
-      (async () => {
-        try {
-          if (env && env.DB) {
-            const d1Req = new Request(request.url, {
-              method: request.method,
-              headers: request.headers,
-              body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
-            });
-            await worker.fetch(d1Req, env);
-          } else {
-            const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
-            await fetch(workerTargetUrl.toString(), {
-              method: request.method,
-              headers: request.headers,
-              body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
-            });
-          }
-        } catch {}
-      })()
-    );
+    try {
+      if (env && env.DB) {
+        const d1Req = new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+          body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
+        });
+        await worker.fetch(d1Req, env);
+      } else {
+        const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
+        await fetch(workerTargetUrl.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
+        });
+      }
+    } catch {}
 
     return new Response("ok", {
       status: 200,

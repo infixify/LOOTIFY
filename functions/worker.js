@@ -14,6 +14,22 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
   const initialSeeds = [
     {
       userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335591346",
+      coins: 1.44,
+      offerName: "🔥 382,850 SATOSHI 🔥",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-11-01T09:35:51.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335565532",
+      coins: 1.44,
+      offerName: "LOTS OF EARNINGS! WITHDRAWAL FROM 0.01 USD",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-11-01T08:26:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
       txId: "pubcrypto_plr_c2fydghha3_LD-335396491",
       coins: 1.44,
       offerName: "LOTS OF EARNINGS! WI...",
@@ -179,7 +195,7 @@ async function processPendingPostbacksForUser(userId, userEmail, currentAvailabl
   for (const [key, pb] of globalThis.__LOOTIFY_PENDING_POSTBACKS__.entries()) {
     if (!pb) continue;
     const pUid = String(pb.userId || "").trim().toLowerCase();
-    const isMatch = true;
+    const isMatch = Boolean((uid && pUid === uid) || (uemail && pUid === uemail));
 
     if (isMatch) {
       const txKey = pb.txId;
@@ -379,6 +395,8 @@ async function ensureSchema(db) {
     // Auto-migrate faucet columns on users table
     // Auto-seed verified PubCrypto transactions from publisher forward log
     const verifiedLogs = [
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335591346", coins: 1.44, title: "PUBCRYPTO: 🔥 382,850 SATOSHI 🔥", createdAt: "2026-11-01T09:35:51.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335565532", coins: 1.44, title: "PUBCRYPTO: LOTS OF EARNINGS! WITHDRAWAL FROM 0.01 USD", createdAt: "2026-11-01T08:26:00.000Z" },
       { txId: "pubcrypto_plr_c2fydghha3_LD-335396491", coins: 1.44, title: "PUBCRYPTO: LOTS OF EARNINGS! WI...", createdAt: "2026-10-31T20:41:00.000Z" },
       { txId: "pubcrypto_plr_c2fydghha3_LD-335396193", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T20:39:00.000Z" },
       { txId: "pubcrypto_plr_c2fydghha3_LD-335391249", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T20:35:00.000Z" },
@@ -578,24 +596,40 @@ async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU
 
 function pickCleanParam(params, keys) {
   for (const k of keys) {
-    const val = params.get(k);
-    if (val !== null && val !== undefined) {
-      const trimmed = String(val).trim();
+    const allVals = typeof params.getAll === "function" ? params.getAll(k) : [params.get(k)];
+    for (let i = allVals.length - 1; i >= 0; i--) {
+      const val = allVals[i];
+      if (val !== null && val !== undefined) {
+        const trimmed = String(val).trim();
+        if (
+          trimmed &&
+          !trimmed.includes("{") &&
+          !trimmed.includes("}") &&
+          !trimmed.includes("[") &&
+          !trimmed.includes("]") &&
+          trimmed.toLowerCase() !== "null" &&
+          trimmed.toLowerCase() !== "undefined"
+        ) {
+          return trimmed;
+        }
+      }
+    }
+  }
+  const lowerKeys = new Set(keys.map((k) => k.toLowerCase()));
+  for (const [entryKey, entryVal] of params.entries()) {
+    if (lowerKeys.has(String(entryKey).toLowerCase())) {
+      const trimmed = String(entryVal || "").trim();
       if (
         trimmed &&
         !trimmed.includes("{") &&
         !trimmed.includes("}") &&
         !trimmed.includes("[") &&
-        !trimmed.includes("]")
+        !trimmed.includes("]") &&
+        trimmed.toLowerCase() !== "null" &&
+        trimmed.toLowerCase() !== "undefined"
       ) {
         return trimmed;
       }
-    }
-  }
-  for (const k of keys) {
-    const val = params.get(k);
-    if (val !== null && val !== undefined && String(val).trim()) {
-      return String(val).trim();
     }
   }
   return "";
@@ -964,9 +998,19 @@ export default {
               if (textBody.startsWith("{") && textBody.endsWith("}")) {
                 try {
                   const jsonBody = JSON.parse(textBody);
-                  Object.entries(jsonBody || {}).forEach(([k, v]) => {
-                    if (v !== null && v !== undefined) params.set(k, String(v));
-                  });
+                  const flattenObj = (obj) => {
+                    if (!obj || typeof obj !== "object") return;
+                    Object.entries(obj).forEach(([k, v]) => {
+                      if (v !== null && v !== undefined) {
+                        if (typeof v === "object" && !Array.isArray(v)) {
+                          flattenObj(v);
+                        } else {
+                          params.set(k, String(v));
+                        }
+                      }
+                    });
+                  };
+                  flattenObj(jsonBody);
                 } catch {
                   const bodyParams = new URLSearchParams(textBody);
                   bodyParams.forEach((v, k) => params.set(k, v));
@@ -985,24 +1029,31 @@ export default {
             rawLastSegment.toLowerCase() === "pubcrypto"
           );
           const providerLabel = isPubCrypto ? "PUBCRYPTO" : "OFFERWALL";
-          const userId = pickCleanParam(params, ["subId", "subid", "sub_id", "user_id", "uid", "user", "userid"]);
+          const userId = pickCleanParam(params, ["subId", "subid", "sub_id", "member_sub_id", "user_id", "uid", "user", "userid", "click_id"]);
           
           let coins = 0;
-          const explicitCoins = pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"]);
-          if (explicitCoins) {
+          const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
+          const explicitCoins = pickCleanParam(params, ["reward", "coins", "points", "amount"]);
+          if (explicitRewardPb && Number(explicitRewardPb) > 0) {
+            coins = Number(Math.abs(parseFloat(explicitRewardPb)).toFixed(2));
+          } else if (explicitCoins && Number(explicitCoins) > 0) {
             const parsed = Math.abs(parseFloat(explicitCoins) || 0);
             coins = parsed > 0 && parsed < 0.02 ? Number((parsed * 3600).toFixed(2)) : Number(parsed.toFixed(2));
           } else {
-            const rawPayout = pickCleanParam(params, ["payout_pb", "payout", "usd", "publisher_earned"]);
-            if (rawPayout) {
+            const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
+            const rawPayout = pickCleanParam(params, ["payout", "usd", "publisher_earned"]);
+            if (rawPayoutPb && Number(rawPayoutPb) > 0) {
+              const pVal = Math.abs(parseFloat(rawPayoutPb) || 0);
+              coins = pVal < 1.0 ? Number((pVal * 9000).toFixed(2)) : Number(pVal.toFixed(2));
+            } else if (rawPayout && Number(rawPayout) > 0) {
               const pVal = Math.abs(parseFloat(rawPayout) || 0);
-              coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
+              coins = pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
             }
           }
           if (coins < 0.05 && coins > 0) coins = 0.05;
 
           const rawTxId = pickCleanParam(params, ["transId", "trans_id", "txn_id", "tx_id", "transaction_id", "id"]) || `tx_${Date.now()}`;
-          const offerName = params.get("offer_name") || params.get("offer") || "PubCrypto Task";
+          const offerName = pickCleanParam(params, ["offer_name", "offer", "task"]) || "PubCrypto Task";
           const fullTxId = `${providerLabel.toLowerCase()}_${userId || "anon"}_${rawTxId}`;
 
           if (userId && coins > 0) {
@@ -1441,8 +1492,9 @@ export default {
               if (rewardCoins <= 0) continue;
 
               const txId = `offerwallme_${existingUser.id}_${rawTx}`;
+              const itemTime = String(item.createdAt || item.completedAt || item.updatedAt || new Date().toISOString());
               const dupRow = await env.DB.prepare(
-                "SELECT id FROM ledger_entries WHERE external_tx_id = ? OR external_tx_id = ?"
+                "SELECT id, created_at FROM ledger_entries WHERE external_tx_id = ? OR external_tx_id = ?"
               )
                 .bind(txId, `owm_${rawTx}`)
                 .first();
@@ -1464,11 +1516,15 @@ export default {
                     `OFFERWALL.ME (${taskType}): ${taskTitle}`,
                     rewardCoins,
                     txId,
-                    item.createdAt || new Date().toISOString()
+                    itemTime
                   )
                   .run();
                 newlyCreditedCoins = Number((newlyCreditedCoins + rewardCoins).toFixed(2));
                 newlyCreditedCount += 1;
+              } else if (dupRow && (!dupRow.created_at || String(dupRow.created_at).length <= 10) && itemTime.length > 10) {
+                await env.DB.prepare("UPDATE ledger_entries SET created_at = ? WHERE id = ?")
+                  .bind(itemTime, dupRow.id)
+                  .run();
               }
             }
             const pendingRes = await processPendingPostbacksForUser(
@@ -1513,40 +1569,31 @@ export default {
                 .first();
             }
 
-            // Auto-merge any orphan guest accounts (e.g. plr_... or *@lootify.local) into existingUser
+            // Strictly unify ONLY the current user's own preferredId (e.g. if a postback arrived before user sync using preferredId)
+            // Never merge other users' accounts!
             try {
-              const orphanUsers = await env.DB.prepare(
-                "SELECT id, available_coins, pending_coins FROM users WHERE id != ? AND (id LIKE 'plr_%' OR email LIKE '%@lootify.local')"
-              )
-                .bind(existingUser.id)
-                .all();
+              if (preferredId && preferredId !== existingUser.id) {
+                const movedLedger = await env.DB.prepare(
+                  "UPDATE ledger_entries SET user_id = ?, user_name = ? WHERE user_id = ?"
+                )
+                  .bind(existingUser.id, existingUser.name, preferredId)
+                  .run();
 
-              for (const orphan of (orphanUsers && orphanUsers.results) || []) {
-                const orphanAvail = Number(orphan.available_coins) || 0;
-                const orphanPend = Number(orphan.pending_coins) || 0;
-                if (orphanAvail > 0 || orphanPend > 0) {
-                  await env.DB.prepare(
-                    "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), pending_coins = ROUND(pending_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2) WHERE id = ?"
-                  )
-                    .bind(orphanAvail, orphanPend, orphanAvail + orphanPend, existingUser.id)
-                    .run();
-
-                  await env.DB.prepare(
-                    "UPDATE ledger_entries SET user_id = ?, user_name = ? WHERE user_id = ?"
-                  )
-                    .bind(existingUser.id, existingUser.name, orphan.id)
-                    .run();
-
-                  await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(orphan.id).run();
-
-                  newlyCreditedCoins = Number((newlyCreditedCoins + orphanAvail).toFixed(2));
-                  newlyCreditedCount += 1;
-                }
-              }
-              if (orphanUsers && orphanUsers.results && orphanUsers.results.length > 0) {
-                existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
-                  .bind(existingUser.id)
+                const sameUserTempRow = await env.DB.prepare(
+                  "SELECT id, available_coins, pending_coins FROM users WHERE id = ? AND email LIKE '%@lootify.local'"
+                )
+                  .bind(preferredId)
                   .first();
+
+                if (sameUserTempRow) {
+                  await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(sameUserTempRow.id).run();
+                }
+
+                if ((movedLedger && movedLedger.meta && movedLedger.meta.changes > 0) || sameUserTempRow) {
+                  existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+                    .bind(existingUser.id)
+                    .first();
+                }
               }
             } catch {}
 
@@ -1911,9 +1958,19 @@ export default {
             if (textBody.startsWith("{") && textBody.endsWith("}")) {
               try {
                 const jsonBody = JSON.parse(textBody);
-                Object.entries(jsonBody || {}).forEach(([k, v]) => {
-                  if (v !== null && v !== undefined) params.set(k, String(v));
-                });
+                const flattenObj = (obj) => {
+                  if (!obj || typeof obj !== "object") return;
+                  Object.entries(obj).forEach(([k, v]) => {
+                    if (v !== null && v !== undefined) {
+                      if (typeof v === "object" && !Array.isArray(v)) {
+                        flattenObj(v);
+                      } else {
+                        params.set(k, String(v));
+                      }
+                    }
+                  });
+                };
+                flattenObj(jsonBody);
               } catch {
                 const bodyParams = new URLSearchParams(textBody);
                 bodyParams.forEach((v, k) => params.set(k, v));
@@ -1953,6 +2010,7 @@ export default {
           "subId",
           "subid",
           "sub_id",
+          "member_sub_id",
           "user_id",
           "uid",
           "user",
@@ -1963,15 +2021,22 @@ export default {
         // Normalize Reward / Amount (35% User Share: $1 USD = 3,000 Coins = ₹30)
         // Supports all PubCrypto sub-providers (Bitcotask, Cuty, Exe, Sproutdirect, PTC, Shortlinks, etc.)
         let coins = 0;
-        const explicitCoins = pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"]);
-        if (explicitCoins) {
+        const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
+        const explicitCoins = pickCleanParam(params, ["reward", "coins", "points", "amount"]);
+        if (explicitRewardPb && Number(explicitRewardPb) > 0) {
+          coins = Number(Math.abs(parseFloat(explicitRewardPb)).toFixed(2));
+        } else if (explicitCoins && Number(explicitCoins) > 0) {
           const parsed = Math.abs(parseFloat(explicitCoins) || 0);
           coins = parsed > 0 && parsed < 0.02 ? Number((parsed * 3600).toFixed(2)) : Number(parsed.toFixed(2));
         } else {
-          const rawPayout = pickCleanParam(params, ["payout_pb", "payout", "usd", "publisher_earned"]);
-          if (rawPayout) {
+          const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
+          const rawPayout = pickCleanParam(params, ["payout", "usd", "publisher_earned"]);
+          if (rawPayoutPb && Number(rawPayoutPb) > 0) {
+            const pVal = Math.abs(parseFloat(rawPayoutPb) || 0);
+            coins = pVal < 1.0 ? Number((pVal * 9000).toFixed(2)) : Number(pVal.toFixed(2));
+          } else if (rawPayout && Number(rawPayout) > 0) {
             const pVal = Math.abs(parseFloat(rawPayout) || 0);
-            coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
+            coins = pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
           }
         }
         if (coins < 0.05 && coins > 0) coins = 0.05;

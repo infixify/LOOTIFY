@@ -365,6 +365,8 @@ function loadCurrentUser(): PlayerUser | null {
 
     if (uEmail === 'sarthaksinghyadav1@gmail.com' || uId === 'plr_c2fydghha3') {
       const pcLogs = [
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335591346', coins: 1.44, title: 'PUBCRYPTO: 🔥 382,850 SATOSHI 🔥', createdAt: '2026-11-01T09:35:51.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335565532', coins: 1.44, title: 'PUBCRYPTO: LOTS OF EARNINGS! WITHDRAWAL FROM 0.01 USD', createdAt: '2026-11-01T08:26:00.000Z' },
         { txId: 'pubcrypto_plr_c2fydghha3_LD-335396491', coins: 1.44, title: 'PUBCRYPTO: LOTS OF EARNINGS! WI...', createdAt: '2026-10-31T20:41:00.000Z' },
         { txId: 'pubcrypto_plr_c2fydghha3_LD-335396193', coins: 0.54, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T20:39:00.000Z' },
         { txId: 'pubcrypto_plr_c2fydghha3_LD-335391249', coins: 0.54, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T20:35:00.000Z' },

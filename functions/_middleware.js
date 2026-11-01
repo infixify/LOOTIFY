@@ -231,8 +231,49 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Delegate all /api/* routes directly to worker.js on Cloudflare Pages
+  // Handle all /api/* routes on lootify.eternant.c0m.to
   if (url.pathname.startsWith("/api/")) {
+    // 1. If D1 database (DB) is bound directly to Cloudflare Pages, run worker.js in-place
+    if (context.env && context.env.DB) {
+      try {
+        return await worker.fetch(request, context.env);
+      } catch (err) {
+        return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // 2. If D1 is bound on the lootify-api Cloudflare Worker (via wrangler.toml),
+    // transparently proxy server-to-server on Cloudflare Edge so all postbacks & syncs
+    // read/write the exact same Global D1 Database while keeping the URL on lootify.eternant.c0m.to/api/*
+    try {
+      const targetUrl = new URL(
+        "https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search
+      );
+      let bodyText = undefined;
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        try {
+          bodyText = await request.clone().text();
+        } catch {}
+      }
+      const proxyHeaders = new Headers(request.headers);
+      proxyHeaders.set("x-forwarded-host", url.host);
+      const proxyResp = await fetch(targetUrl.toString(), {
+        method: request.method,
+        headers: proxyHeaders,
+        body: bodyText,
+      });
+      if (proxyResp.status < 500) {
+        const respHeaders = new Headers(proxyResp.headers);
+        Object.entries(corsHeaders).forEach(([k, v]) => respHeaders.set(k, v));
+        return new Response(proxyResp.body, {
+          status: proxyResp.status,
+          statusText: proxyResp.statusText,
+          headers: respHeaders,
+        });
+      }
+    } catch {}
+
+    // 3. Fallback to local worker execution if Worker proxy is unreachable
     try {
       return await worker.fetch(request, context.env);
     } catch (err) {
