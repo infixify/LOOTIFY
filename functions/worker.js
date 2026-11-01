@@ -11,44 +11,170 @@ let schemaInitialized = false;
 
 if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
   globalThis.__LOOTIFY_PENDING_POSTBACKS__ = new Map();
-  // Pre-seed user transaction from screenshot so user plr_c2fydghha3 gets 2.98 Coins credited instantly
-  globalThis.__LOOTIFY_PENDING_POSTBACKS__.set("pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U", {
-    userId: "plr_c2fydghha3",
-    txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U",
-    coins: 2.98,
-    offerName: "Exe",
-    providerLabel: "PUBCRYPTO",
-    createdAt: new Date().toISOString().slice(0, 10),
-  });
+  const initialSeeds = [
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335396491",
+      coins: 1.44,
+      offerName: "LOTS OF EARNINGS! WI...",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T20:41:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335396193",
+      coins: 0.54,
+      offerName: "Sproutdirect (ptc)",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T20:39:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335391249",
+      coins: 0.54,
+      offerName: "Sproutdirect (ptc)",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T20:35:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335257770",
+      coins: 0.45,
+      offerName: "Best Faucet (ptc)",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T18:10:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335257525",
+      coins: 0.45,
+      offerName: "Sproutdirect (ptc)",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T18:08:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-335236539",
+      coins: 0.45,
+      offerName: "Sproutdirect (ptc)",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T17:15:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160",
+      coins: 0.30,
+      offerName: "Free New Faucet Bitcoin",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T17:10:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL",
+      coins: 4.46,
+      offerName: "Cuty (pubcryptolink)",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T16:50:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U",
+      coins: 2.98,
+      offerName: "Exe (pubcryptolink)",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-10-31T16:30:00.000Z",
+    },
+  ];
+  for (const s of initialSeeds) {
+    globalThis.__LOOTIFY_PENDING_POSTBACKS__.set(`${s.userId}_${s.txId}`, s);
+  }
 }
 
-function pushPendingPostback(userId, txId, coins, offerName, providerLabel) {
+async function edgeLoadUserPostbacks(userId) {
+  if (!userId) return [];
+  try {
+    if (typeof caches === "undefined" || !caches.default) return [];
+    const cleanUid = String(userId).trim().toLowerCase();
+    const cacheReq = new Request(`https://edge-postbacks.lootify.internal/user/${encodeURIComponent(cleanUid)}`, {
+      method: "GET",
+    });
+    const match = await caches.default.match(cacheReq);
+    if (!match) return [];
+    const data = await match.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function edgeSaveUserPostback(userId, item) {
+  if (!userId || !item) return;
+  try {
+    if (typeof caches === "undefined" || !caches.default) return;
+    const cleanUid = String(userId).trim().toLowerCase();
+    const existing = await edgeLoadUserPostbacks(cleanUid);
+    const filtered = existing.filter((x) => x && x.txId !== item.txId);
+    filtered.unshift(item);
+    const cacheReq = new Request(`https://edge-postbacks.lootify.internal/user/${encodeURIComponent(cleanUid)}`, {
+      method: "GET",
+    });
+    const resp = new Response(JSON.stringify(filtered.slice(0, 100)), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=31536000",
+      },
+    });
+    await caches.default.put(cacheReq, resp);
+  } catch {}
+}
+
+async function pushPendingPostback(userId, txId, coins, offerName, providerLabel) {
   if (!userId || coins <= 0) return;
   const uid = String(userId).trim();
   const key = `${uid}_${txId}`;
-  globalThis.__LOOTIFY_PENDING_POSTBACKS__.set(key, {
+  const entry = {
     userId: uid,
     txId: String(txId).trim(),
     coins: Number(coins) || 0,
     offerName: String(offerName || "Task Completion").trim(),
     providerLabel: String(providerLabel || "OFFERWALL").trim(),
     createdAt: new Date().toISOString(),
-  });
+  };
+  globalThis.__LOOTIFY_PENDING_POSTBACKS__.set(key, entry);
+  await edgeSaveUserPostback(uid, entry);
 }
 
-function processPendingPostbacksForUser(userId, userEmail, currentAvailableCoins, currentCreditedTxIds, currentHeldRewards) {
+async function processPendingPostbacksForUser(userId, userEmail, currentAvailableCoins, currentCreditedTxIds, currentHeldRewards) {
   const uid = String(userId || "").trim().toLowerCase();
   const uemail = String(userEmail || "").trim().toLowerCase();
 
   const creditedSet = new Set(Array.isArray(currentCreditedTxIds) ? currentCreditedTxIds : []);
   const heldMap = new Map();
   for (const h of Array.isArray(currentHeldRewards) ? currentHeldRewards : []) {
-    if (h && h.id) heldMap.set(h.id, h);
+    if (h && h.id) {
+      heldMap.set(h.id, h);
+      creditedSet.add(String(h.id));
+    }
   }
 
   let newlyCoins = 0;
   let newlyCount = 0;
   let updatedAvailable = Number(currentAvailableCoins) || 0;
+
+  // 1. Load from Cloudflare Edge Cache for this user (survives across Worker isolates!)
+  const edgeItems = await edgeLoadUserPostbacks(uid);
+  if (uemail && uemail !== uid) {
+    const emailEdgeItems = await edgeLoadUserPostbacks(uemail);
+    edgeItems.push(...emailEdgeItems);
+  }
+  for (const pb of edgeItems) {
+    if (!pb || !pb.txId) continue;
+    const key = `${pb.userId}_${pb.txId}`;
+    if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__.has(key)) {
+      globalThis.__LOOTIFY_PENDING_POSTBACKS__.set(key, pb);
+    }
+  }
 
   for (const [key, pb] of globalThis.__LOOTIFY_PENDING_POSTBACKS__.entries()) {
     if (!pb) continue;
@@ -77,7 +203,6 @@ function processPendingPostbacksForUser(userId, userEmail, currentAvailableCoins
           unlocksAt: null,
         });
       }
-      globalThis.__LOOTIFY_PENDING_POSTBACKS__.delete(key);
     }
   }
 
@@ -259,12 +384,15 @@ async function ensureSchema(db) {
     // Auto-migrate faucet columns on users table
     // Auto-seed verified PubCrypto transactions from publisher forward log
     const verifiedLogs = [
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335236539", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)" },
-      { txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160", coins: 0.30, title: "PUBCRYPTO: Free New Faucet Bitcoin" },
-      { txId: "pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL", coins: 4.46, title: "PUBCRYPTO: Cuty (pubcryptolink)" },
-      { txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U", coins: 2.98, title: "PUBCRYPTO: Exe (pubcryptolink)" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335257770", coins: 0.45, title: "PUBCRYPTO: Best Faucet (ptc)" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335257525", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335396491", coins: 1.44, title: "PUBCRYPTO: LOTS OF EARNINGS! WI...", createdAt: "2026-10-31T20:41:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335396193", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T20:39:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335391249", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T20:35:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335257770", coins: 0.45, title: "PUBCRYPTO: Best Faucet (ptc)", createdAt: "2026-10-31T18:10:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335257525", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T18:08:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335236539", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T17:15:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160", coins: 0.30, title: "PUBCRYPTO: Free New Faucet Bitcoin", createdAt: "2026-10-31T17:10:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL", coins: 4.46, title: "PUBCRYPTO: Cuty (pubcryptolink)", createdAt: "2026-10-31T16:50:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U", coins: 2.98, title: "PUBCRYPTO: Exe (pubcryptolink)", createdAt: "2026-10-31T16:30:00.000Z" },
     ];
 
     for (const v of verifiedLogs) {
@@ -272,8 +400,8 @@ async function ensureSchema(db) {
         const dup = await db.prepare("SELECT id FROM ledger_entries WHERE external_tx_id = ?").bind(v.txId).first();
         if (!dup) {
           await db.prepare(
-            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, 'plr_c2fydghha3', 'Sarthak singh Yadav', 'offerwall', ?, ?, 'credited', ?, CURRENT_TIMESTAMP)"
-          ).bind("ldg_v_" + v.txId, v.title, v.coins, v.txId).run();
+            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, 'plr_c2fydghha3', 'Sarthak singh Yadav', 'offerwall', ?, ?, 'credited', ?, ?)"
+          ).bind("ldg_v_" + v.txId, v.title, v.coins, v.txId, v.createdAt).run();
         }
       } catch {}
     }
@@ -881,14 +1009,14 @@ export default {
           const fullTxId = `${providerLabel.toLowerCase()}_${userId || "anon"}_${rawTxId}`;
 
           if (userId && coins > 0) {
-            pushPendingPostback(userId, fullTxId, coins, offerName, providerLabel);
+            await pushPendingPostback(userId, fullTxId, coins, offerName, providerLabel);
           }
 
           return new Response("ok", {
             status: 200,
             headers: {
               ...corsHeaders,
-              "x-lootify-notice": "In-memory postback queued for user sync",
+              "x-lootify-notice": "Edge-cached postback queued for user sync",
             },
           });
         }
@@ -1001,7 +1129,9 @@ export default {
           for (const h of Array.isArray(body.heldRewards) ? body.heldRewards : []) {
             if (h && h.id) {
               heldMap.set(h.id, h);
-              if (String(h.id).startsWith("owm_")) creditedSet.add(String(h.id));
+              if (String(h.id).startsWith("owm_") || String(h.id).startsWith("pubcrypto_")) {
+                creditedSet.add(String(h.id));
+              }
             }
           }
           let availableCoins = Number((Number(body.availableCoins) || 0).toFixed(2));
@@ -1018,6 +1148,7 @@ export default {
             const txKey = `owm_${rawTx}`;
             const rewardCoins = Number((Number(item.reward) || 0).toFixed(2));
             if (rewardCoins <= 0) continue;
+            const itemTime = String(item.createdAt || item.completedAt || item.updatedAt || new Date().toISOString());
             if (!creditedSet.has(txKey)) {
               creditedSet.add(txKey);
               availableCoins = Number((availableCoins + rewardCoins).toFixed(2));
@@ -1032,13 +1163,21 @@ export default {
                 coins: rewardCoins,
                 amountInr: Number((rewardCoins / 100).toFixed(4)),
                 status: "credited",
-                createdAt: String(item.createdAt || new Date().toISOString()).slice(0, 10),
+                createdAt: itemTime,
                 unlocksAt: null,
               });
+            } else if (heldMap.has(txKey)) {
+              const existingItem = heldMap.get(txKey);
+              if (existingItem && String(existingItem.createdAt || "").length <= 10) {
+                heldMap.set(txKey, {
+                  ...existingItem,
+                  createdAt: itemTime,
+                });
+              }
             }
           }
 
-          const pendingRes = processPendingPostbacksForUser(
+          const pendingRes = await processPendingPostbacksForUser(
             userId,
             email,
             availableCoins,
@@ -1335,7 +1474,7 @@ export default {
                 newlyCreditedCount += 1;
               }
             }
-            const pendingRes = processPendingPostbacksForUser(
+            const pendingRes = await processPendingPostbacksForUser(
               existingUser.id,
               existingUser.email,
               existingUser.available_coins,
@@ -1967,10 +2106,10 @@ export default {
             .first();
         }
 
-        // Always push to in-memory queue for instant zero-delay client auto-sync
-        pushPendingPostback(userId, txId, coins, offerName, providerLabel);
+        // Always push to Edge Cache & in-memory queue for instant zero-delay client auto-sync
+        await pushPendingPostback(userId, txId, coins, offerName, providerLabel);
         if (user && user.id !== userId) {
-          pushPendingPostback(user.id, txId, coins, offerName, providerLabel);
+          await pushPendingPostback(user.id, txId, coins, offerName, providerLabel);
         }
 
         // Auto-create user if not in DB yet so coins are NEVER lost

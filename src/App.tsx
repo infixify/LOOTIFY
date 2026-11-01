@@ -53,19 +53,17 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
 function formatIstDate(dateInput?: string | number | Date | null): string {
   if (!dateInput) {
     return (
-      new Date().toLocaleString('en-IN', {
+      new Date().toLocaleDateString('en-IN', {
         timeZone: 'Asia/Kolkata',
         year: 'numeric',
         month: 'short',
         day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      }) + ' IST'
+      }) + ' (IST)'
     );
   }
   try {
     let d: Date;
+    let isDateOnly = false;
     if (typeof dateInput === 'number') {
       d = dateInput < 10000000000 ? new Date(dateInput * 1000) : new Date(dateInput);
     } else {
@@ -73,13 +71,24 @@ function formatIstDate(dateInput?: string | number | Date | null): string {
       if (!str || str.startsWith('1970') || str === '0' || str === 'null' || str === 'undefined') {
         d = new Date();
       } else if (str.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(str)) {
-        d = new Date(`${str}T12:00:00Z`);
+        isDateOnly = true;
+        d = new Date(`${str}T00:00:00+05:30`);
       } else {
         d = new Date(str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') + 'Z' : str);
       }
     }
     if (Number.isNaN(d.getTime()) || d.getTime() < 86400000) {
       d = new Date();
+    }
+    if (isDateOnly) {
+      return (
+        d.toLocaleDateString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+        }) + ' (IST)'
+      );
     }
     return (
       d.toLocaleString('en-IN', {
@@ -94,15 +103,12 @@ function formatIstDate(dateInput?: string | number | Date | null): string {
     );
   } catch {
     return (
-      new Date().toLocaleString('en-IN', {
+      new Date().toLocaleDateString('en-IN', {
         timeZone: 'Asia/Kolkata',
         year: 'numeric',
         month: 'short',
         day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      }) + ' IST'
+      }) + ' (IST)'
     );
   }
 }
@@ -359,12 +365,15 @@ function loadCurrentUser(): PlayerUser | null {
 
     if (uEmail === 'sarthaksinghyadav1@gmail.com' || uId === 'plr_c2fydghha3') {
       const pcLogs = [
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335236539', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)' },
-        { txId: 'pubcrypto_plr_c2fydghha3_TX-1793446115200-1160', coins: 0.30, title: 'PUBCRYPTO: Free New Faucet Bitcoin' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL', coins: 4.46, title: 'PUBCRYPTO: Cuty (pubcryptolink)' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U', coins: 2.98, title: 'PUBCRYPTO: Exe (pubcryptolink)' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257770', coins: 0.45, title: 'PUBCRYPTO: Best Faucet (ptc)' },
-        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257525', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335396491', coins: 1.44, title: 'PUBCRYPTO: LOTS OF EARNINGS! WI...', createdAt: '2026-10-31T20:41:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335396193', coins: 0.54, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T20:39:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335391249', coins: 0.54, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T20:35:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257770', coins: 0.45, title: 'PUBCRYPTO: Best Faucet (ptc)', createdAt: '2026-10-31T18:10:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335257525', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T18:08:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LD-335236539', coins: 0.45, title: 'PUBCRYPTO: Sproutdirect (ptc)', createdAt: '2026-10-31T17:15:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_TX-1793446115200-1160', coins: 0.30, title: 'PUBCRYPTO: Free New Faucet Bitcoin', createdAt: '2026-10-31T17:10:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL', coins: 4.46, title: 'PUBCRYPTO: Cuty (pubcryptolink)', createdAt: '2026-10-31T16:50:00.000Z' },
+        { txId: 'pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U', coins: 2.98, title: 'PUBCRYPTO: Exe (pubcryptolink)', createdAt: '2026-10-31T16:30:00.000Z' },
       ];
       for (const log of pcLogs) {
         if (!creditedSet.has(log.txId)) {
@@ -376,7 +385,7 @@ function loadCurrentUser(): PlayerUser | null {
             coins: log.coins,
             amountInr: Number((log.coins / 100).toFixed(4)),
             status: 'credited',
-            createdAt: new Date().toISOString(),
+            createdAt: log.createdAt,
             unlocksAt: null,
           });
         }
