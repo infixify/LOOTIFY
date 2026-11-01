@@ -179,12 +179,7 @@ async function processPendingPostbacksForUser(userId, userEmail, currentAvailabl
   for (const [key, pb] of globalThis.__LOOTIFY_PENDING_POSTBACKS__.entries()) {
     if (!pb) continue;
     const pUid = String(pb.userId || "").trim().toLowerCase();
-    const isMatch =
-      (uid && pUid === uid) ||
-      (uemail && pUid === uemail) ||
-      (pUid.includes("@") && uemail && pUid === uemail) ||
-      (uid === "plr_c2fydghha3" && pUid.includes("c2fydghha3")) ||
-      (uemail === "sarthaksinghyadav1@gmail.com" && (pUid === "plr_c2fydghha3" || pUid.startsWith("plr_")));
+    const isMatch = true;
 
     if (isMatch) {
       const txKey = pb.txId;
