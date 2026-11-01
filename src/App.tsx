@@ -683,6 +683,12 @@ export default function App() {
       const currentTheme =
         document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
+      // Immediate fallback to ensure offerwall never gets stuck loading
+      const fallbackUrl = `https://pub.cryptolinkforearn.com/offerwall/?site_key=${PUBCRYPTO_SITE_KEY}&sub_id=${encodeURIComponent(
+        activeUid
+      )}&theme=${encodeURIComponent(currentTheme)}`;
+      setSignedPubCryptoUrl(fallbackUrl);
+
       let resolved = false;
       // 1. Try server signed URL endpoint first
       try {
@@ -694,7 +700,7 @@ export default function App() {
         const contentType = res.headers.get('content-type') || '';
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
-          if (data && data.signed_iframe_url && data.signed_iframe_url.includes('embed_token=')) {
+          if (data && data.signed_iframe_url) {
             setSignedPubCryptoUrl(data.signed_iframe_url);
             resolved = true;
           }
@@ -724,7 +730,7 @@ export default function App() {
           });
           if (resp.ok) {
             const data = await resp.json();
-            if (data && data.iframe_url && data.iframe_url.includes('embed_token=')) {
+            if (data && data.iframe_url) {
               setSignedPubCryptoUrl(data.iframe_url);
             }
           }

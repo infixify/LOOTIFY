@@ -995,14 +995,16 @@ export default {
           let coins = 0;
           const explicitCoins = pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"]);
           if (explicitCoins) {
-            coins = Number(Math.abs(parseFloat(explicitCoins) || 0).toFixed(2));
+            const parsed = Math.abs(parseFloat(explicitCoins) || 0);
+            coins = parsed > 0 && parsed < 0.02 ? Number((parsed * 3600).toFixed(2)) : Number(parsed.toFixed(2));
           } else {
-            const rawPayout = pickCleanParam(params, ["payout_pb", "payout", "usd"]);
+            const rawPayout = pickCleanParam(params, ["payout_pb", "payout", "usd", "publisher_earned"]);
             if (rawPayout) {
               const pVal = Math.abs(parseFloat(rawPayout) || 0);
-              coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
+              coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
             }
           }
+          if (coins < 0.05 && coins > 0) coins = 0.05;
 
           const rawTxId = pickCleanParam(params, ["transId", "trans_id", "txn_id", "tx_id", "transaction_id", "id"]) || `tx_${Date.now()}`;
           const offerName = params.get("offer_name") || params.get("offer") || "PubCrypto Task";
@@ -1969,12 +1971,12 @@ export default {
         const explicitCoins = pickCleanParam(params, ["reward_pb", "reward", "coins", "points", "amount"]);
         if (explicitCoins) {
           const parsed = Math.abs(parseFloat(explicitCoins) || 0);
-          coins = parsed > 0 && parsed < 0.02 ? Number((parsed * 3000).toFixed(2)) : Number(parsed.toFixed(2));
+          coins = parsed > 0 && parsed < 0.02 ? Number((parsed * 3600).toFixed(2)) : Number(parsed.toFixed(2));
         } else {
           const rawPayout = pickCleanParam(params, ["payout_pb", "payout", "usd", "publisher_earned"]);
           if (rawPayout) {
             const pVal = Math.abs(parseFloat(rawPayout) || 0);
-            coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
+            coins = pVal > 0 && pVal < 1.0 ? Number((pVal * 3600).toFixed(2)) : Number(pVal.toFixed(2));
           }
         }
         if (coins < 0.05 && coins > 0) coins = 0.05;
