@@ -2336,7 +2336,7 @@ export default {
             "SELECT * FROM withdrawals ORDER BY created_at DESC LIMIT 100"
           ).all();
           const postbacksRes = await env.DB.prepare(
-            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'chargeback_reversal') ORDER BY created_at DESC LIMIT 50"
+            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'chargeback_reversal', 'debug_postback', 'verified_ping') ORDER BY created_at DESC LIMIT 50"
           ).all();
           const offerwallsRes = await env.DB.prepare(
             "SELECT * FROM offerwall_configs ORDER BY rowid ASC"
