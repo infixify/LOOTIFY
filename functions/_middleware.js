@@ -233,8 +233,9 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Handle all /api/* routes on lootify.eternant.c0m.to
-  if (url.pathname.startsWith("/api/")) {
+  // Handle all /api/* and /lootify/api/* routes on lootify.eternant.c0m.to
+  const normalizedPath = url.pathname.replace(/^\/lootify(?=\/api(\/|$))/i, "");
+  if (normalizedPath.startsWith("/api/")) {
     // 1. If D1 database (DB) is bound directly to Cloudflare Pages, run worker.js in-place
     if (context.env && context.env.DB) {
       try {
@@ -249,7 +250,7 @@ export async function onRequest(context) {
     // read/write the exact same Global D1 Database while keeping the URL on lootify.eternant.c0m.to/api/*
     try {
       const targetUrl = new URL(
-        "https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search
+        "https://lootify-api.sarthaksinghyadav1.workers.dev" + normalizedPath + url.search
       );
       let bodyText = undefined;
       if (request.method !== "GET" && request.method !== "HEAD") {

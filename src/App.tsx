@@ -370,6 +370,38 @@ function saveCachedOfferwalls(walls: OfferwallConfig[]) {
   } catch {}
 }
 
+function generateUniquePlayerId(emailRaw: string): string {
+  const email = String(emailRaw || '').trim().toLowerCase();
+  if (email === 'sarthaksinghyadav1@gmail.com') {
+    return 'plr_c2fydghha3';
+  }
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < email.length; i++) {
+    const c = email.charCodeAt(i);
+    h1 ^= c;
+    h1 = Math.imul(h1, 0x01000193) >>> 0;
+    h2 ^= c + i * 31;
+    h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+  }
+  const prefix = email.replace(/[^a-z0-9]/g, '').slice(0, 4) || 'user';
+  return `plr_${prefix}_${h1.toString(36)}${h2.toString(36)}`;
+}
+
+function parseHistoryTimestampMs(val?: string | number | Date | null): number {
+  if (!val) return 0;
+  if (typeof val === 'number') return val < 10000000000 ? val * 1000 : val;
+  if (val instanceof Date) return val.getTime();
+  const str = String(val).trim();
+  if (!str) return 0;
+  const iso =
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(str)
+      ? str.replace(' ', 'T') + (str.endsWith('Z') ? '' : 'Z')
+      : str;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 function loadCurrentUser(): PlayerUser | null {
   try {
     const raw = localStorage.getItem(STORAGE_USER_KEY);
@@ -377,13 +409,33 @@ function loadCurrentUser(): PlayerUser | null {
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.id || !parsed.email) return null;
 
+    const cleanEmail = String(parsed.email).trim().toLowerCase();
+    let uId = String(parsed.id || '').trim();
+    // Prevent any non-admin user from ever sharing the admin ID or demo ID
+    if (
+      cleanEmail !== 'sarthaksinghyadav1@gmail.com' &&
+      (!uId || uId === 'plr_c2fydghha3' || uId === 'plr_demo')
+    ) {
+      uId = generateUniquePlayerId(cleanEmail);
+    }
+
     const creditedSet = new Set<string>(Array.isArray(parsed.creditedTxIds) ? parsed.creditedTxIds : []);
-    const heldRewards = Array.isArray(parsed.heldRewards) ? [...parsed.heldRewards] : [];
+    const heldRewards = (Array.isArray(parsed.heldRewards) ? [...parsed.heldRewards] : [])
+      .filter(Boolean)
+      .map((h: any) => {
+        const coins = Number(Math.max(0, Number(h.coins) || 0).toFixed(2));
+        return {
+          ...h,
+          coins,
+          amountInr: Number((coins / 100).toFixed(4)),
+        };
+      })
+      .sort((a: any, b: any) => parseHistoryTimestampMs(b.createdAt) - parseHistoryTimestampMs(a.createdAt));
+
     for (const h of heldRewards) {
       if (h && h.id) creditedSet.add(String(h.id));
     }
     const availableCoins = Number((Number(parsed.availableCoins) || 0).toFixed(2));
-    const uId = String(parsed.id || '').trim();
 
     return {
       id: uId,
@@ -416,15 +468,24 @@ function saveCurrentUser(user: PlayerUser | null) {
       localStorage.removeItem('lootify_user_id');
       return;
     }
-    localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(user));
-    localStorage.setItem('lootify_user_id', user.id);
+    const sortedHeld = Array.isArray(user.heldRewards)
+      ? [...user.heldRewards].sort(
+          (a, b) => parseHistoryTimestampMs(b?.createdAt) - parseHistoryTimestampMs(a?.createdAt)
+        )
+      : [];
+    const normalizedUser: PlayerUser = {
+      ...user,
+      heldRewards: sortedHeld,
+    };
+    localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(normalizedUser));
+    localStorage.setItem('lootify_user_id', normalizedUser.id);
 
     const accountsRaw = localStorage.getItem(STORAGE_ACCOUNTS_KEY);
     const accounts: Record<string, any> = accountsRaw ? JSON.parse(accountsRaw) : {};
-    const key = user.email.toLowerCase();
+    const key = normalizedUser.email.toLowerCase();
     accounts[key] = {
       ...(accounts[key] || {}),
-      user,
+      user: normalizedUser,
     };
     localStorage.setItem(STORAGE_ACCOUNTS_KEY, JSON.stringify(accounts));
   } catch {
@@ -566,76 +627,89 @@ export default function App() {
   const lastAutoSyncAtRef = useRef<number>(0);
   const pubCryptoRefreshInFlightRef = useRef<boolean>(false);
 
-  const syncUserWithBackend = useCallback(async (currentUser: PlayerUser | null, showFeedback = false) => {
-    if (!currentUser) return;
-    if (syncInFlightRef.current && !showFeedback) return;
-    const now = Date.now();
-    if (!showFeedback && now - lastAutoSyncAtRef.current < 4000) return;
+  const syncUserWithBackend = useCallback(
+    async (currentUser: PlayerUser | null, showFeedback = false, bypassThrottle = false) => {
+      if (!currentUser) return;
+      if (syncInFlightRef.current && !showFeedback && !bypassThrottle) return;
+      const now = Date.now();
+      if (!showFeedback && !bypassThrottle && now - lastAutoSyncAtRef.current < 3000) return;
 
-    syncInFlightRef.current = true;
-    lastAutoSyncAtRef.current = now;
-    if (showFeedback) setSyncingWallet(true);
-    const base = getApiBaseUrl();
-    try {
-      const res = await fetch(`${base}/api/user/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentUser),
-      });
+      syncInFlightRef.current = true;
+      lastAutoSyncAtRef.current = now;
+      if (showFeedback) setSyncingWallet(true);
+      const base = getApiBaseUrl();
+      try {
+        const res = await fetch(`${base}/api/user/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentUser),
+        });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.user) {
-          const prevAvail = Number(currentUser.availableCoins) || 0;
-          const nextAvail = Number(data.user.availableCoins) || 0;
-          const balanceIncrease = Number((nextAvail - prevAvail).toFixed(2));
-          const newlyCredited = Number(data.newlyCreditedCoins) || 0;
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.user) {
+            const sortedHeld = Array.isArray(data.user.heldRewards)
+              ? [...data.user.heldRewards].sort(
+                  (a, b) => parseHistoryTimestampMs(b?.createdAt) - parseHistoryTimestampMs(a?.createdAt)
+                )
+              : [];
+            const nextUser: PlayerUser = {
+              ...data.user,
+              heldRewards: sortedHeld,
+            };
 
-          // Also check if any new offerwall reward ID appeared compared to previous heldRewards
-          const prevHeldIds = new Set(
-            (Array.isArray(currentUser.heldRewards) ? currentUser.heldRewards : []).map((h) => String(h.id))
-          );
-          let newHeldCoins = 0;
-          if (prevHeldIds.size > 0 && Array.isArray(data.user.heldRewards)) {
-            for (const h of data.user.heldRewards) {
-              if (h && h.id && !prevHeldIds.has(String(h.id)) && Number(h.coins) > 0) {
-                newHeldCoins = Number((newHeldCoins + Number(h.coins)).toFixed(2));
+            const prevAvail = Number(currentUser.availableCoins) || 0;
+            const nextAvail = Number(nextUser.availableCoins) || 0;
+            const balanceIncrease = Number((nextAvail - prevAvail).toFixed(2));
+            const newlyCredited = Number(data.newlyCreditedCoins) || 0;
+
+            // Check if any new offerwall reward ID appeared compared to previous heldRewards
+            const prevHeldIds = new Set(
+              (Array.isArray(currentUser.heldRewards) ? currentUser.heldRewards : []).map((h) => String(h.id))
+            );
+            let newHeldCoins = 0;
+            if (prevHeldIds.size > 0 && sortedHeld.length > 0) {
+              for (const h of sortedHeld) {
+                if (h && h.id && !prevHeldIds.has(String(h.id)) && Number(h.coins) > 0) {
+                  newHeldCoins = Number((newHeldCoins + Number(h.coins)).toFixed(2));
+                }
               }
             }
-          }
 
-          const diffCoins =
-            newHeldCoins > 0
-              ? newHeldCoins
-              : balanceIncrease > 0
-                ? newlyCredited > 0 && newlyCredited <= balanceIncrease
+            const diffCoins =
+              newHeldCoins > 0
+                ? newHeldCoins
+                : newlyCredited > 0
                   ? newlyCredited
-                  : balanceIncrease
-                : 0;
+                  : balanceIncrease > 0
+                    ? balanceIncrease
+                    : 0;
 
-          saveCurrentUser(data.user);
-          setUser(data.user);
-          if (diffCoins > 0) {
-            setSyncStatusMsg(
-              `🎉 +${diffCoins} Coins credited from Offerwall Task! Balance: ${data.user.availableCoins} Coins`
-            );
-            setTimeout(() => setSyncStatusMsg(null), 6000);
-          } else if (showFeedback) {
-            setSyncStatusMsg(`✅ Synced! Balance: ${data.user.availableCoins} Available Coins`);
-            setTimeout(() => setSyncStatusMsg(null), 3500);
+            saveCurrentUser(nextUser);
+            setUser(nextUser);
+            if (diffCoins > 0) {
+              setSyncStatusMsg(
+                `🎉 +${diffCoins} Coins credited from Offerwall Task! Balance: ${nextUser.availableCoins} Coins`
+              );
+              setTimeout(() => setSyncStatusMsg(null), 6000);
+            } else if (showFeedback) {
+              setSyncStatusMsg(`✅ Synced! Balance: ${nextUser.availableCoins} Available Coins (${sortedHeld.length} tasks in history)`);
+              setTimeout(() => setSyncStatusMsg(null), 3500);
+            }
           }
         }
+      } catch {
+        if (showFeedback) {
+          setSyncStatusMsg('⚡ Using local wallet cache');
+          setTimeout(() => setSyncStatusMsg(null), 3500);
+        }
+      } finally {
+        syncInFlightRef.current = false;
+        if (showFeedback) setSyncingWallet(false);
       }
-    } catch {
-      if (showFeedback) {
-        setSyncStatusMsg('⚡ Using local wallet cache');
-        setTimeout(() => setSyncStatusMsg(null), 3500);
-      }
-    } finally {
-      syncInFlightRef.current = false;
-      if (showFeedback) setSyncingWallet(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   const fetchOfferwallsFromBackend = useCallback(async (uid?: string) => {
     const base = getApiBaseUrl();
@@ -1069,6 +1143,10 @@ export default function App() {
     const hashTarget = tab === 'overview' ? '#/dashboard' : `#/${tab}`;
     if (window.location.hash !== hashTarget) {
       window.location.hash = hashTarget;
+    }
+    const latestUser = loadCurrentUser() || user;
+    if (latestUser) {
+      syncUserWithBackend(latestUser, false, true);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -3107,16 +3185,32 @@ export default function App() {
             </div>
 
             <div className="card" style={{ padding: 26 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                  Recent Cashout &amp; Account Activity
-                </h3>
-                <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
-                  REAL-TIME LEDGER
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                    Recent Offerwall Tasks &amp; Account Activity
+                  </h3>
+                  <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
+                    Live history of your completed Offerwall.me &amp; PubCrypto tasks, faucet claims, and cashouts.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                    {(user.heldRewards?.length || 0) + (user.faucetHistory?.length || 0) + (user.withdrawals?.length || 0)} ENTRIES
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => syncUserWithBackend(user, true)}
+                    className="btn btn-outline btn-sm"
+                  >
+                    🔄 Sync History
+                  </button>
+                </div>
               </div>
 
-              {user.withdrawals.length === 0 ? (
+              {(user.heldRewards?.length || 0) === 0 &&
+              (user.faucetHistory?.length || 0) === 0 &&
+              user.withdrawals.length === 0 ? (
                 <div
                   style={{
                     padding: '32px 20px',
@@ -3135,6 +3229,100 @@ export default function App() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(user.heldRewards || []).slice(0, 15).map((item) => {
+                    const isHeld = item.status === 'pending_hold';
+                    return (
+                      <div
+                        key={`ov_task_${item.id}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '14px 16px',
+                          background: 'var(--bg2)',
+                          border: isHeld ? '1px solid rgba(255,180,0,0.28)' : '1px solid rgba(0,232,154,0.22)',
+                          borderRadius: 10,
+                          flexWrap: 'wrap',
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
+                            {item.title}
+                          </div>
+                          <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                            Earned: {formatIstDate(item.createdAt)}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span
+                            className="font-mono"
+                            style={{ fontSize: 13, fontWeight: 700, color: isHeld ? 'var(--gold)' : 'var(--green)' }}
+                          >
+                            +{item.coins} Coins (₹{item.amountInr})
+                          </span>
+                          <span
+                            className="font-mono"
+                            style={{
+                              fontSize: 10,
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              background: isHeld ? 'rgba(255,180,0,0.12)' : 'rgba(0,232,154,0.12)',
+                              color: isHeld ? 'var(--gold)' : 'var(--green)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {isHeld ? '⏳ ON HOLD' : '✅ CREDITED'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {(user.faucetHistory || []).slice(0, 5).map((f) => (
+                    <div
+                      key={`ov_faucet_${f.id}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        flexWrap: 'wrap',
+                        gap: 10,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
+                          Hourly Faucet Roll #{String(f.rollNumber).padStart(4, '0')}
+                        </div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                          {formatIstDate(f.createdAt)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="font-mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+                          +{f.coins} Coins
+                        </span>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 10,
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(0,232,154,0.12)',
+                            color: 'var(--green)',
+                            fontWeight: 700,
+                          }}
+                        >
+                          ✅ CREDITED
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
                   {user.withdrawals.map((w) => (
                     <div
                       key={w.id}
@@ -3403,6 +3591,117 @@ export default function App() {
                     )}
                   </div>
                 )}
+
+                {/* Live Completed Offerwall Tasks History directly on the Quests page */}
+                <div className="card" style={{ padding: 24 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 14,
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
+                    <div>
+                      <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                        Completed Offerwall Tasks — Live History
+                      </h3>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
+                        Every task completed for Player ID <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> logs here automatically.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
+                        {user.heldRewards?.length || 0} Tasks Logged
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => syncUserWithBackend(user, true)}
+                        className="btn btn-outline btn-sm"
+                      >
+                        🔄 Sync History
+                      </button>
+                    </div>
+                  </div>
+
+                  {!user.heldRewards || user.heldRewards.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '24px 16px',
+                        textAlign: 'center',
+                        background: 'var(--bg2)',
+                        border: '1px dashed var(--border2)',
+                        borderRadius: 12,
+                      }}
+                    >
+                      <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
+                        No offerwall tasks logged yet for Player ID {user.id}. Complete any PTC ad, shortlink, or task above!
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {user.heldRewards.slice(0, 20).map((item) => {
+                        const isHeld = item.status === 'pending_hold';
+                        return (
+                          <div
+                            key={`quest_hist_${item.id}`}
+                            style={{
+                              padding: '12px 14px',
+                              background: 'var(--bg2)',
+                              border: isHeld
+                                ? '1px solid rgba(255,180,0,0.28)'
+                                : '1px solid rgba(0,232,154,0.22)',
+                              borderRadius: 10,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+                                {item.title}
+                              </div>
+                              <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                                Earned: {formatIstDate(item.createdAt)}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  color: isHeld ? 'var(--gold)' : 'var(--green)',
+                                }}
+                              >
+                                +{item.coins} Coins (₹{item.amountInr})
+                              </span>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: 10,
+                                  padding: '3px 7px',
+                                  borderRadius: 6,
+                                  background: isHeld
+                                    ? 'rgba(255,180,0,0.12)'
+                                    : 'rgba(0,232,154,0.12)',
+                                  color: isHeld ? 'var(--gold)' : 'var(--green)',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {isHeld ? '⏳ ON HOLD' : '✅ CREDITED'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
                 {/* Offerwall.me Multi-Size Banner Ad Showcase (728x90, 468x60, 300x250) */}
                 <div
@@ -4114,17 +4413,17 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {/* Dedicated On-Hold & Settled Task Breakdown */}
                 <div className="card" style={{ padding: 24 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                     <div>
                       <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                        Coins on Hold &amp; Task Settlement Queue
+                        Completed Offerwall Tasks &amp; Earnings History
                       </h3>
                       <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
-                        Completed tasks stay in Hold until advertiser verification &amp; payout settlement completes.
+                        All Offerwall.me &amp; PubCrypto completions credited to Player ID <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> (newest at top).
                       </p>
                     </div>
-                    <span className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>
-                      {user.pendingCoins} Held
+                    <span className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>
+                      {user.heldRewards?.length || 0} Tasks ({user.pendingCoins} Held)
                     </span>
                   </div>
 

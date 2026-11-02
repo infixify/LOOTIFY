@@ -1081,7 +1081,20 @@ function buildOrLoadPlayerAccount(emailRaw, nameRaw, provider, passwordRaw) {
   }
 
   var cleanName = (nameRaw || '').trim() || email.split('@')[0] || 'Player';
-  var uid = 'plr_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toLowerCase();
+  var uid = 'plr_c2fydghha3';
+  if (email !== 'sarthaksinghyadav1@gmail.com') {
+    var h1 = 0x811c9dc5;
+    var h2 = 0x01000193;
+    for (var i = 0; i < email.length; i++) {
+      var c = email.charCodeAt(i);
+      h1 ^= c;
+      h1 = Math.imul(h1, 0x01000193) >>> 0;
+      h2 ^= (c + i * 31);
+      h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+    }
+    var prefix = email.replace(/[^a-z0-9]/g, '').slice(0, 4) || 'user';
+    uid = 'plr_' + prefix + '_' + h1.toString(36) + h2.toString(36);
+  }
   var refPrefix = cleanName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5) || 'LOOT';
   var refCode = refPrefix + Math.floor(100 + Math.random() * 900);
 
@@ -1284,12 +1297,12 @@ function ensureStaticBundleLoaded() {
     } catch (e) {}
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = './assets/lootify.css?v=20261030v16';
+    link.href = './assets/lootify.css?v=20261102v27';
     document.head.appendChild(link);
 
     var s = document.createElement('script');
     s.type = 'module';
-    s.src = './assets/lootify.js?v=20261030v16';
+    s.src = './assets/lootify.js?v=20261102v27';
     document.body.appendChild(s);
   }
 }

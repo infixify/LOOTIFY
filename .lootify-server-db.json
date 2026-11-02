@@ -7,15 +7,135 @@
       "authProvider": "google",
       "referralCode": "SARTH647",
       "referredBy": null,
-      "availableCoins": 3.25,
+      "availableCoins": 9.99,
       "pendingCoins": 0,
-      "questsCompleted": 5,
+      "questsCompleted": 16,
       "referralsCount": 0,
       "joinedAt": "2026-10-30"
     }
   ],
   "withdrawals": [],
   "postbacks": [
+    {
+      "id": "ldg_1793605381567_44",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Crypto Crops",
+      "amount_coins": 1.05,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793359109720-1045",
+      "created_at": "2026-10-30T11:18:29.720Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_479",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Poplik",
+      "amount_coins": 0.03,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793413477756-7597",
+      "created_at": "2026-10-31T02:24:37.756Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_456",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): poplix",
+      "amount_coins": 0.06,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793439769463-1503",
+      "created_at": "2026-10-31T09:42:49.463Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_50",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): LAGFAUCET ",
+      "amount_coins": 0.9,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793446714851-4939",
+      "created_at": "2026-10-31T11:38:34.851Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_726",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Poplix",
+      "amount_coins": 0.05,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793470861766-1183",
+      "created_at": "2026-10-31T18:21:01.766Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_866",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Poplix",
+      "amount_coins": 0.06,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793477859782-2727",
+      "created_at": "2026-10-31T20:17:39.782Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_967",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Earn money Online ",
+      "amount_coins": 0.9,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793478019223-306",
+      "created_at": "2026-10-31T20:20:19.224Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_951",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Lightning Miner",
+      "amount_coins": 0.9,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793479157953-2363",
+      "created_at": "2026-10-31T20:39:17.953Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_391",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): Earn money Online ",
+      "amount_coins": 0.9,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793564755813-95",
+      "created_at": "2026-11-01T20:25:55.813Z",
+      "unlocks_at": null
+    },
+    {
+      "id": "ldg_1793605381567_496",
+      "user_id": "plr_c2fydghha3",
+      "user_name": "Sarthak",
+      "source_type": "offerwall",
+      "title": "OFFERWALL.ME (PTC): 🤑Auto Faucet | Instant Payout🤑",
+      "amount_coins": 0.9,
+      "status": "credited",
+      "external_tx_id": "offerwallme_plr_c2fydghha3_TX-1793564858015-9803",
+      "created_at": "2026-11-01T20:27:38.015Z",
+      "unlocks_at": null
+    },
     {
       "id": "ldg_1793334357300_105",
       "user_id": "plr_c2fydghha3",
@@ -98,18 +218,18 @@
       "iframe_url_template": "https://offerwall.me/offerwall/{app_id}/{user_id}",
       "secret_key": "f25hoUjdRBQpUbbogHGU4aObX1lb7W24",
       "hold_days": 0,
-      "postback_macro_query": "?user_id={subid}&amount={reward}&txn_id={transId}&status={status}"
+      "postback_macro_query": "?user_id={subId}&amount={reward}&txn_id={transId}&status={status}"
     },
     {
       "provider_id": "pubcrypto",
       "name": "PubCrypto",
       "badge": "Shortlinks, PTC, Tasks & Offerwalls",
       "enabled": 1,
-      "app_id": "site_b233010ad04bdeea470d1114a38e6d0b05839e4a",
+      "app_id": "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
       "iframe_url_template": "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
-      "secret_key": "c5564a3578c36a1ad2a2381ca995221e19490ffd98706c43fad2f7b898fad919",
+      "secret_key": "e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23",
       "hold_days": 0,
-      "postback_macro_query": ""
+      "postback_macro_query": "?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}"
     }
   ]
 }

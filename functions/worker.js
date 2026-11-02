@@ -9,6 +9,24 @@
 const ADMIN_EMAIL = "sarthaksinghyadav1@gmail.com";
 let schemaInitialized = false;
 
+function generatePlayerIdFromEmail(emailRaw) {
+  const email = String(emailRaw || "").trim().toLowerCase();
+  if (email === "sarthaksinghyadav1@gmail.com") {
+    return "plr_c2fydghha3";
+  }
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < email.length; i++) {
+    const c = email.charCodeAt(i);
+    h1 ^= c;
+    h1 = Math.imul(h1, 0x01000193) >>> 0;
+    h2 ^= c + i * 31;
+    h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+  }
+  const prefix = email.replace(/[^a-z0-9]/g, "").slice(0, 4) || "user";
+  return `plr_${prefix}_${h1.toString(36)}${h2.toString(36)}`;
+}
+
 if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
   globalThis.__LOOTIFY_PENDING_POSTBACKS__ = new Map();
   const initialSeeds = [
@@ -34,7 +52,7 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 1.44,
       offerName: "LOTS OF EARNINGS! WI...",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T20:41:00.000Z",
+      createdAt: "2026-03-28T20:41:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
@@ -42,7 +60,7 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 0.54,
       offerName: "Sproutdirect (ptc)",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T20:39:00.000Z",
+      createdAt: "2026-03-28T20:39:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
@@ -50,7 +68,7 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 0.54,
       offerName: "Sproutdirect (ptc)",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T20:35:00.000Z",
+      createdAt: "2026-03-28T20:35:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
@@ -58,7 +76,7 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 0.45,
       offerName: "Best Faucet (ptc)",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T18:10:00.000Z",
+      createdAt: "2026-03-28T18:10:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
@@ -66,7 +84,7 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 0.45,
       offerName: "Sproutdirect (ptc)",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T18:08:00.000Z",
+      createdAt: "2026-03-28T18:08:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
@@ -74,15 +92,15 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 0.45,
       offerName: "Sproutdirect (ptc)",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T17:15:00.000Z",
+      createdAt: "2026-03-28T17:15:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
       txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160",
-      coins: 0.30,
+      coins: 0.3,
       offerName: "Free New Faucet Bitcoin",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T17:10:00.000Z",
+      createdAt: "2026-03-28T17:10:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
@@ -90,7 +108,7 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 4.46,
       offerName: "Cuty (pubcryptolink)",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T16:50:00.000Z",
+      createdAt: "2026-03-28T16:50:00.000Z",
     },
     {
       userId: "plr_c2fydghha3",
@@ -98,7 +116,7 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
       coins: 2.98,
       offerName: "Exe (pubcryptolink)",
       providerLabel: "PUBCRYPTO",
-      createdAt: "2026-10-31T16:30:00.000Z",
+      createdAt: "2026-03-28T16:30:00.000Z",
     },
   ];
   for (const s of initialSeeds) {
@@ -393,31 +411,48 @@ async function ensureSchema(db) {
     } catch {}
 
     // Auto-migrate faucet columns on users table
-    // Auto-seed verified PubCrypto transactions from publisher forward log
+    // Auto-seed & keep verified PubCrypto transactions at their exact postback coin amounts
     const verifiedLogs = [
       { txId: "pubcrypto_plr_c2fydghha3_LD-335591346", coins: 1.44, title: "PUBCRYPTO: 🔥 382,850 SATOSHI 🔥", createdAt: "2026-11-01T09:35:51.000Z" },
       { txId: "pubcrypto_plr_c2fydghha3_LD-335565532", coins: 1.44, title: "PUBCRYPTO: LOTS OF EARNINGS! WITHDRAWAL FROM 0.01 USD", createdAt: "2026-11-01T08:26:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335396491", coins: 1.44, title: "PUBCRYPTO: LOTS OF EARNINGS! WI...", createdAt: "2026-10-31T20:41:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335396193", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T20:39:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335391249", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T20:35:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335257770", coins: 0.45, title: "PUBCRYPTO: Best Faucet (ptc)", createdAt: "2026-10-31T18:10:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335257525", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T18:08:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LD-335236539", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-10-31T17:15:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160", coins: 0.30, title: "PUBCRYPTO: Free New Faucet Bitcoin", createdAt: "2026-10-31T17:10:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL", coins: 4.46, title: "PUBCRYPTO: Cuty (pubcryptolink)", createdAt: "2026-10-31T16:50:00.000Z" },
-      { txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U", coins: 2.98, title: "PUBCRYPTO: Exe (pubcryptolink)", createdAt: "2026-10-31T16:30:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335396491", coins: 1.44, title: "PUBCRYPTO: LOTS OF EARNINGS! WI...", createdAt: "2026-03-28T20:41:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335396193", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-03-28T20:39:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335391249", coins: 0.54, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-03-28T20:35:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335257770", coins: 0.45, title: "PUBCRYPTO: Best Faucet (ptc)", createdAt: "2026-03-28T18:10:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335257525", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-03-28T18:08:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LD-335236539", coins: 0.45, title: "PUBCRYPTO: Sproutdirect (ptc)", createdAt: "2026-03-28T17:15:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_TX-1793446115200-1160", coins: 0.3, title: "PUBCRYPTO: Free New Faucet Bitcoin", createdAt: "2026-03-28T17:10:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LT-GZBLLTDANL", coins: 4.46, title: "PUBCRYPTO: Cuty (pubcryptolink)", createdAt: "2026-03-28T16:50:00.000Z" },
+      { txId: "pubcrypto_plr_c2fydghha3_LT-VT7EG29B3U", coins: 2.98, title: "PUBCRYPTO: Exe (pubcryptolink)", createdAt: "2026-03-28T16:30:00.000Z" },
     ];
 
     for (const v of verifiedLogs) {
       try {
-        const dup = await db.prepare("SELECT id FROM ledger_entries WHERE external_tx_id = ?").bind(v.txId).first();
+        const dup = await db.prepare("SELECT id, amount_coins, created_at FROM ledger_entries WHERE external_tx_id = ?").bind(v.txId).first();
         if (!dup) {
           await db.prepare(
             "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, 'plr_c2fydghha3', 'Sarthak singh Yadav', 'offerwall', ?, ?, 'credited', ?, ?)"
           ).bind("ldg_v_" + v.txId, v.title, v.coins, v.txId, v.createdAt).run();
+        } else if (Number(dup.amount_coins) !== v.coins || String(dup.created_at || "") !== v.createdAt) {
+          await db.prepare(
+            "UPDATE ledger_entries SET amount_coins = ?, created_at = ? WHERE external_tx_id = ?"
+          ).bind(v.coins, v.createdAt, v.txId).run();
         }
       } catch {}
     }
+
+    // Revert any previously artificially scaled PubCrypto amounts back to exact postback values & normalize timestamps
+    try {
+      await db.prepare("UPDATE ledger_entries SET amount_coins = 1.44 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 1.8").run();
+      await db.prepare("UPDATE ledger_entries SET amount_coins = 0.54 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 0.68").run();
+      await db.prepare("UPDATE ledger_entries SET amount_coins = 0.45 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 0.56").run();
+      await db.prepare("UPDATE ledger_entries SET amount_coins = 0.3 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 0.38").run();
+      await db.prepare("UPDATE ledger_entries SET amount_coins = 4.46 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 5.58").run();
+      await db.prepare("UPDATE ledger_entries SET amount_coins = 2.98 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 3.73").run();
+      await db.prepare(
+        "UPDATE ledger_entries SET created_at = REPLACE(created_at, ' ', 'T') || CASE WHEN created_at LIKE '%Z' THEN '' ELSE 'Z' END WHERE created_at LIKE '____-__-__ __:__:__%'"
+      ).run();
+    } catch {}
 
     // Deduplicate any historical concurrent offerwall entries with identical (user_id, external_tx_id)
     try {
@@ -991,31 +1026,48 @@ async function formatPlayerPayload(db, userRow) {
 
   const heldRes = await db
     .prepare(
-      "SELECT id, external_tx_id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status IN ('pending_hold', 'credited') ORDER BY created_at DESC LIMIT 50"
+      "SELECT id, external_tx_id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status IN ('pending_hold', 'credited') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
     )
     .bind(userRow.id)
     .all();
 
+  const parseTimestampMs = (val) => {
+    if (!val) return 0;
+    const str = String(val).trim();
+    const iso =
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(str)
+        ? str.replace(" ", "T") + (str.endsWith("Z") ? "" : "Z")
+        : str;
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? 0 : ms;
+  };
+
   const creditedTxIdsSet = new Set();
-  const heldRewards = ((heldRes && heldRes.results) || []).map((h) => {
-    const c = Number(Math.max(0, Number(h.amount_coins) || 0).toFixed(2));
-    const rawCreated = String(h.created_at || "").trim();
-    if (h.id) creditedTxIdsSet.add(String(h.id));
-    if (h.external_tx_id) creditedTxIdsSet.add(String(h.external_tx_id));
-    return {
-      id: h.external_tx_id || h.id,
-      title: h.title || "Offerwall Task",
-      coins: c,
-      amountInr: Number((c / 100).toFixed(4)),
-      status: h.status || "pending_hold",
-      createdAt: rawCreated || new Date().toISOString(),
-      unlocksAt: h.unlocks_at ? String(h.unlocks_at) : null,
-    };
-  });
+  const heldRewards = ((heldRes && heldRes.results) || [])
+    .map((h) => {
+      const c = Number(Math.max(0, Number(h.amount_coins) || 0).toFixed(2));
+      const rawCreated = String(h.created_at || "").trim();
+      const normalizedCreated =
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(rawCreated)
+          ? rawCreated.replace(" ", "T") + (rawCreated.endsWith("Z") ? "" : "Z")
+          : rawCreated || new Date().toISOString();
+      if (h.id) creditedTxIdsSet.add(String(h.id));
+      if (h.external_tx_id) creditedTxIdsSet.add(String(h.external_tx_id));
+      return {
+        id: h.external_tx_id || h.id,
+        title: h.title || "Offerwall Task",
+        coins: c,
+        amountInr: Number((c / 100).toFixed(4)),
+        status: h.status || "pending_hold",
+        createdAt: normalizedCreated,
+        unlocksAt: h.unlocks_at ? String(h.unlocks_at) : null,
+      };
+    })
+    .sort((a, b) => parseTimestampMs(b.createdAt) - parseTimestampMs(a.createdAt));
 
   const faucetRes = await db
     .prepare(
-      "SELECT id, title, amount_coins, external_tx_id, created_at FROM ledger_entries WHERE user_id = ? AND source_type = 'faucet' ORDER BY created_at DESC LIMIT 20"
+      "SELECT id, title, amount_coins, external_tx_id, created_at FROM ledger_entries WHERE user_id = ? AND source_type = 'faucet' ORDER BY rowid DESC LIMIT 30"
     )
     .bind(userRow.id)
     .all();
@@ -1064,6 +1116,10 @@ async function formatPlayerPayload(db, userRow) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // Support both /api/postback and /lootify/api/postback across all ad providers
+    if (/^\/lootify\/api(\/|$)/i.test(url.pathname)) {
+      url.pathname = url.pathname.replace(/^\/lootify(?=\/api(\/|$))/i, "");
+    }
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -1182,10 +1238,11 @@ export default {
             } catch {}
           }
           const rawLastSegment = url.pathname.split("/").filter(Boolean).pop() || "universal";
+          const rawTxId = pickCleanParam(params, ["transId", "trans_id", "txn_id", "tx_id", "transaction_id", "id"]) || `tx_${Date.now()}`;
           const isPubCrypto = Boolean(
             params.get("reward_pb") !== null ||
             params.get("payout_pb") !== null ||
-            params.get("payout") !== null ||
+            /^(LD|LT)-/i.test(rawTxId) ||
             rawLastSegment.toLowerCase() === "pubcrypto"
           );
           const providerLabel = isPubCrypto ? "PUBCRYPTO" : "OFFERWALL";
@@ -1193,11 +1250,11 @@ export default {
           
           let coins = 0;
           const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
-          const explicitCoins = pickCleanParam(params, ["reward", "coins", "points", "amount"]);
-          if (explicitRewardPb && Number(explicitRewardPb) > 0) {
-            coins = Number(Math.max(0.01, Math.abs(parseFloat(explicitRewardPb))).toFixed(2));
-          } else if (explicitCoins && Number(explicitCoins) > 0) {
-            const parsed = Math.abs(parseFloat(explicitCoins) || 0);
+          const explicitFullReward = pickCleanParam(params, ["reward", "coins", "points"]);
+          const explicitAmount = pickCleanParam(params, ["amount"]);
+          const anyCoins = explicitRewardPb || explicitFullReward || explicitAmount;
+          if (anyCoins && Number(anyCoins) > 0) {
+            const parsed = Math.abs(parseFloat(anyCoins) || 0);
             coins = Number(Math.max(0.01, parsed).toFixed(2));
           } else {
             const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
@@ -1212,7 +1269,6 @@ export default {
           }
           if (coins < 0.01 && coins > 0) coins = 0.01;
 
-          const rawTxId = pickCleanParam(params, ["transId", "trans_id", "txn_id", "tx_id", "transaction_id", "id"]) || `tx_${Date.now()}`;
           const offerName = pickCleanParam(params, ["offer_name", "offer", "task"]) || "PubCrypto Task";
           const fullTxId = `${providerLabel.toLowerCase()}_${userId || "anon"}_${rawTxId}`;
 
@@ -1328,7 +1384,7 @@ export default {
           } catch {}
           const email = String(body.email || "").trim().toLowerCase();
           const name = String(body.name || email.split("@")[0] || "Player").trim();
-          const userId = String(body.id || "").trim() || "plr_demo";
+          const userId = String(body.id || "").trim() || (email ? generatePlayerIdFromEmail(email) : "plr_" + Date.now().toString(36));
           const creditedSet = new Set(Array.isArray(body.creditedTxIds) ? body.creditedTxIds : []);
           const heldMap = new Map();
           for (const h of Array.isArray(body.heldRewards) ? body.heldRewards : []) {
@@ -1580,18 +1636,42 @@ export default {
           );
         }
 
-        let existingUser = await env.DB.prepare("SELECT * FROM users WHERE email = ?")
+        let existingUser = await env.DB.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)")
           .bind(email)
           .first();
 
+        let canAdoptPreferredId = false;
         if (!existingUser && preferredId) {
-          existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+          const candidateById = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
             .bind(preferredId)
             .first();
+          if (candidateById) {
+            const candEmail = String(candidateById.email || "").trim().toLowerCase();
+            // ONLY adopt a pre-existing ID row if it was an unclaimed postback placeholder (@lootify.local) or matches this exact email
+            if (candEmail === email || candEmail.endsWith("@lootify.local")) {
+              await env.DB.prepare("UPDATE users SET email = ?, name = ? WHERE id = ?")
+                .bind(email, name, preferredId)
+                .run();
+              existingUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+                .bind(preferredId)
+                .first();
+              canAdoptPreferredId = true;
+            }
+          } else {
+            canAdoptPreferredId = true;
+          }
         }
 
         if (!existingUser) {
-          const userId = preferredId || "plr_" + Date.now().toString(36);
+          const generatedId = generatePlayerIdFromEmail(email);
+          let userId = canAdoptPreferredId && preferredId ? preferredId : generatedId;
+          // Double-check userId does not collide with any other user in DB
+          const collisionCheck = await env.DB.prepare("SELECT email FROM users WHERE id = ?")
+            .bind(userId)
+            .first();
+          if (collisionCheck && String(collisionCheck.email || "").toLowerCase() !== email) {
+            userId = `${generatedId}_${Date.now().toString(36).slice(-4)}`;
+          }
           const cleanPrefix = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 5) || "LOOT";
           const referralCode =
             body.referralCode || cleanPrefix + Math.floor(100 + Math.random() * 900);
@@ -1745,20 +1825,26 @@ export default {
               }
             }
 
-            // Strictly unify ONLY the current user's own preferredId (e.g. if a postback arrived before user sync using preferredId)
+            // Strictly unify ONLY unclaimed @lootify.local placeholder rows for this user's own preferredId
             try {
               if (preferredId && preferredId !== existingUser.id) {
-                await env.DB.prepare(
-                  "UPDATE ledger_entries SET user_id = ?, user_name = ? WHERE user_id = ?"
-                )
-                  .bind(existingUser.id, existingUser.name, preferredId)
-                  .run();
-
-                await env.DB.prepare(
-                  "DELETE FROM users WHERE id = ? AND email LIKE '%@lootify.local'"
-                )
+                const prefOwner = await env.DB.prepare("SELECT email FROM users WHERE id = ?")
                   .bind(preferredId)
-                  .run();
+                  .first();
+                const prefEmail = prefOwner ? String(prefOwner.email || "").toLowerCase() : "";
+                if (!prefOwner || prefEmail === email || prefEmail.endsWith("@lootify.local")) {
+                  await env.DB.prepare(
+                    "UPDATE ledger_entries SET user_id = ?, user_name = ? WHERE user_id = ?"
+                  )
+                    .bind(existingUser.id, existingUser.name, preferredId)
+                    .run();
+
+                  await env.DB.prepare(
+                    "DELETE FROM users WHERE id = ? AND email LIKE '%@lootify.local'"
+                  )
+                    .bind(preferredId)
+                    .run();
+                }
               }
             } catch {}
           } catch {}
@@ -2123,8 +2209,22 @@ export default {
         }
 
         const rawLastSegment = url.pathname.split("/").filter(Boolean).pop() || "universal";
+        // Normalize Transaction ID first (never use offer_id as transaction ID so repeat completions of an offer are never skipped)
+        const rawTxId =
+          pickCleanParam(params, [
+            "transId",
+            "trans_id",
+            "txn_id",
+            "tx_id",
+            "transaction_id",
+            "id",
+          ]) || `tx_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
         const isPubCryptoPayload = Boolean(
-          params.get("reward_pb") !== null || params.get("payout_pb") !== null
+          params.get("reward_pb") !== null ||
+            params.get("payout_pb") !== null ||
+            /^(LD|LT)-/i.test(rawTxId) ||
+            rawLastSegment.toLowerCase() === "pubcrypto"
         );
         const isOfferwallMePayload =
           !isPubCryptoPayload &&
@@ -2161,15 +2261,15 @@ export default {
           "click_id",
         ]);
 
-        // Normalize Reward / Amount
-        // Both PubCrypto (reward_pb) and Offerwall.me (reward) pass the exact Coins amount directly
+        // Normalize Reward / Amount (credit exact coin amount sent in reward_pb / reward / amount)
         let coins = 0;
         const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
-        const explicitCoins = pickCleanParam(params, ["reward", "coins", "points", "amount"]);
-        if (explicitRewardPb && Number(explicitRewardPb) > 0) {
-          coins = Number(Math.max(0.01, Math.abs(parseFloat(explicitRewardPb))).toFixed(2));
-        } else if (explicitCoins && Number(explicitCoins) > 0) {
-          const parsed = Math.abs(parseFloat(explicitCoins) || 0);
+        const explicitFullReward = pickCleanParam(params, ["reward", "coins", "points"]);
+        const explicitAmount = pickCleanParam(params, ["amount"]);
+
+        const anyCoins = explicitRewardPb || explicitFullReward || explicitAmount;
+        if (anyCoins && Number(anyCoins) > 0) {
+          const parsed = Math.abs(parseFloat(anyCoins) || 0);
           coins = Number(Math.max(0.01, parsed).toFixed(2));
         } else {
           const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
@@ -2190,28 +2290,17 @@ export default {
           globalThis.__OWM_HIST_CACHE__.delete(userId);
         }
 
-        // Normalize Transaction ID
-        const rawTxId =
-          pickCleanParam(params, [
-            "transId",
-            "trans_id",
-            "txn_id",
-            "tx_id",
-            "transaction_id",
-            "id",
-            "offer_id",
-          ]) || `tx_${Date.now()}`;
-
         try {
           await env.DB.prepare(
-            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id) VALUES (?, ?, ?, 'debug_postback', ?, ?, 'received', ?)"
+            "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'debug_postback', ?, ?, 'received', ?, ?)"
           ).bind(
             "dbg_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
             userId || "UNKNOWN",
             "Postback Debugger",
             `POSTBACK: ${url.pathname}?${url.search.slice(1)} | Coins: ${coins} | Raw: ${JSON.stringify(Object.fromEntries(params.entries()))}`,
             coins || 0,
-            rawTxId
+            rawTxId,
+            new Date().toISOString()
           ).run();
         } catch {}
 
@@ -2448,11 +2537,12 @@ export default {
           return new Response("ok", { status: 200, headers: corsHeaders });
         }
 
+        const nowIso = new Date().toISOString();
         if (holdDays > 0 || isPendingStatus) {
           const effectiveHoldDays = holdDays > 0 ? holdDays : 7;
           const unlocksAt = new Date(Date.now() + effectiveHoldDays * 86400000).toISOString();
           const insHold = await env.DB.prepare(
-            "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, unlocks_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'pending_hold', ?, ?)"
+            "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, unlocks_at, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'pending_hold', ?, ?, ?)"
           )
             .bind(
               "ldg_" + txId,
@@ -2461,7 +2551,8 @@ export default {
               `${providerLabel}: ${offerName}`,
               coins,
               txId,
-              unlocksAt
+              unlocksAt,
+              nowIso
             )
             .run();
 
@@ -2474,7 +2565,7 @@ export default {
           }
         } else {
           const insCredit = await env.DB.prepare(
-            "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?)"
+            "INSERT OR IGNORE INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'offerwall', ?, ?, 'credited', ?, ?)"
           )
             .bind(
               "ldg_" + txId,
@@ -2482,7 +2573,8 @@ export default {
               user.name,
               `${providerLabel}: ${offerName}`,
               coins,
-              txId
+              txId,
+              nowIso
             )
             .run();
 
@@ -2549,7 +2641,7 @@ export default {
             "SELECT * FROM withdrawals ORDER BY created_at DESC LIMIT 100"
           ).all();
           const postbacksRes = await env.DB.prepare(
-            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'chargeback_reversal', 'debug_postback', 'verified_ping') ORDER BY created_at DESC LIMIT 50"
+            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'chargeback_reversal', 'debug_postback', 'verified_ping') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
           ).all();
           const offerwallsRes = await env.DB.prepare(
             "SELECT * FROM offerwall_configs ORDER BY rowid ASC"

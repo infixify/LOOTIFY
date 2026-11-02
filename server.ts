@@ -338,6 +338,17 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
       createdAt: w.created_at.slice(0, 10),
     }));
 
+  const parseTimestampMs = (val: string) => {
+    if (!val) return 0;
+    const str = String(val).trim();
+    const iso =
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(str)
+        ? str.replace(' ', 'T') + (str.endsWith('Z') ? '' : 'Z')
+        : str;
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? 0 : ms;
+  };
+
   const heldRewards = db.postbacks
     .filter(
       (p) =>
@@ -345,19 +356,25 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
         p.source_type === 'offerwall' &&
         (p.status === 'pending_hold' || p.status === 'credited')
     )
-    .slice(0, 30)
     .map((h) => {
       const c = Number(Math.max(0, Number(h.amount_coins) || 0).toFixed(2));
+      const rawCreated = String(h.created_at || '').trim();
+      const normalizedCreated =
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(rawCreated)
+          ? rawCreated.replace(' ', 'T') + (rawCreated.endsWith('Z') ? '' : 'Z')
+          : rawCreated || new Date().toISOString();
       return {
-        id: h.id,
+        id: h.external_tx_id || h.id,
         title: h.title || 'Offerwall Task',
         coins: c,
-        amountInr: Number((c / 100).toFixed(2)),
+        amountInr: Number((c / 100).toFixed(4)),
         status: (h.status as 'pending_hold' | 'credited') || 'pending_hold',
-        createdAt: String(h.created_at || '').slice(0, 10),
-        unlocksAt: h.unlocks_at ? String(h.unlocks_at).slice(0, 10) : null,
+        createdAt: normalizedCreated,
+        unlocksAt: h.unlocks_at ? String(h.unlocks_at) : null,
       };
-    });
+    })
+    .sort((a, b) => parseTimestampMs(b.createdAt) - parseTimestampMs(a.createdAt))
+    .slice(0, 100);
 
   const faucetHistory = db.postbacks
     .filter((p) => p.user_id === u.id && p.source_type === 'faucet')
@@ -431,14 +448,38 @@ async function startServer() {
       return;
     }
 
-    let user = db.users.find(
-      (u) => u.email.toLowerCase() === email || (preferredId && u.id === preferredId)
-    );
+    const generatePlayerIdFromEmail = (emailRaw: string) => {
+      const clean = String(emailRaw || '').trim().toLowerCase();
+      if (clean === 'sarthaksinghyadav1@gmail.com') return 'plr_c2fydghha3';
+      let h1 = 0x811c9dc5;
+      let h2 = 0x01000193;
+      for (let i = 0; i < clean.length; i++) {
+        const c = clean.charCodeAt(i);
+        h1 ^= c;
+        h1 = Math.imul(h1, 0x01000193) >>> 0;
+        h2 ^= c + i * 31;
+        h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+      }
+      const prefix = clean.replace(/[^a-z0-9]/g, '').slice(0, 4) || 'user';
+      return `plr_${prefix}_${h1.toString(36)}${h2.toString(36)}`;
+    };
+
+    let user = db.users.find((u) => u.email.toLowerCase() === email);
+    if (!user && preferredId) {
+      const byId = db.users.find((u) => u.id === preferredId);
+      if (byId && (byId.email.toLowerCase() === email || byId.email.toLowerCase().endsWith('@lootify.local'))) {
+        byId.email = email;
+        byId.name = name;
+        user = byId;
+      }
+    }
 
     if (!user) {
       const cleanPrefix = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5) || 'LOOT';
+      const idTaken = preferredId ? db.users.some((u) => u.id === preferredId && u.email.toLowerCase() !== email) : false;
+      const resolvedId = preferredId && !idTaken ? preferredId : generatePlayerIdFromEmail(email);
       user = {
-        id: preferredId || 'plr_' + Date.now().toString(36),
+        id: resolvedId,
         name,
         email,
         authProvider: body.authProvider === 'email' ? 'email' : 'google',
@@ -719,8 +760,8 @@ async function startServer() {
     res.json({ ok: true, user: buildPlayerResponse(db, user), withdrawalId: wd.id });
   });
 
-  // SINGLE Universal S2S Offerwall Postback Webhook (GET & POST) — Works before & after approval for ALL networks
-  app.all(['/api/postback', '/api/postback/:provider'], (req, res) => {
+  // SINGLE Universal S2S Offerwall Postback Webhook (GET & POST) — Supports /api/postback and /lootify/api/postback
+  app.all(['/api/postback', '/api/postback/:provider', '/lootify/api/postback', '/lootify/api/postback/:provider'], (req, res) => {
     const db = loadDB();
 
     const merged: Record<string, string> = {};
@@ -731,10 +772,21 @@ async function startServer() {
       if (v !== undefined) merged[k] = String(v);
     });
 
+    const rawTxId =
+      pickCleanFromObj(merged, [
+        'transId',
+        'trans_id',
+        'txn_id',
+        'tx_id',
+        'transaction_id',
+        'id',
+      ]) || `${Date.now()}`;
+
     const isPubCryptoPayload = Boolean(
       merged.reward_pb !== undefined ||
         merged.payout_pb !== undefined ||
-        merged.reward_name !== undefined
+        merged.reward_name !== undefined ||
+        /^(LD|LT)-/i.test(rawTxId)
     );
     const isOfferwallMePayload =
       !isPubCryptoPayload && Boolean(merged.subId || merged.transId || merged.offer_type);
@@ -761,36 +813,22 @@ async function startServer() {
       'click_id',
     ]);
 
-    // 35% User Share / 65% Admin Profit Economy:
-    // 1,000 Coins = ₹10 (100 Coins = ₹1) | $1.00 USD (₹84) = 3,000 Coins (₹30 to user, ₹54 profit to you)
-    // Supports Offerwall.me (reward) & PubCrypto (reward_pb) with 2-decimal precision
-    const rawCoinsParam = pickCleanFromObj(merged, [
-      'reward_pb',
-      'reward',
-      'amount',
-      'coins',
-      'points',
-      'currency',
-    ]);
+    const explicitRewardPb = pickCleanFromObj(merged, ['reward_pb', 'member_points']);
+    const explicitFullReward = pickCleanFromObj(merged, ['reward', 'coins', 'points', 'currency']);
+    const explicitAmount = pickCleanFromObj(merged, ['amount']);
     const rawUsdPayout = pickCleanFromObj(merged, ['payout_pb', 'payout', 'usd']);
-    const parsedAmount = parseFloat(rawCoinsParam || rawUsdPayout || '0');
-    let coins = 0;
-    if (!rawCoinsParam && rawUsdPayout) {
-      coins = Number((Math.abs(parsedAmount) * 3000).toFixed(2));
-    } else {
-      coins = Number(Math.abs(parsedAmount || 0).toFixed(2));
-    }
 
-    const rawTxId =
-      pickCleanFromObj(merged, [
-        'transId',
-        'trans_id',
-        'txn_id',
-        'tx_id',
-        'transaction_id',
-        'id',
-        'offer_id',
-      ]) || `${Date.now()}`;
+    let coins = 0;
+    const rawCoinsParam = explicitRewardPb || explicitFullReward || explicitAmount;
+    if (rawCoinsParam && Number(rawCoinsParam) > 0) {
+      const parsedVal = Math.abs(parseFloat(rawCoinsParam) || 0);
+      coins = Number(Math.max(0.01, parsedVal).toFixed(2));
+    } else if (rawUsdPayout && Number(rawUsdPayout) > 0) {
+      const pVal = Math.abs(parseFloat(rawUsdPayout) || 0);
+      const rate = isPubCryptoPayload || providerId === 'pubcrypto' ? 9000 : 3000;
+      coins = pVal < 1.0 ? Number((pVal * rate).toFixed(2)) : Number(pVal.toFixed(2));
+    }
+    const parsedAmount = coins;
 
     const incomingSig = (
       merged.signature ||

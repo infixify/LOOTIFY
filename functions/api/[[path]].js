@@ -16,8 +16,10 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const normalizedPath = url.pathname.replace(/^\/lootify(?=\/api(\/|$))/i, "");
+
   // Handle /api/postback with guaranteed D1 write before returning "ok"
-  if (url.pathname === "/api/postback" || url.pathname.startsWith("/api/postback/")) {
+  if (normalizedPath === "/api/postback" || normalizedPath.startsWith("/api/postback/")) {
     let bodyText = "";
     if (request.method === "POST" || request.method === "PUT") {
       try {
@@ -27,14 +29,14 @@ export async function onRequest(context) {
 
     try {
       if (env && env.DB) {
-        const d1Req = new Request(request.url, {
+        const d1Req = new Request(url.origin + normalizedPath + url.search, {
           method: request.method,
           headers: request.headers,
           body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
         });
         await worker.fetch(d1Req, env);
       } else {
-        const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
+        const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + normalizedPath + url.search);
         await fetch(workerTargetUrl.toString(), {
           method: request.method,
           headers: request.headers,
@@ -54,7 +56,7 @@ export async function onRequest(context) {
   }
 
   // Fallback proxy to Cloudflare Worker
-  const targetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
+  const targetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + normalizedPath + url.search);
   
   let reqInit = {
     method: request.method,

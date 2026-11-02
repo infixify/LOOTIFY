@@ -26,15 +26,16 @@ export async function onRequest(context) {
     }
 
     try {
+      const normalizedPath = url.pathname.replace(/^\/lootify(?=\/api(\/|$))/i, "");
       if (env && env.DB) {
-        const d1Req = new Request(request.url, {
+        const d1Req = new Request(url.origin + normalizedPath + url.search, {
           method: request.method,
           headers: request.headers,
           body: bodyText && (request.method === "POST" || request.method === "PUT") ? bodyText : undefined,
         });
         await worker.fetch(d1Req, env);
       } else {
-        const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + url.pathname + url.search);
+        const workerTargetUrl = new URL("https://lootify-api.sarthaksinghyadav1.workers.dev" + normalizedPath + url.search);
         await fetch(workerTargetUrl.toString(), {
           method: request.method,
           headers: request.headers,
