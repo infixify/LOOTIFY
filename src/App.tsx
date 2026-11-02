@@ -791,6 +791,13 @@ export default function App() {
   const [copiedSlDestId, setCopiedSlDestId] = useState<string | null>(null);
   const [quickLinkProvider, setQuickLinkProvider] = useState<string>('shrinkme');
   const [quickLinkApiToken, setQuickLinkApiToken] = useState<string>('');
+  const [adminActiveSection, setAdminActiveSection] = useState<
+    'all' | 'wallets' | 'withdrawals' | 'shortlinks' | 'offerwalls' | 'api'
+  >('all');
+  const [overviewHistoryFilter, setOverviewHistoryFilter] = useState<
+    'all' | 'tasks' | 'faucet' | 'withdrawals'
+  >('all');
+  const [copiedPlayerId, setCopiedPlayerId] = useState<boolean>(false);
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
@@ -2417,55 +2424,182 @@ export default function App() {
             </div>
           )}
 
-          {/* Admin Quick-Jump Navigation Bar */}
+          {/* Admin Live KPI Summary Strip */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <div
+              className="card"
+              onClick={() => setAdminActiveSection('wallets')}
+              style={{
+                padding: '16px 18px',
+                cursor: 'pointer',
+                border:
+                  adminActiveSection === 'wallets'
+                    ? '1.5px solid var(--green)'
+                    : '1px solid var(--border)',
+              }}
+            >
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.05em' }}>
+                👥 REGISTERED PLAYERS
+              </div>
+              <div className="font-mono" style={{ fontSize: 24, fontWeight: 700, color: 'var(--green)', marginTop: 4 }}>
+                {adminUsers.length}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                Click to manage +/- Wallet Coins
+              </div>
+            </div>
+
+            <div
+              className="card"
+              onClick={() => setAdminActiveSection('withdrawals')}
+              style={{
+                padding: '16px 18px',
+                cursor: 'pointer',
+                border:
+                  adminActiveSection === 'withdrawals'
+                    ? '1.5px solid var(--gold)'
+                    : '1px solid rgba(255,180,0,0.28)',
+              }}
+            >
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gold)', letterSpacing: '0.05em' }}>
+                🏦 PENDING WITHDRAWALS
+              </div>
+              <div className="font-mono" style={{ fontSize: 24, fontWeight: 700, color: 'var(--gold)', marginTop: 4 }}>
+                {adminWithdrawals.filter((w) => w.status === 'pending').length}{' '}
+                <span style={{ fontSize: 12, color: 'var(--txt2)', fontWeight: 500 }}>
+                  / {adminWithdrawals.length} Total
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                1-Click FaucetPay API &amp; UPI Queue
+              </div>
+            </div>
+
+            <div
+              className="card"
+              onClick={() => setAdminActiveSection('shortlinks')}
+              style={{
+                padding: '16px 18px',
+                cursor: 'pointer',
+                border:
+                  adminActiveSection === 'shortlinks'
+                    ? '1.5px solid var(--green)'
+                    : '1px solid var(--border)',
+              }}
+            >
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.05em' }}>
+                🔗 EARNING WALLS ACTIVE
+              </div>
+              <div className="font-mono" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)', marginTop: 4 }}>
+                {offerwalls.filter((w) => w.enabled).length} Walls •{' '}
+                <span style={{ color: 'var(--green)' }}>
+                  {shortlinks.filter((s) => s.enabled).length} Links
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                Offerwalls &amp; Paid Shortlinks
+              </div>
+            </div>
+
+            <div
+              className="card"
+              onClick={() => setAdminActiveSection('withdrawals')}
+              style={{
+                padding: '16px 18px',
+                cursor: 'pointer',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--violet)', letterSpacing: '0.05em' }}>
+                ⏳ ESCROW S2S POSTBACKS
+              </div>
+              <div className="font-mono" style={{ fontSize: 24, fontWeight: 700, color: 'var(--violet)', marginTop: 4 }}>
+                {adminPostbacks.filter((p) => p.status === 'pending_hold').length}{' '}
+                <span style={{ fontSize: 12, color: 'var(--txt2)', fontWeight: 500 }}>
+                  Held / {adminPostbacks.length} Logged
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                Auto-unlocks or 1-click release
+              </div>
+            </div>
+          </div>
+
+          {/* Admin Section Switcher & Quick-Jump Bar */}
           <div
             className="card"
             style={{
               padding: '12px 16px',
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              justifyContent: 'space-between',
+              gap: 10,
               flexWrap: 'wrap',
               background: 'var(--bg2)',
             }}
           >
-            <span className="font-mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginRight: 4 }}>
-              ⚡ QUICK JUMP:
-            </span>
-            {[
-              { id: 'admin-sec-1', label: '🔌 1. API & FaucetPay' },
-              { id: 'admin-sec-2', label: '🎮 2. Offerwalls' },
-              { id: 'admin-sec-2b', label: '🔗 2B. Shortlinks Manager' },
-              { id: 'admin-sec-3', label: '🧪 3. S2S Tester' },
-              { id: 'admin-sec-4', label: '💰 4. Player Wallet (+/- Coins)' },
-              { id: 'admin-sec-5', label: `🏦 5. Withdrawals (${adminWithdrawals.filter((w) => w.status === 'pending').length} Pending)` },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById(item.id);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                className="font-mono"
-                style={{
-                  padding: '6px 11px',
-                  borderRadius: 8,
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  background: 'var(--bg3)',
-                  border: '1px solid var(--border2)',
-                  color: 'var(--txt)',
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span className="font-mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginRight: 4 }}>
+                🗂️ VIEW SECTION:
+              </span>
+              {(
+                [
+                  { id: 'all', label: '📋 All Sections' },
+                  { id: 'wallets', label: '💰 Player Wallets (+/-)' },
+                  {
+                    id: 'withdrawals',
+                    label: `🏦 Withdrawals & Holds (${adminWithdrawals.filter((w) => w.status === 'pending').length})`,
+                  },
+                  { id: 'shortlinks', label: `🔗 Shortlinks (${shortlinks.length})` },
+                  { id: 'offerwalls', label: `🎮 Offerwalls (${offerwalls.length})` },
+                  { id: 'api', label: '🔌 API & S2S Tester' },
+                ] as const
+              ).map((tab) => {
+                const active = adminActiveSection === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setAdminActiveSection(tab.id)}
+                    className="font-mono"
+                    style={{
+                      padding: '7px 12px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: active ? 'rgba(0,232,154,0.14)' : 'var(--bg3)',
+                      border: active ? '1.5px solid var(--green)' : '1px solid var(--border2)',
+                      color: active ? 'var(--green)' : 'var(--txt)',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button type="button" onClick={fetchAdminDashboard} className="btn btn-outline btn-sm">
+              🔄 Refresh Admin Data
+            </button>
           </div>
 
           {/* 1. Cloudflare Worker + D1 Backend URL */}
-          <div id="admin-sec-1" className="card" style={{ padding: 24 }}>
+          <div
+            id="admin-sec-1"
+            className="card"
+            style={{
+              padding: 24,
+              display: adminActiveSection === 'all' || adminActiveSection === 'api' ? 'block' : 'none',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
               <div>
                 <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
@@ -2506,7 +2640,14 @@ export default function App() {
           </div>
 
           {/* 2. Dynamic Offerwall Creator */}
-          <div id="admin-sec-2" className="card" style={{ padding: 24 }}>
+          <div
+            id="admin-sec-2"
+            className="card"
+            style={{
+              padding: 24,
+              display: adminActiveSection === 'all' || adminActiveSection === 'offerwalls' ? 'block' : 'none',
+            }}
+          >
             <div style={{ marginBottom: 18 }}>
               <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
                 2. Dynamic Offerwall Manager
@@ -2956,7 +3097,14 @@ export default function App() {
           </div>
 
           {/* 2B. Dynamic Shortlinks Manager */}
-          <div id="admin-sec-2b" className="card card-glow" style={{ padding: 24 }}>
+          <div
+            id="admin-sec-2b"
+            className="card card-glow"
+            style={{
+              padding: 24,
+              display: adminActiveSection === 'all' || adminActiveSection === 'shortlinks' ? 'block' : 'none',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3575,7 +3723,14 @@ export default function App() {
           </div>
 
           {/* 3. Live S2S Postback Webhook Simulator */}
-          <div id="admin-sec-3" className="card" style={{ padding: 24 }}>
+          <div
+            id="admin-sec-3"
+            className="card"
+            style={{
+              padding: 24,
+              display: adminActiveSection === 'all' || adminActiveSection === 'api' ? 'block' : 'none',
+            }}
+          >
             <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
               3. Universal S2S Postback Webhook Tester (`/api/postback/:provider`)
             </h2>
@@ -3658,7 +3813,14 @@ export default function App() {
           </div>
 
           {/* 3B. Admin Player Wallet & Balance Controller (Add / Minus / Set Coins + Custom Note) */}
-          <div id="admin-sec-4" className="card card-glow" style={{ padding: 24 }}>
+          <div
+            id="admin-sec-4"
+            className="card card-glow"
+            style={{
+              padding: 24,
+              display: adminActiveSection === 'all' || adminActiveSection === 'wallets' ? 'block' : 'none',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4316,7 +4478,17 @@ export default function App() {
           </div>
 
           {/* 5. Player Withdrawals Queue & Recent Postbacks */}
-          <div id="admin-sec-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+          <div
+            id="admin-sec-5"
+            style={{
+              display:
+                adminActiveSection === 'all' || adminActiveSection === 'withdrawals'
+                  ? 'grid'
+                  : 'none',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: 20,
+            }}
+          >
             <div className="card" style={{ padding: 24 }}>
               <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
                 Player Withdrawal Requests ({adminWithdrawals.length})
@@ -4895,35 +5067,160 @@ export default function App() {
         )}
       </nav>
 
+      {/* ── STICKY SUB-NAVIGATION & LIVE STATUS BAR (DESKTOP + MOBILE) ── */}
+      {(() => {
+        const remSlViews = shortlinks
+          .filter((s) => s.enabled)
+          .reduce(
+            (acc, s) =>
+              acc + Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0)),
+            0
+          );
+        const claimsUsed = Number(user.faucetClaimsCount) || 0;
+        const offerwallTasks = Math.max(0, (Number(user.questsCompleted) || 0) - claimsUsed);
+        const remainingFaucetRolls = Math.max(0, 2 + offerwallTasks * 3 - claimsUsed);
+
+        return (
+          <div
+            style={{
+              background: 'var(--bg2)',
+              borderBottom: '1px solid var(--border)',
+              padding: '8px 0',
+              position: 'sticky',
+              top: 64,
+              zIndex: 40,
+            }}
+          >
+            <div
+              className="wrap"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                overflowX: 'auto',
+                scrollbarWidth: 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                {(
+                  [
+                    { id: 'overview', label: '⚡ Overview' },
+                    { id: 'quests', label: `🎮 Offerwalls (${enabledOfferwalls.length})` },
+                    {
+                      id: 'shortlinks',
+                      label: remSlViews > 0 ? `🔗 Shortlinks (${remSlViews})` : '🔗 Shortlinks',
+                    },
+                    {
+                      id: 'faucet',
+                      label:
+                        faucetCooldownSecs > 0
+                          ? `🚰 Faucet (${Math.ceil(faucetCooldownSecs / 60)}m)`
+                          : '🚰 Free Faucet',
+                    },
+                    { id: 'referrals', label: '👥 Refer (10%)' },
+                    { id: 'wallet', label: '🏦 Cashout' },
+                  ] as { id: DashboardTab; label: string }[]
+                ).map((t) => {
+                  const active = activeTab === t.id;
+                  return (
+                    <button
+                      key={`subnav_${t.id}`}
+                      type="button"
+                      onClick={() => switchTab(t.id)}
+                      className="font-mono"
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 8,
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        background: active ? 'rgba(0,232,154,0.14)' : 'var(--bg3)',
+                        border: active ? '1px solid var(--green)' : '1px solid var(--border)',
+                        color: active ? 'var(--green)' : 'var(--txt2)',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <span
+                  onClick={() => switchTab('faucet')}
+                  className="font-mono"
+                  style={{
+                    fontSize: 11,
+                    padding: '4px 9px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    background: remainingFaucetRolls > 0 ? 'rgba(0,232,154,0.1)' : 'rgba(255,180,0,0.1)',
+                    border:
+                      remainingFaucetRolls > 0
+                        ? '1px solid rgba(0,232,154,0.28)'
+                        : '1px solid rgba(255,180,0,0.28)',
+                    color: remainingFaucetRolls > 0 ? 'var(--green)' : 'var(--gold)',
+                    fontWeight: 600,
+                  }}
+                >
+                  ⚡ Faucet Energy: {remainingFaucetRolls} Rolls
+                </span>
+                <span
+                  onClick={() => switchTab('wallet')}
+                  className="font-mono"
+                  style={{
+                    fontSize: 11,
+                    padding: '4px 9px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border)',
+                    color: user.availableCoins >= 100 ? 'var(--green)' : 'var(--txt2)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {user.availableCoins >= 100
+                    ? '✅ Ready for Instant FaucetPay Cashout!'
+                    : `🪙 ${Math.max(0, 100 - Math.floor(user.availableCoins))} Coins to Instant Cashout`}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── MAIN CONTENT ── */}
-      <main className="wrap" style={{ flex: 1, width: '100%', padding: '36px 20px 64px' }}>
-        {/* Player Header Bar */}
+      <main className="wrap" style={{ flex: 1, width: '100%', padding: '24px 20px 64px' }}>
+        {/* Compact Unified Player Command Header */}
         <div
           className="card"
           style={{
-            padding: '24px 28px',
-            marginBottom: 24,
+            padding: '16px 22px',
+            marginBottom: 20,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: 16,
+            gap: 14,
             background: 'linear-gradient(135deg, rgba(0,232,154,0.06), rgba(155,110,255,0.04))',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div
               style={{
-                width: 52,
-                height: 52,
-                borderRadius: 14,
+                width: 44,
+                height: 44,
+                borderRadius: 12,
                 background: 'linear-gradient(135deg, var(--green), #00A870)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontFamily: "'Chakra Petch', sans-serif",
                 fontWeight: 700,
-                fontSize: 22,
+                fontSize: 20,
                 color: '#03100A',
                 flexShrink: 0,
               }}
@@ -4932,41 +5229,82 @@ export default function App() {
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <h1 className="font-display" style={{ fontSize: 'clamp(18px, 3vw, 24px)', fontWeight: 700, color: 'var(--txt)' }}>
+                <h1 className="font-display" style={{ fontSize: 'clamp(16px, 2.5vw, 20px)', fontWeight: 700, color: 'var(--txt)' }}>
                   {user.name}
                 </h1>
-                <span
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(user.id).catch(() => {});
+                    setCopiedPlayerId(true);
+                    setTimeout(() => setCopiedPlayerId(false), 2000);
+                  }}
                   className="font-mono"
                   style={{
                     fontSize: 11,
                     padding: '3px 8px',
                     borderRadius: 6,
                     background: 'rgba(0,232,154,0.1)',
-                    border: '1px solid rgba(0,232,154,0.25)',
+                    border: '1px solid rgba(0,232,154,0.28)',
                     color: 'var(--green)',
                     fontWeight: 600,
+                    cursor: 'pointer',
                   }}
+                  title="Click to copy Player ID"
                 >
-                  PLAYER ID: {user.id}
-                </span>
+                  {copiedPlayerId ? '✅ COPIED ID!' : `ID: ${user.id} 📋`}
+                </button>
               </div>
-              <p style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 4 }}>
+              <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
                 {user.email} &nbsp;•&nbsp; Joined {user.joinedAt}
               </p>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* Live Compact Balance Pills */}
+            <div
+              onClick={() => switchTab('wallet')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '7px 12px',
+                borderRadius: 9,
+                background: 'var(--bg2)',
+                border: '1px solid var(--border2)',
+                cursor: 'pointer',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.04em' }}>
+                  WITHDRAWABLE
+                </div>
+                <div className="font-mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+                  {user.availableCoins.toLocaleString('en-IN')} <span style={{ fontSize: 11, color: 'var(--txt2)' }}>(₹{inrBalance})</span>
+                </div>
+              </div>
+              <div style={{ width: 1, height: 24, background: 'var(--border)' }} />
+              <div>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.04em' }}>
+                  ON HOLD
+                </div>
+                <div className="font-mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
+                  {user.pendingCoins.toLocaleString('en-IN')} <span style={{ fontSize: 11, color: 'var(--txt2)' }}>(₹{pendingInr})</span>
+                </div>
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={() => syncUserWithBackend(user, true)}
               disabled={syncingWallet}
               className="btn btn-ghost btn-sm"
             >
-              {syncingWallet ? '⏳ Syncing...' : '🔄 Sync S2S Coins'}
+              {syncingWallet ? '⏳ Syncing...' : '🔄 Sync S2S'}
             </button>
             <button type="button" onClick={() => switchTab('wallet')} className="btn btn-primary btn-sm">
-              🏦 Cashout ₹ INR
+              🏦 Cashout Now
             </button>
           </div>
         </div>
@@ -4988,350 +5326,788 @@ export default function App() {
           </div>
         )}
 
-        {/* ── TAB 1: OVERVIEW ── */}
-        {activeTab === 'overview' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: 16,
-              }}
-            >
-              <div className="card" style={{ padding: 22 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  TOTAL COINS BALANCE
-                </div>
-                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--txt)' }}>
-                  {totalCoins.toLocaleString('en-IN')}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Total Value: <strong style={{ color: 'var(--txt)' }}>₹{totalInr}</strong> (Withdrawable + Hold)
-                </div>
-              </div>
+        {/* ── TAB 1: OVERVIEW (REARRANGED FOR CLEAN HIERARCHY) ── */}
+        {activeTab === 'overview' && (() => {
+          const enabledSl = shortlinks.filter((s) => s.enabled);
+          const slViewsLeft = enabledSl.reduce(
+            (acc, s) => acc + Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0)),
+            0
+          );
+          const slCoinsLeft = Number(
+            enabledSl
+              .reduce((acc, s) => {
+                const rem = Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0));
+                return acc + rem * (Number(s.reward_coins) || 0);
+              }, 0)
+              .toFixed(0)
+          );
+          const faucetPayProgressPct = Math.min(100, Math.round((user.availableCoins / 100) * 100));
+          const upiMinProgressPct = Math.min(100, Math.round((user.availableCoins / 1100) * 100));
 
-              <div className="card" style={{ padding: 22, border: '1px solid rgba(0,232,154,0.3)' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  WITHDRAWABLE NOW
-                </div>
-                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--green)' }}>
-                  {user.availableCoins.toLocaleString('en-IN')}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Ready for Cashout: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} (${usdBalance})</strong> (100,000 Coins = $1 / ₹90)
-                </div>
-              </div>
-
-              <div className="card" style={{ padding: 22, border: '1px solid rgba(255,180,0,0.28)' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gold)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  ON HOLD (VERIFICATION)
-                </div>
-                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--gold)' }}>
-                  {user.pendingCoins.toLocaleString('en-IN')}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  ₹{pendingInr} — Auto-moves to Withdrawable after network clearance
-                </div>
-              </div>
-
-              <div className="card" style={{ padding: 22 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  QUESTS &amp; REFERRALS
-                </div>
-                <div className="font-mono" style={{ fontSize: 30, fontWeight: 700, color: 'var(--violet)' }}>
-                  {user.questsCompleted} <span style={{ fontSize: 14, color: 'var(--txt2)' }}>• {user.referralsCount} Refs</span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 6 }}>
-                  10% lifetime referral commission active
-                </div>
-              </div>
-            </div>
-
-            <div className="bento">
-              <div className="card qcard span2" style={{ padding: 26 }} onClick={() => switchTab('quests')}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-                  <div
-                    style={{
-                      width: 46,
-                      height: 46,
-                      background: 'linear-gradient(135deg,var(--green),#065F46)',
-                      borderRadius: 12,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 22,
-                    }}
-                  >
-                    🎮
-                  </div>
-                  <div>
-                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      Open Live Offerwalls &amp; Micro-Tasks
-                    </h3>
-                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                      Verified S2S Postback Offerwalls • Surveys • Shortlinks • Gaming Quests
-                    </p>
-                  </div>
-                </div>
-                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.7, marginBottom: 18 }}>
-                  Complete PTC ads, paid shortlinks, surveys, and gaming quests with automatic S2S postback credit to your Player ID (<span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>).
-                </p>
-                <button type="button" className="btn btn-primary btn-sm">
-                  🚀 Launch Offerwalls →
-                </button>
-              </div>
-
-              <div className="card qcard" style={{ padding: 26 }} onClick={() => switchTab('shortlinks')}>
-                <div style={{ fontSize: 26, marginBottom: 10 }}>🔗</div>
-                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
-                  Paid Shortlinks Wall
-                </h3>
-                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 16 }}>
-                  Complete daily shortlinks to earn up to <strong style={{ color: 'var(--green)' }}>+150 Coins per link</strong> &amp; unlock +3 Free Faucet Rolls!
-                </p>
-                <button type="button" className="btn btn-primary btn-sm btn-full">
-                  🔗 Open Shortlinks →
-                </button>
-              </div>
-
-              <div className="card qcard" style={{ padding: 26 }} onClick={() => switchTab('faucet')}>
-                <div style={{ fontSize: 26, marginBottom: 10 }}>🚰</div>
-                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
-                  Free Coin &amp; FaucetPay Roll
-                </h3>
-                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 16 }}>
-                  Roll every 60 minutes to win up to <strong style={{ color: 'var(--gold)' }}>50 Coins</strong> directly to your Lootify Wallet!
-                </p>
-                <button type="button" className="btn btn-primary btn-sm btn-full">
-                  🎲 Claim Free Faucet →
-                </button>
-              </div>
-            </div>
-
-            {/* Offerwall.me Official Banner Ad Slots (728x90 & 468x60) */}
-            <div
-              className="card"
-              style={{
-                padding: '18px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 14,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.08em' }}>
-                  SPONSORED PARTNER PLACEMENT • OFFERWALL.ME
-                </span>
-                <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
-                  VERIFIED ADS
-                </span>
-              </div>
-              <OfferwallMeBanner size="728x90" />
-              <OfferwallMeBanner size="468x60" />
-            </div>
-
-            <div className="card" style={{ padding: 26 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-                <div>
-                  <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                    Recent Offerwall Tasks &amp; Account Activity
-                  </h3>
-                  <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
-                    Live history of your completed Offerwall.me &amp; PubCrypto tasks, faucet claims, and cashouts.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
-                    {(user.heldRewards?.length || 0) + (user.faucetHistory?.length || 0) + (user.withdrawals?.length || 0)} ENTRIES
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => syncUserWithBackend(user, true)}
-                    className="btn btn-outline btn-sm"
-                  >
-                    🔄 Sync History
-                  </button>
-                </div>
-              </div>
-
-              {(user.heldRewards?.length || 0) === 0 &&
-              (user.faucetHistory?.length || 0) === 0 &&
-              user.withdrawals.length === 0 ? (
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              {/* TIER 1: PRIMARY 3-CARD EARNING HUB (ABOVE THE FOLD) */}
+              <div>
                 <div
                   style={{
-                    padding: '32px 20px',
-                    textAlign: 'center',
-                    background: 'var(--bg2)',
-                    border: '1px dashed var(--border2)',
-                    borderRadius: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    marginBottom: 12,
                   }}
                 >
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
-                    No transactions yet
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                    Your completed offerwall tasks and cashout requests will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {(user.heldRewards || []).slice(0, 15).map((item) => {
-                    const isHeld = item.status === 'pending_hold';
-                    const isDeducted = Number(item.coins) < 0 || item.status === 'deducted';
-                    return (
-                      <div
-                        key={`ov_task_${item.id}`}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '14px 16px',
-                          background: 'var(--bg2)',
-                          border: isDeducted
-                            ? '1px solid rgba(255,85,102,0.32)'
-                            : isHeld
-                            ? '1px solid rgba(255,180,0,0.28)'
-                            : '1px solid rgba(0,232,154,0.22)',
-                          borderRadius: 10,
-                          flexWrap: 'wrap',
-                          gap: 10,
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
-                            {item.title}
-                          </div>
-                          <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                            Date: {formatIstDate(item.createdAt)}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span
-                            className="font-mono"
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 700,
-                              color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
-                            }}
-                          >
-                            {Number(item.coins) >= 0 ? `+${item.coins}` : item.coins} Coins (₹{item.amountInr})
-                          </span>
-                          <span
-                            className="font-mono"
-                            style={{
-                              fontSize: 10,
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              background: isDeducted
-                                ? 'rgba(255,85,102,0.12)'
-                                : isHeld
-                                ? 'rgba(255,180,0,0.12)'
-                                : 'rgba(0,232,154,0.12)',
-                              color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {isDeducted ? '⚠️ DEDUCTED' : isHeld ? '⏳ ON HOLD' : '✅ CREDITED'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {(user.faucetHistory || []).slice(0, 5).map((f) => (
-                    <div
-                      key={`ov_faucet_${f.id}`}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                      ⚡ Choose Your Earning Mode
+                    </span>
+                    <span
+                      className="font-mono"
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '14px 16px',
-                        background: 'var(--bg2)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 10,
-                        flexWrap: 'wrap',
-                        gap: 10,
+                        fontSize: 10.5,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        background: 'rgba(0,232,154,0.12)',
+                        color: 'var(--green)',
+                        fontWeight: 700,
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
-                          Hourly Faucet Roll #{String(f.rollNumber).padStart(4, '0')}
+                      100,000 COINS = $1.00 USD / ₹90 INR
+                    </span>
+                  </div>
+                  <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                    All modes credit directly to Player ID <strong style={{ color: 'var(--green)' }}>{user.id}</strong>
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                    gap: 16,
+                  }}
+                >
+                  {/* Card 1: Live Offerwalls & Quests */}
+                  <div
+                    className="card qcard"
+                    style={{
+                      padding: 22,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: 14,
+                      border: '1px solid rgba(0,232,154,0.32)',
+                    }}
+                    onClick={() => switchTab('quests')}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div
+                            style={{
+                              width: 42,
+                              height: 42,
+                              background: 'linear-gradient(135deg,var(--green),#065F46)',
+                              borderRadius: 11,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 20,
+                            }}
+                          >
+                            🎮
+                          </div>
+                          <div>
+                            <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
+                              Offerwalls &amp; Quests
+                            </h3>
+                            <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--green)' }}>
+                              {enabledOfferwalls.length} Verified Networks Live
+                            </div>
+                          </div>
                         </div>
-                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                          {formatIstDate(f.createdAt)}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span className="font-mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
-                          +{f.coins} Coins
-                        </span>
                         <span
                           className="font-mono"
                           style={{
                             fontSize: 10,
-                            padding: '4px 8px',
+                            padding: '3px 8px',
                             borderRadius: 6,
-                            background: 'rgba(0,232,154,0.12)',
+                            background: 'rgba(0,232,154,0.14)',
                             color: 'var(--green)',
                             fontWeight: 700,
                           }}
                         >
-                          ✅ CREDITED
+                          HIGH PAYING
                         </span>
                       </div>
+                      <p style={{ fontSize: 12.5, color: 'var(--txt2)', lineHeight: 1.6 }}>
+                        Complete PTC ads, surveys, app installs, and micro-tasks on Offerwall.me &amp; PubCrypto with automatic S2S Postback credit.
+                      </p>
                     </div>
-                  ))}
+                    <button type="button" className="btn btn-primary btn-sm btn-full">
+                      🚀 Launch Offerwalls →
+                    </button>
+                  </div>
 
-                  {user.withdrawals.map((w) => (
-                    <div
-                      key={w.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '14px 16px',
-                        background: 'var(--bg2)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 10,
-                        flexWrap: 'wrap',
-                        gap: 10,
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
-                          {w.methodLabel} — ₹{w.amountInr}
+                  {/* Card 2: Paid Shortlinks Wall */}
+                  <div
+                    className="card qcard"
+                    style={{
+                      padding: 22,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: 14,
+                      border: '1px solid rgba(255,180,0,0.28)',
+                    }}
+                    onClick={() => switchTab('shortlinks')}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div
+                            style={{
+                              width: 42,
+                              height: 42,
+                              background: 'rgba(255,180,0,0.15)',
+                              border: '1px solid rgba(255,180,0,0.35)',
+                              borderRadius: 11,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 20,
+                            }}
+                          >
+                            🔗
+                          </div>
+                          <div>
+                            <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
+                              Paid Shortlinks Wall
+                            </h3>
+                            <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--gold)' }}>
+                              {slViewsLeft} Views Left (+{slCoinsLeft} Coins)
+                            </div>
+                          </div>
                         </div>
-                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                          {w.destination} • {formatIstDate(w.createdAt)}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span className="font-mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)' }}>
-                          -{w.coins} Coins
-                        </span>
                         <span
                           className="font-mono"
                           style={{
                             fontSize: 10,
-                            padding: '4px 8px',
+                            padding: '3px 8px',
                             borderRadius: 6,
-                            background: 'rgba(255,180,0,0.1)',
-                            border: '1px solid rgba(255,180,0,0.25)',
+                            background: 'rgba(255,180,0,0.14)',
                             color: 'var(--gold)',
-                            textTransform: 'uppercase',
+                            fontWeight: 700,
                           }}
                         >
-                          {w.status}
+                          +3 ROLLS / LINK
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12.5, color: 'var(--txt2)', lineHeight: 1.6 }}>
+                        Visit daily shortlinks to earn up to <strong style={{ color: 'var(--green)' }}>+150 Coins per link</strong> directly into your withdrawable wallet + 3 Faucet Rolls!
+                      </p>
+                    </div>
+                    <button type="button" className="btn btn-primary btn-sm btn-full">
+                      🔗 Open Shortlinks ({slViewsLeft} Available) →
+                    </button>
+                  </div>
+
+                  {/* Card 3: Hourly Free Faucet */}
+                  <div
+                    className="card qcard"
+                    style={{
+                      padding: 22,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: 14,
+                    }}
+                    onClick={() => switchTab('faucet')}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div
+                            style={{
+                              width: 42,
+                              height: 42,
+                              background: 'rgba(155,110,255,0.16)',
+                              border: '1px solid rgba(155,110,255,0.35)',
+                              borderRadius: 11,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 20,
+                            }}
+                          >
+                            🚰
+                          </div>
+                          <div>
+                            <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
+                              Hourly Free Faucet
+                            </h3>
+                            <div className="font-mono" style={{ fontSize: 10.5, color: faucetCooldownSecs > 0 ? 'var(--gold)' : 'var(--green)' }}>
+                              {faucetCooldownSecs > 0
+                                ? `Cooldown: ${Math.floor(faucetCooldownSecs / 60)}m ${faucetCooldownSecs % 60}s`
+                                : '✅ Ready to Roll Now'}
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 10,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(155,110,255,0.14)',
+                            color: 'var(--violet)',
+                            fontWeight: 700,
+                          }}
+                        >
+                          UP TO 50 COINS
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12.5, color: 'var(--txt2)', lineHeight: 1.6 }}>
+                        Roll lucky numbers 0000–9999 every 60 minutes to win up to <strong style={{ color: 'var(--gold)' }}>50 Coins Jackpot</strong> with instant wallet credit.
+                      </p>
+                    </div>
+                    <button type="button" className="btn btn-primary btn-sm btn-full">
+                      🎲 Claim Free Faucet Roll →
+                    </button>
+                  </div>
+                </div>
+
+                {/* Compact Refer & Earn Quick-Share Bar */}
+                <div
+                  className="card"
+                  style={{
+                    marginTop: 14,
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border2)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: 11,
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        background: 'rgba(155,110,255,0.14)',
+                        color: 'var(--violet)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      👥 10% LIFETIME REFERRAL
+                    </span>
+                    <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 600 }}>
+                      Invite friends &amp; earn 10% commission on all their tasks forever:
+                    </span>
+                    <code className="font-mono" style={{ fontSize: 11.5, color: 'var(--green)' }}>
+                      {referralLink}
+                    </code>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button type="button" onClick={copyReferral} className="btn btn-primary btn-sm" style={{ padding: '7px 12px', fontSize: 11.5 }}>
+                      {copiedRef ? '✅ Copied!' : '📋 Copy Referral Link'}
+                    </button>
+                    <button type="button" onClick={() => switchTab('referrals')} className="btn btn-ghost btn-sm" style={{ padding: '7px 12px', fontSize: 11.5 }}>
+                      Referral Details ({user.referralsCount}) →
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* TIER 2: UNIFIED WALLET STATS & CASHOUT ELIGIBILITY BAR */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))',
+                    gap: 14,
+                  }}
+                >
+                  <div className="card" style={{ padding: 20, border: '1.5px solid rgba(0,232,154,0.35)' }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--green)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                      1. WITHDRAWABLE NOW
+                    </div>
+                    <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--green)' }}>
+                      {user.availableCoins.toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
+                      Ready Value: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} (${usdBalance})</strong>
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: 20, border: '1px solid rgba(255,180,0,0.28)' }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gold)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                      2. ON HOLD (VERIFICATION)
+                    </div>
+                    <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--gold)' }}>
+                      {user.pendingCoins.toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
+                      Hold Value: <strong style={{ color: 'var(--gold)' }}>₹{pendingInr}</strong> (Auto-settles)
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: 20 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                      3. TOTAL COINS BALANCE
+                    </div>
+                    <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--txt)' }}>
+                      {totalCoins.toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
+                      Combined Value: <strong style={{ color: 'var(--txt)' }}>₹{totalInr}</strong>
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: 20 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--violet)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                      4. TASKS &amp; REFERRALS
+                    </div>
+                    <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--violet)' }}>
+                      {user.questsCompleted} <span style={{ fontSize: 13, color: 'var(--txt2)' }}>• {user.referralsCount} Refs</span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: 4 }}>
+                      10% lifetime commission active
+                    </div>
+                  </div>
+                </div>
+
+                {/* Visual Instant Cashout Progress Bar */}
+                <div
+                  className="card"
+                  style={{
+                    padding: '14px 18px',
+                    background: 'var(--bg2)',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                    gap: 16,
+                    alignItems: 'center',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 6 }}>
+                      <span className="font-mono" style={{ color: 'var(--txt)', fontWeight: 700 }}>
+                        🪙 FaucetPay Instant Goal (100 Coins = $0.001)
+                      </span>
+                      <span className="font-mono" style={{ color: 'var(--gold)', fontWeight: 700 }}>
+                        {faucetPayProgressPct}%
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: 7, borderRadius: 999, background: 'var(--bg3)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                      <div
+                        style={{
+                          width: `${faucetPayProgressPct}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, var(--gold), var(--green))',
+                          transition: 'width 0.3s ease',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 6 }}>
+                      <span className="font-mono" style={{ color: 'var(--txt)', fontWeight: 700 }}>
+                        ⚡ UPI Minimum Goal (1,100 Coins = ₹1 INR)
+                      </span>
+                      <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 700 }}>
+                        {upiMinProgressPct}%
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: 7, borderRadius: 999, background: 'var(--bg3)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                      <div
+                        style={{
+                          width: `${upiMinProgressPct}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, var(--green), #059669)',
+                          transition: 'width 0.3s ease',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* TIER 3: TWO-COLUMN SPLIT (FILTERABLE ACTIVITY LEDGER + PAYOUT METHODS & AD PLACEMENT) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, alignItems: 'start' }}>
+                {/* Left Column: Filterable Account Activity Ledger */}
+                <div className="card" style={{ padding: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
+                        Recent Account Activity
+                      </h3>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 2 }}>
+                        Live ledger of your completed Offerwalls, Shortlinks, Faucet rolls &amp; Cashouts.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => syncUserWithBackend(user, true)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      🔄 Sync History
+                    </button>
+                  </div>
+
+                  {/* Activity Filter Pills */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                    {(
+                      [
+                        { id: 'all', label: 'All Activity' },
+                        { id: 'tasks', label: `Tasks & Links (${user.heldRewards?.length || 0})` },
+                        { id: 'faucet', label: `Faucet (${user.faucetHistory?.length || 0})` },
+                        { id: 'withdrawals', label: `Cashouts (${user.withdrawals?.length || 0})` },
+                      ] as const
+                    ).map((tab) => {
+                      const active = overviewHistoryFilter === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setOverviewHistoryFilter(tab.id)}
+                          className="font-mono"
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: 7,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            background: active ? 'rgba(0,232,154,0.14)' : 'var(--bg2)',
+                            border: active ? '1px solid var(--green)' : '1px solid var(--border)',
+                            color: active ? 'var(--green)' : 'var(--txt2)',
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {(user.heldRewards?.length || 0) === 0 &&
+                  (user.faucetHistory?.length || 0) === 0 &&
+                  user.withdrawals.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '28px 18px',
+                        textAlign: 'center',
+                        background: 'var(--bg2)',
+                        border: '1px dashed var(--border2)',
+                        borderRadius: 12,
+                      }}
+                    >
+                      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
+                        No transactions yet
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                        Complete any Offerwall task, Shortlink, or Faucet roll above to see live entries here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
+                      {(overviewHistoryFilter === 'all' || overviewHistoryFilter === 'tasks') &&
+                        (user.heldRewards || []).slice(0, 15).map((item) => {
+                          const isHeld = item.status === 'pending_hold';
+                          const isDeducted = Number(item.coins) < 0 || item.status === 'deducted';
+                          return (
+                            <div
+                              key={`ov_task_${item.id}`}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 14px',
+                                background: 'var(--bg2)',
+                                border: isDeducted
+                                  ? '1px solid rgba(255,85,102,0.32)'
+                                  : isHeld
+                                  ? '1px solid rgba(255,180,0,0.28)'
+                                  : '1px solid rgba(0,232,154,0.22)',
+                                borderRadius: 10,
+                                flexWrap: 'wrap',
+                                gap: 10,
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+                                  {item.title}
+                                </div>
+                                <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 2 }}>
+                                  {formatIstDate(item.createdAt)}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span
+                                  className="font-mono"
+                                  style={{
+                                    fontSize: 12.5,
+                                    fontWeight: 700,
+                                    color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
+                                  }}
+                                >
+                                  {Number(item.coins) >= 0 ? `+${item.coins}` : item.coins} Coins
+                                </span>
+                                <span
+                                  className="font-mono"
+                                  style={{
+                                    fontSize: 9.5,
+                                    padding: '3px 7px',
+                                    borderRadius: 6,
+                                    background: isDeducted
+                                      ? 'rgba(255,85,102,0.12)'
+                                      : isHeld
+                                      ? 'rgba(255,180,0,0.12)'
+                                      : 'rgba(0,232,154,0.12)',
+                                    color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {isDeducted ? '⚠️ DEDUCTED' : isHeld ? '⏳ ON HOLD' : '✅ CREDITED'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                      {(overviewHistoryFilter === 'all' || overviewHistoryFilter === 'faucet') &&
+                        (user.faucetHistory || []).slice(0, 8).map((f) => (
+                          <div
+                            key={`ov_faucet_${f.id}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '12px 14px',
+                              background: 'var(--bg2)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              flexWrap: 'wrap',
+                              gap: 10,
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+                                Hourly Faucet Roll #{String(f.rollNumber).padStart(4, '0')}
+                              </div>
+                              <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 2 }}>
+                                {formatIstDate(f.createdAt)}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span className="font-mono" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--green)' }}>
+                                +{f.coins} Coins
+                              </span>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: 9.5,
+                                  padding: '3px 7px',
+                                  borderRadius: 6,
+                                  background: 'rgba(0,232,154,0.12)',
+                                  color: 'var(--green)',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ✅ CREDITED
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+
+                      {(overviewHistoryFilter === 'all' || overviewHistoryFilter === 'withdrawals') &&
+                        user.withdrawals.map((w) => (
+                          <div
+                            key={w.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '12px 14px',
+                              background: 'var(--bg2)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              flexWrap: 'wrap',
+                              gap: 10,
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+                                {w.methodLabel} — ₹{w.amountInr}
+                              </div>
+                              <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 2 }}>
+                                {w.destination} • {formatIstDate(w.createdAt)}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span className="font-mono" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold)' }}>
+                                -{w.coins} Coins
+                              </span>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: 9.5,
+                                  padding: '3px 7px',
+                                  borderRadius: 6,
+                                  background: 'rgba(255,180,0,0.1)',
+                                  border: '1px solid rgba(255,180,0,0.25)',
+                                  color: 'var(--gold)',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                {w.status}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column: Quick Cashout Channels & Sponsored Partner Placement */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div className="card" style={{ padding: 22 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                        🏦 Supported Payout Methods
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => switchTab('wallet')}
+                        className="btn btn-primary btn-sm"
+                        style={{ padding: '5px 11px', fontSize: 11 }}
+                      >
+                        Open Cashout →
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div
+                        onClick={() => {
+                          setPayoutChannel('crypto');
+                          switchTab('wallet');
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 9,
+                          background: 'var(--bg2)',
+                          border: '1px solid rgba(255,180,0,0.28)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
+                            🪙 FaucetPay (USDT) — 0% Fee
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                            Min 100 Coins ($0.001) • Instant API Transfer &lt;= $0.01
+                          </div>
+                        </div>
+                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
+                          INSTANT ⚡
+                        </span>
+                      </div>
+
+                      <div
+                        onClick={() => {
+                          setPayoutChannel('upi');
+                          switchTab('wallet');
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 9,
+                          background: 'var(--bg2)',
+                          border: '1px solid rgba(0,232,154,0.28)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+                            ⚡ UPI (₹ Only) — Direct Bank VPA
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                            Min ₹1 Withdrawal • ₹1 = 1,100 Coins (₹2 = 2,200)
+                          </div>
+                        </div>
+                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
+                          MIN ₹1
+                        </span>
+                      </div>
+
+                      <div
+                        onClick={() => {
+                          setPayoutChannel('gift_card');
+                          switchTab('wallet');
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 9,
+                          background: 'var(--bg2)',
+                          border: '1px solid rgba(155,110,255,0.28)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--violet)' }}>
+                            🎁 Gift Cards (Play • Amazon • Flipkart)
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                            Redeem vouchers delivered directly to your email
+                          </div>
+                        </div>
+                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--violet)', fontWeight: 700 }}>
+                          VOUCHERS
                         </span>
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Offerwall.me Official Banner Ad Slots */}
+                  <div
+                    className="card"
+                    style={{
+                      padding: '16px 18px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.08em' }}>
+                        SPONSORED PARTNER PLACEMENT • OFFERWALL.ME
+                      </span>
+                      <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
+                        VERIFIED ADS
+                      </span>
+                    </div>
+                    <OfferwallMeBanner size="468x60" />
+                    <OfferwallMeBanner size="300x250" />
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── TAB 2: OFFERWALLS & QUEST MODES (100% Dynamic) ── */}
         {activeTab === 'quests' && (
@@ -6365,30 +7141,8 @@ export default function App() {
         {/* ── TAB 2C: LOOTIFY BUILT-IN FREE FAUCET + FAUCETPAY INSTANT ROLL ── */}
         {activeTab === 'faucet' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-            {/* Top Sponsored Banner Slot (728x90 & 468x60) */}
-            <div
-              className="card"
-              style={{
-                padding: '16px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.08em' }}>
-                  FAUCET SPONSOR PLACEMENT • OFFERWALL.ME
-                </span>
-                <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
-                  ACTIVE AD SLOT
-                </span>
-              </div>
-              <OfferwallMeBanner size="728x90" />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 22 }}>
-              {/* Left Column: Faucet Roll Box */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 22, alignItems: 'start' }}>
+              {/* Left Column: Faucet Roll Box (Immediately Above the Fold) */}
               <div className="card card-glow" style={{ padding: 28 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -6643,29 +7397,12 @@ export default function App() {
                 </form>
               </div>
 
-              {/* Right Column: 300x250 + 468x60 Banner Ads & Recent Faucet Claims */}
+              {/* Right Column: Recent Faucet Claims First + Sponsored Banner Ads Below */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <div
-                  className="card"
-                  style={{
-                    padding: 20,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
-                    SPONSORED FAUCET ADS • OFFERWALL.ME
-                  </span>
-                  <OfferwallMeBanner size="300x250" />
-                  <OfferwallMeBanner size="468x60" />
-                </div>
-
                 <div className="card" style={{ padding: 22 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                      Your Recent Faucet Rolls
+                      📜 Your Recent Faucet Rolls
                     </h3>
                     <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
                       {user.faucetClaimsCount || 0} Total Claims
@@ -6683,7 +7420,7 @@ export default function App() {
                         color: 'var(--txt2)',
                       }}
                     >
-                      No faucet rolls yet. Complete your first free roll now!
+                      No faucet rolls yet. Complete your first free roll on the left!
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -6715,6 +7452,23 @@ export default function App() {
                       ))}
                     </div>
                   )}
+                </div>
+
+                <div
+                  className="card"
+                  style={{
+                    padding: 20,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
+                    SPONSORED FAUCET ADS • OFFERWALL.ME
+                  </span>
+                  <OfferwallMeBanner size="300x250" />
+                  <OfferwallMeBanner size="468x60" />
                 </div>
               </div>
             </div>
