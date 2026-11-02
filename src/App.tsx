@@ -603,9 +603,10 @@ export default function App() {
   const [testCoins, setTestCoins] = useState('500');
 
   // Cashout form state
-  const [payoutChannel, setPayoutChannel] = useState<PayoutChannel>('upi');
+  const [payoutChannel, setPayoutChannel] = useState<PayoutChannel>('crypto');
   const [payoutDestination, setPayoutDestination] = useState('');
-  const [payoutCoins, setPayoutCoins] = useState('100000');
+  const [payoutCoins, setPayoutCoins] = useState('1000');
+  const [upiInrInput, setUpiInrInput] = useState('1');
   const [payoutMessage, setPayoutMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   // Built-in Faucet state
@@ -1675,7 +1676,7 @@ export default function App() {
     }
 
     const effectiveOrigin = apiBaseInput.trim().replace(/\/+$/, '') || window.location.origin;
-    const universalPostbackPreview = `${effectiveOrigin}/api/postback${newWallMacroQuery}`;
+    const universalPostbackPreview = `${effectiveOrigin}/lootify/api/postback${newWallMacroQuery}`;
 
     // ── SINGLE-PAGE ADMIN PANEL (Authenticated as sarthaksinghyadav1@gmail.com) ──
     return (
@@ -2147,7 +2148,7 @@ export default function App() {
                     const macroQuery =
                       wall.postback_macro_query ||
                       '?user_id={user_id}&amount={amount}&txn_id={txn_id}&status={status}';
-                    const postbackUrl = `${effectiveOrigin}/api/postback${macroQuery}`;
+                    const postbackUrl = `${effectiveOrigin}/lootify/api/postback${macroQuery}`;
                     return (
                       <div
                         key={wall.provider_id}
@@ -2659,32 +2660,54 @@ export default function App() {
     e.preventDefault();
     setPayoutMessage(null);
 
-    const coinsNum = Math.floor(Number(payoutCoins) || 0);
-    if (coinsNum < 100000) {
-      setPayoutMessage({ type: 'error', text: 'Minimum withdrawal is 100,000 Coins ($1.00 USD / ₹90.00 INR).' });
-      return;
+    const channelLabels: Record<PayoutChannel, string> = {
+      crypto: 'FaucetPay (USDT - 0% Fee)',
+      upi: 'UPI Direct Transfer (₹)',
+      bank: 'Bank Transfer (IMPS)',
+      gift_card: 'Gift Card Voucher',
+    };
+
+    let coinsNum = 0;
+    let inrVal = 0;
+    let usdVal = 0;
+
+    if (payoutChannel === 'crypto') {
+      coinsNum = Math.floor(Number(payoutCoins) || 0);
+      if (coinsNum < 100) {
+        setPayoutMessage({ type: 'error', text: 'Minimum FaucetPay withdrawal is 100 Coins (0.001 USDT).' });
+        return;
+      }
+      usdVal = Number((coinsNum / 100000).toFixed(4));
+      inrVal = Number(((coinsNum * 90) / 100000).toFixed(2));
+    } else if (payoutChannel === 'upi') {
+      const inrParsed = Math.max(1, Math.floor(Number(upiInrInput) || 1));
+      inrVal = inrParsed;
+      coinsNum = inrParsed * 1100; // 100 coins extra for every amount (1₹ = 1100 coins, 2₹ = 2200, etc.)
+      usdVal = Number((coinsNum / 100000).toFixed(4));
+    } else {
+      coinsNum = Math.floor(Number(payoutCoins) || 0);
+      if (coinsNum < 100000) {
+        setPayoutMessage({ type: 'error', text: 'Minimum withdrawal for this channel is 100,000 Coins ($1.00 USD / ₹90.00 INR).' });
+        return;
+      }
+      inrVal = Number(((coinsNum * 90) / 100000).toFixed(2));
+      usdVal = Number((coinsNum / 100000).toFixed(2));
     }
+
     if (coinsNum > user.availableCoins) {
       setPayoutMessage({
         type: 'error',
-        text: `Insufficient balance. You currently have ${user.availableCoins.toLocaleString('en-IN')} available coins.`,
+        text: `Insufficient balance. This withdrawal requires ${coinsNum.toLocaleString('en-IN')} Coins, but you currently have ${user.availableCoins.toLocaleString('en-IN')} available coins.`,
       });
       return;
     }
     if (!payoutDestination.trim()) {
-      setPayoutMessage({ type: 'error', text: 'Please enter your payout destination details.' });
+      setPayoutMessage({
+        type: 'error',
+        text: payoutChannel === 'upi' ? 'Please enter your UPI ID.' : 'Please enter your FaucetPay Email or USDT Address.',
+      });
       return;
     }
-
-    const channelLabels: Record<PayoutChannel, string> = {
-      upi: 'UPI Direct Transfer',
-      bank: 'Bank Transfer (IMPS)',
-      gift_card: 'Gift Card Voucher',
-      crypto: 'Crypto / FaucetPay (USDT / BTC)',
-    };
-
-    const inrVal = Number(((coinsNum * 90) / 100000).toFixed(2));
-    const usdVal = Number((coinsNum / 100000).toFixed(2));
 
     const base = getApiBaseUrl();
     try {
@@ -2698,20 +2721,24 @@ export default function App() {
           methodLabel: channelLabels[payoutChannel],
           destination: payoutDestination.trim(),
           coins: coinsNum,
+          inrAmount: inrVal,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.user) {
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        if (data.user) {
           saveCurrentUser(data.user);
           setUser(data.user);
-          setPayoutDestination('');
-          setPayoutMessage({
-            type: 'success',
-            text: `Withdrawal request for ₹${inrVal} ($${usdVal} USD • ${coinsNum.toLocaleString('en-IN')} Coins) submitted to server!`,
-          });
-          return;
         }
+        setPayoutDestination('');
+        setPayoutMessage({
+          type: 'success',
+          text: data.message || `Withdrawal request submitted!`,
+        });
+        return;
+      } else if (data && data.error) {
+        setPayoutMessage({ type: 'error', text: data.error });
+        return;
       }
     } catch {
       // Fallback to local update if offline
@@ -2739,7 +2766,9 @@ export default function App() {
     setPayoutDestination('');
     setPayoutMessage({
       type: 'success',
-      text: `Withdrawal request for ₹${newRecord.amountInr} ($${usdVal} USD • ${coinsNum.toLocaleString('en-IN')} Coins) submitted!`,
+      text: payoutChannel === 'crypto'
+        ? `Withdrawal request for $${usdVal} USDT (${coinsNum.toLocaleString('en-IN')} Coins) submitted!`
+        : `Withdrawal request for ₹${inrVal} (${coinsNum.toLocaleString('en-IN')} Coins) submitted!`,
     });
   };
 
@@ -4238,7 +4267,7 @@ export default function App() {
                   <span style={{ fontSize: 14, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Instant Cashout Value: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} INR (${usdBalance} USD)</strong> (Min 100,000 Coins = $1 / ₹90)
+                  Cashout Value: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} INR (${usdBalance} USD)</strong> • ⚡ FaucetPay Min: 100 Coins • ⚡ UPI Min: ₹1
                 </div>
               </div>
 
@@ -4278,73 +4307,189 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
               <div className="card card-glow" style={{ padding: 28 }}>
-                <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
-                  Withdraw Active Earnings
-                </h2>
-                <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 20 }}>
-                  Minimum withdrawal is <strong>100,000 Withdrawable Coins ($1.00 USD / ₹90.00 INR)</strong>. Coins in Hold automatically move to Withdrawable as soon as Ad Network clearance completes.
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+                  <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)' }}>
+                    Withdraw Active Earnings
+                  </h2>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontSize: 11,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      background: 'rgba(0,232,154,0.12)',
+                      color: 'var(--green)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    100,000 Coins = $1.00 USD (₹90 INR)
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 18 }}>
+                  Choose your preferred payout method below. Payouts via <strong>FaucetPay (USDT)</strong> are <strong>0% fee &amp; instant up to $0.01</strong>, and <strong>UPI (₹)</strong> allows minimum <strong>₹1 cashout</strong>.
                 </p>
 
                 <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 8 }}>
-                      SELECT PAYOUT CHANNEL
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.04em', marginBottom: 8 }}>
+                      SELECT PAYOUT METHOD
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      {(
-                        [
-                          { id: 'upi', label: '⚡ UPI Transfer' },
-                          { id: 'bank', label: '🏦 Bank IMPS' },
-                          { id: 'gift_card', label: '🎁 Gift Vouchers' },
-                          { id: 'crypto', label: '🪙 Crypto / FaucetPay' },
-                        ] as { id: PayoutChannel; label: string }[]
-                      ).map((ch) => (
-                        <button
-                          key={ch.id}
-                          type="button"
-                          onClick={() => setPayoutChannel(ch.id)}
-                          style={{
-                            padding: '12px 10px',
-                            borderRadius: 10,
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            background: payoutChannel === ch.id ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
-                            border: payoutChannel === ch.id ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                            color: payoutChannel === ch.id ? 'var(--green)' : 'var(--txt)',
-                            transition: 'all 0.2s',
-                          }}
-                        >
-                          {ch.label}
-                        </button>
-                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPayoutChannel('crypto');
+                          setPayoutCoins('1000');
+                        }}
+                        style={{
+                          padding: '12px 10px',
+                          borderRadius: 10,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          background: payoutChannel === 'crypto' ? 'rgba(255,180,0,0.12)' : 'var(--bg2)',
+                          border: payoutChannel === 'crypto' ? '1.5px solid var(--gold)' : '1px solid var(--border)',
+                          color: payoutChannel === 'crypto' ? 'var(--gold)' : 'var(--txt)',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>🪙 FaucetPay (USDT)</span>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 3 }}>
+                          0% Fee • ⚡ Instant &lt;= $0.01
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPayoutChannel('upi');
+                          setUpiInrInput('1');
+                        }}
+                        style={{
+                          padding: '12px 10px',
+                          borderRadius: 10,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          background: payoutChannel === 'upi' ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
+                          border: payoutChannel === 'upi' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: payoutChannel === 'upi' ? 'var(--green)' : 'var(--txt)',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>⚡ UPI (₹ Only)</span>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 3 }}>
+                          Min ₹1 • ₹1 = 1,100 Coins
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPayoutChannel('bank')}
+                        style={{
+                          padding: '10px 10px',
+                          borderRadius: 10,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          background: payoutChannel === 'bank' ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
+                          border: payoutChannel === 'bank' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: payoutChannel === 'bank' ? 'var(--green)' : 'var(--txt2)',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>🏦 Bank IMPS</div>
+                        <div style={{ fontSize: 10, color: 'var(--txt2)' }}>Min ₹90 (100k Coins)</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPayoutChannel('gift_card')}
+                        style={{
+                          padding: '10px 10px',
+                          borderRadius: 10,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          background: payoutChannel === 'gift_card' ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
+                          border: payoutChannel === 'gift_card' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: payoutChannel === 'gift_card' ? 'var(--green)' : 'var(--txt2)',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>🎁 Gift Vouchers</div>
+                        <div style={{ fontSize: 10, color: 'var(--txt2)' }}>Min ₹90 (100k Coins)</div>
+                      </button>
                     </div>
                   </div>
 
+                  {/* Channel-Specific Helper Banner */}
+                  {payoutChannel === 'crypto' ? (
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        background: 'rgba(255,180,0,0.08)',
+                        border: '1px solid rgba(255,180,0,0.3)',
+                        fontSize: 12,
+                        color: 'var(--txt)',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong style={{ color: 'var(--gold)' }}>🪙 FAUCETPAY RULES:</strong>
+                      <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 11.5, color: 'var(--txt2)' }}>
+                        <li><strong>Zero Transaction Fees:</strong> You receive 100% of your earnings.</li>
+                        <li><strong>Minimum:</strong> Just <strong>100 Coins ($0.001 USDT)</strong>.</li>
+                        <li><strong>⚡ Instant Transfer:</strong> Transactions up to <strong>1,000 Coins ($0.01 USDT)</strong> transfer automatically via FaucetPay Merchant API.</li>
+                        <li><strong>🛡️ Admin Review:</strong> Above 1,000 Coins ($0.01 USDT), transfers are reviewed and sent via 1-click API approval.</li>
+                      </ul>
+                    </div>
+                  ) : payoutChannel === 'upi' ? (
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        background: 'rgba(0,232,154,0.08)',
+                        border: '1px solid rgba(0,232,154,0.3)',
+                        fontSize: 12,
+                        color: 'var(--txt)',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong style={{ color: 'var(--green)' }}>⚡ UPI (₹ ONLY) RULES:</strong>
+                      <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 11.5, color: 'var(--txt2)' }}>
+                        <li><strong>Minimum:</strong> Just <strong>₹1 Withdrawal</strong>.</li>
+                        <li><strong>Fee Structure:</strong> 100 extra coins per rupee (<strong>₹1 = 1,100 Coins</strong>, ₹2 = 2,200 Coins, ₹5 = 5,500 Coins, ₹10 = 11,000 Coins, and so on).</li>
+                        <li><strong>Direct to VPA:</strong> Direct bank credit to your GooglePay, PhonePe, Paytm, or BHIM UPI ID.</li>
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {/* Destination Input */}
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                      {payoutChannel === 'upi'
-                        ? 'UPI ID (e.g. name@okaxis)'
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                      {payoutChannel === 'crypto'
+                        ? 'FAUCETPAY LINKED EMAIL OR USDT WALLET ADDRESS'
+                        : payoutChannel === 'upi'
+                        ? 'UPI ID / VPA (e.g. name@okaxis, 9876543210@paytm)'
                         : payoutChannel === 'bank'
-                        ? 'ACCOUNT NO & IFSC CODE'
-                        : payoutChannel === 'gift_card'
-                        ? 'DELIVERY EMAIL ADDRESS'
-                        : 'FAUCETPAY EMAIL OR USDT ADDRESS'}
+                        ? 'ACCOUNT NUMBER & IFSC CODE'
+                        : 'VOUCHER DELIVERY EMAIL ADDRESS'}
                     </label>
                     <input
                       type="text"
                       value={payoutDestination}
                       onChange={(e) => setPayoutDestination(e.target.value)}
                       placeholder={
-                        payoutChannel === 'upi'
-                          ? 'yourname@upi'
+                        payoutChannel === 'crypto'
+                          ? 'Enter FaucetPay email or TRC20/BEP20/Polygon address'
+                          : payoutChannel === 'upi'
+                          ? 'yourname@okhdfcbank or 9876543210@paytm'
                           : payoutChannel === 'bank'
-                          ? 'A/C Number & IFSC'
-                          : payoutChannel === 'gift_card'
-                          ? user.email
-                          : 'FaucetPay Email or TRC20 / Polygon Address'
+                          ? 'Account No & IFSC Code'
+                          : user.email
                       }
                       style={{
                         width: '100%',
@@ -4359,36 +4504,185 @@ export default function App() {
                     />
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 6 }}>
-                      COINS TO WITHDRAW (WITHDRAWABLE NOW: {user.availableCoins} COINS)
-                    </label>
-                    <input
-                      type="number"
-                      min={100000}
-                      step={1000}
-                      value={payoutCoins}
-                      onChange={(e) => setPayoutCoins(e.target.value)}
-                      className="font-mono"
-                      style={{
-                        width: '100%',
-                        padding: '12px 14px',
-                        borderRadius: 10,
-                        background: 'var(--bg2)',
-                        border: '1px solid var(--border2)',
-                        color: 'var(--gold)',
-                        fontSize: 15,
-                        fontWeight: 700,
-                        outline: 'none',
-                      }}
-                    />
-                    <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                      Payout Value:{' '}
-                      <strong className="font-mono" style={{ color: 'var(--green)' }}>
-                        ₹{(((Math.max(0, Number(payoutCoins) || 0)) * 90) / 100000).toFixed(2)} INR (${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(2)} USD)
-                      </strong>
+                  {/* Amount Input & Quick Selectors */}
+                  {payoutChannel === 'crypto' ? (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)' }}>
+                          COINS TO WITHDRAW (AVAILABLE: {user.availableCoins} COINS)
+                        </label>
+                        <span className="font-mono" style={{ fontSize: 11, color: Number(payoutCoins || 0) <= 1000 ? 'var(--gold)' : 'var(--txt2)' }}>
+                          {Number(payoutCoins || 0) <= 1000 ? '⚡ Instant Transfer Mode' : '🛡️ Admin Review Mode'}
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        min={100}
+                        step={100}
+                        value={payoutCoins}
+                        onChange={(e) => setPayoutCoins(e.target.value)}
+                        className="font-mono"
+                        style={{
+                          width: '100%',
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          background: 'var(--bg2)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--gold)',
+                          fontSize: 16,
+                          fontWeight: 700,
+                          outline: 'none',
+                        }}
+                      />
+
+                      {/* Quick FaucetPay Presets */}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                        {[
+                          { coins: '100', label: '100 ($0.001) ⚡' },
+                          { coins: '500', label: '500 ($0.005) ⚡' },
+                          { coins: '1000', label: '1,000 ($0.01) ⚡' },
+                          { coins: '5000', label: '5k ($0.05)' },
+                          { coins: '10000', label: '10k ($0.10)' },
+                          { coins: '50000', label: '50k ($0.50)' },
+                          { coins: '100000', label: '100k ($1.00)' },
+                        ].map((btn) => (
+                          <button
+                            key={btn.coins}
+                            type="button"
+                            onClick={() => setPayoutCoins(btn.coins)}
+                            style={{
+                              padding: '5px 9px',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              background: payoutCoins === btn.coins ? 'rgba(255,180,0,0.18)' : 'var(--bg3)',
+                              border: payoutCoins === btn.coins ? '1px solid var(--gold)' : '1px solid var(--border)',
+                              color: payoutCoins === btn.coins ? 'var(--gold)' : 'var(--txt2)',
+                            }}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 8 }}>
+                        You Receive:{' '}
+                        <strong className="font-mono" style={{ color: 'var(--gold)', fontSize: 13 }}>
+                          ${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(4)} USDT
+                        </strong>{' '}
+                        (approx. ₹{((Math.max(0, Number(payoutCoins) || 0) * 90) / 100000).toFixed(2)} INR) • 0% Fee
+                      </div>
                     </div>
-                  </div>
+                  ) : payoutChannel === 'upi' ? (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)' }}>
+                          WITHDRAW AMOUNT IN RUPEES (₹) (MINIMUM ₹1)
+                        </label>
+                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                          ₹1 = 1,100 Coins
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={upiInrInput}
+                        onChange={(e) => setUpiInrInput(e.target.value)}
+                        className="font-mono"
+                        style={{
+                          width: '100%',
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          background: 'var(--bg2)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--green)',
+                          fontSize: 16,
+                          fontWeight: 700,
+                          outline: 'none',
+                        }}
+                      />
+
+                      {/* Quick UPI Presets */}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                        {[
+                          { inr: '1', label: '₹1 (1.1k)' },
+                          { inr: '2', label: '₹2 (2.2k)' },
+                          { inr: '5', label: '₹5 (5.5k)' },
+                          { inr: '10', label: '₹10 (11k)' },
+                          { inr: '25', label: '₹25 (27.5k)' },
+                          { inr: '50', label: '₹50 (55k)' },
+                          { inr: '100', label: '₹100 (110k)' },
+                        ].map((btn) => (
+                          <button
+                            key={btn.inr}
+                            type="button"
+                            onClick={() => setUpiInrInput(btn.inr)}
+                            style={{
+                              padding: '5px 9px',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              background: upiInrInput === btn.inr ? 'rgba(0,232,154,0.18)' : 'var(--bg3)',
+                              border: upiInrInput === btn.inr ? '1px solid var(--green)' : '1px solid var(--border)',
+                              color: upiInrInput === btn.inr ? 'var(--green)' : 'var(--txt2)',
+                            }}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {(() => {
+                        const targetInr = Math.max(1, Math.floor(Number(upiInrInput) || 1));
+                        const requiredCoins = targetInr * 1100;
+                        return (
+                          <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 8 }}>
+                            You Receive: <strong style={{ color: 'var(--green)' }}>₹{targetInr} INR</strong> • Coins Deducted:{' '}
+                            <strong className="font-mono" style={{ color: 'var(--green)' }}>
+                              {requiredCoins.toLocaleString('en-IN')} Coins
+                            </strong>{' '}
+                            ({(targetInr * 1000).toLocaleString('en-IN')} Base + {(targetInr * 100).toLocaleString('en-IN')} Fee)
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        COINS TO WITHDRAW (MIN 100,000 COINS = ₹90 / $1.00)
+                      </label>
+                      <input
+                        type="number"
+                        min={100000}
+                        step={1000}
+                        value={payoutCoins}
+                        onChange={(e) => setPayoutCoins(e.target.value)}
+                        className="font-mono"
+                        style={{
+                          width: '100%',
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          background: 'var(--bg2)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--txt)',
+                          fontSize: 15,
+                          fontWeight: 700,
+                          outline: 'none',
+                        }}
+                      />
+                      <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
+                        Payout Value:{' '}
+                        <strong className="font-mono" style={{ color: 'var(--green)' }}>
+                          ₹{(((Math.max(0, Number(payoutCoins) || 0)) * 90) / 100000).toFixed(2)} INR (${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(2)} USD)
+                        </strong>
+                      </div>
+                    </div>
+                  )}
 
                   {payoutMessage && (
                     <div
@@ -4410,8 +4704,23 @@ export default function App() {
                     </div>
                   )}
 
-                  <button type="submit" className="btn btn-primary btn-full" style={{ padding: '14px' }}>
-                    Request Instant Cashout →
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-full"
+                    style={{
+                      padding: '14px',
+                      background: payoutChannel === 'crypto' ? 'linear-gradient(135deg, var(--gold), #D49000)' : undefined,
+                      color: payoutChannel === 'crypto' ? '#03100A' : undefined,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {payoutChannel === 'crypto'
+                      ? Number(payoutCoins || 0) <= 1000
+                        ? `⚡ Claim Instant FaucetPay Transfer ($${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(4)} USDT) →`
+                        : `Request FaucetPay Transfer ($${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(4)} USDT) →`
+                      : payoutChannel === 'upi'
+                      ? `Request ₹${Math.max(1, Math.floor(Number(upiInrInput) || 1))} UPI Transfer (${(Math.max(1, Math.floor(Number(upiInrInput) || 1)) * 1100).toLocaleString('en-IN')} Coins) →`
+                      : 'Request Cashout →'}
                   </button>
                 </form>
               </div>

@@ -32,7 +32,7 @@ async function sendFaucetPayPayout(
   referral = false
 ): Promise<any> {
   const apiKey = getFaucetPayApiKey();
-  const satoshis = Math.max(1, Math.round(Number(coinsAmount || 1) * 12000));
+  const satoshis = Math.max(1, Math.round(Number(coinsAmount || 1) * 1000));
   const form = new URLSearchParams();
   form.set('api_key', apiKey);
   form.set('amount', String(satoshis));
@@ -251,8 +251,10 @@ interface ServerWithdrawal {
   coins_deducted: number;
   amount_inr: number;
   payout_details_json: string;
+  utr_or_voucher?: string | null;
   status: 'pending' | 'completed' | 'rejected';
   created_at: string;
+  processed_at?: string;
 }
 
 interface ServerPostbackLog {
@@ -709,18 +711,19 @@ async function startServer() {
     });
   });
 
-  app.post('/api/withdrawals', (req, res) => {
+  app.post('/api/withdrawals', async (req, res) => {
     const db = loadDB();
     const body = req.body || {};
     const userId = String(body.userId || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
-    const method = String(body.method || 'upi').trim();
+    const method = String(body.method || 'upi').trim().toLowerCase();
     const methodLabel = String(body.methodLabel || 'UPI Direct Transfer').trim();
     const destination = String(body.destination || '').trim();
-    const coins = Math.floor(Number(body.coins) || 0);
+    const rawCoins = Math.floor(Number(body.coins) || 0);
+    const inrInput = Number(body.inrAmount || body.amountInr || 0);
 
-    if (coins < 100000 || !destination) {
-      res.status(400).json({ error: 'Minimum withdrawal is 100,000 Coins ($1.00 USD / ₹90.00 INR) and destination is required.' });
+    if (!destination) {
+      res.status(400).json({ error: 'Destination account (UPI ID or FaucetPay Address/Email) is required.' });
       return;
     }
 
@@ -732,15 +735,83 @@ async function startServer() {
       return;
     }
 
-    if (user.availableCoins < coins) {
-      res.status(400).json({
-        error: `Insufficient balance. Server available balance is ${user.availableCoins} Coins.`,
-      });
-      return;
+    let coinsToDeduct = rawCoins;
+    let amountInr = 0;
+    let amountUsd = 0;
+    let isInstantFaucetPay = false;
+    let instantSuccess = false;
+    let instantPayoutId = '';
+    let instantNotice = '';
+
+    if (method === 'crypto' || method === 'faucetpay') {
+      // FAUCETPAY (NO TRANSACTION FEES) :- MINIMUM 100 COINS (0.001 USDT)
+      if (coinsToDeduct < 100) {
+        res.status(400).json({ error: 'Minimum FaucetPay withdrawal is 100 Coins (0.001 USDT).' });
+        return;
+      }
+      if (user.availableCoins < coinsToDeduct) {
+        res.status(400).json({
+          error: `Insufficient available coins. You requested ${coinsToDeduct} Coins, but your available balance is ${user.availableCoins} Coins.`,
+        });
+        return;
+      }
+
+      amountUsd = Number((coinsToDeduct / 100000).toFixed(4));
+      amountInr = Number(((coinsToDeduct * 90) / 100000).toFixed(2));
+
+      // Up to 0.01 USDT (1,000 Coins): AUTOMATIC INSTANT TRANSFER via FaucetPay API!
+      if (coinsToDeduct <= 1000) {
+        isInstantFaucetPay = true;
+        try {
+          const fpResult = await sendFaucetPayPayout(destination, coinsToDeduct, 'USDT', false);
+          if (fpResult && Number(fpResult.status) === 200) {
+            instantSuccess = true;
+            instantPayoutId = String(fpResult.payout_id || fpResult.payout_user_hash || 'FP_INSTANT_' + Date.now());
+            instantNotice = `⚡ Instant FaucetPay payout sent! ${amountUsd} USDT has been credited directly to ${destination} (Payout ID: ${instantPayoutId}).`;
+          } else {
+            instantSuccess = false;
+            instantNotice = (fpResult && fpResult.message) || 'FaucetPay API balance temporarily awaiting reload. Queued for 1-click admin transfer.';
+          }
+        } catch (fpErr: any) {
+          instantSuccess = false;
+          instantNotice = fpErr?.message || 'FaucetPay API connection error. Queued for admin review.';
+        }
+      }
+    } else if (method === 'upi') {
+      // UPI (FOR ₹ ONLY) UPI ID:- MINIMUM 1₹ WITHDRAWAL, 100 coins extra for every amount (1₹ = 1100 coins, 2₹ = 2200, etc.)
+      const targetInr = inrInput > 0 ? Math.floor(inrInput) : Math.floor(rawCoins / 1100);
+      if (targetInr < 1) {
+        res.status(400).json({ error: 'Minimum UPI withdrawal is ₹1 (1,100 Coins). ₹1 = 1,100 Coins (includes 100 Coins transfer fee).' });
+        return;
+      }
+      coinsToDeduct = targetInr * 1100;
+      amountInr = targetInr;
+      amountUsd = Number((coinsToDeduct / 100000).toFixed(4));
+
+      if (user.availableCoins < coinsToDeduct) {
+        res.status(400).json({
+          error: `Insufficient available coins. ₹${targetInr} withdrawal requires ${coinsToDeduct.toLocaleString('en-IN')} Coins (₹1 = 1,100 Coins). Your available balance is ${user.availableCoins} Coins.`,
+        });
+        return;
+      }
+    } else {
+      // Other channels (Bank, Gift Cards): Min 100,000 Coins
+      if (coinsToDeduct < 100000) {
+        res.status(400).json({ error: 'Minimum withdrawal for this channel is 100,000 Coins ($1.00 USD / ₹90.00 INR).' });
+        return;
+      }
+      if (user.availableCoins < coinsToDeduct) {
+        res.status(400).json({
+          error: `Insufficient available coins. Your available balance is ${user.availableCoins} Coins.`,
+        });
+        return;
+      }
+      amountInr = Number(((coinsToDeduct * 90) / 100000).toFixed(2));
+      amountUsd = Number((coinsToDeduct / 100000).toFixed(4));
     }
 
-    user.availableCoins -= coins;
-    const amountInr = Number(((coins * 90) / 100000).toFixed(2));
+    user.availableCoins -= coinsToDeduct;
+    const finalStatus = instantSuccess ? 'completed' : 'pending';
     const wd: ServerWithdrawal = {
       id: 'wd_' + Date.now().toString(36),
       user_id: user.id,
@@ -748,16 +819,47 @@ async function startServer() {
       user_email: user.email,
       method,
       tier_label: methodLabel,
-      coins_deducted: coins,
+      coins_deducted: coinsToDeduct,
       amount_inr: amountInr,
       payout_details_json: destination,
-      status: 'pending',
+      utr_or_voucher: instantPayoutId || (isInstantFaucetPay && !instantSuccess ? 'FP_QUEUED: ' + instantNotice : null),
+      status: finalStatus,
       created_at: new Date().toISOString(),
+      processed_at: instantSuccess ? new Date().toISOString() : undefined,
     };
     db.withdrawals.unshift(wd);
+
+    db.postbacks.unshift({
+      id: 'ldg_wd_' + Date.now(),
+      user_id: user.id,
+      user_name: user.name,
+      source_type: 'withdrawal',
+      title: instantSuccess
+        ? `⚡ Instant FaucetPay Payout ($${amountUsd} USDT)`
+        : `Cashout Request (${methodLabel} - ${method === 'crypto' || method === 'faucetpay' ? `$${amountUsd} USDT` : `₹${amountInr}`})`,
+      amount_coins: -coinsToDeduct,
+      status: finalStatus,
+      external_tx_id: wd.id,
+      created_at: new Date().toISOString(),
+    });
+
     saveDB(db);
 
-    res.json({ ok: true, user: buildPlayerResponse(db, user), withdrawalId: wd.id });
+    res.json({
+      ok: true,
+      status: finalStatus,
+      instant: instantSuccess,
+      payoutId: instantPayoutId || null,
+      message: instantSuccess
+        ? instantNotice
+        : method === 'crypto' || method === 'faucetpay'
+        ? (isInstantFaucetPay
+            ? `Withdrawal queued! ${instantNotice}`
+            : `Withdrawal of $${amountUsd} USDT submitted for Admin Review (amounts above $0.01 / 1,000 Coins are reviewed before 1-click automatic transfer).`)
+        : `Withdrawal request for ₹${amountInr} (${coinsToDeduct.toLocaleString('en-IN')} Coins) submitted! Admin will transfer to your UPI ID (${destination}).`,
+      user: buildPlayerResponse(db, user),
+      withdrawalId: wd.id,
+    });
   });
 
   // SINGLE Universal S2S Offerwall Postback Webhook (GET & POST) — Supports /api/postback and /lootify/api/postback
@@ -1078,7 +1180,7 @@ async function startServer() {
     });
   });
 
-  app.post('/api/admin/withdrawals/update', (req, res) => {
+  app.post('/api/admin/withdrawals/update', async (req, res) => {
     const db = loadDB();
     const { withdrawalId, status } = req.body || {};
     const wd = db.withdrawals.find((w) => w.id === withdrawalId);
@@ -1090,7 +1192,47 @@ async function startServer() {
       res.status(400).json({ error: 'Withdrawal already processed.' });
       return;
     }
+
+    if (status === 'completed' && (wd.method === 'crypto' || wd.method === 'faucetpay')) {
+      // "WAHA SE APPROVE DABATE HI AUTOMATIC TRANSFER"
+      let fpPayoutId = wd.utr_or_voucher;
+      if (!fpPayoutId || (!fpPayoutId.startsWith('fp_') && !fpPayoutId.startsWith('FP_') && !fpPayoutId.includes('FAUCETPAY_'))) {
+        try {
+          const fpResult = await sendFaucetPayPayout(
+            wd.payout_details_json,
+            wd.coins_deducted,
+            'USDT',
+            false
+          );
+          if (!fpResult || Number(fpResult.status) !== 200) {
+            res.status(400).json({
+              error:
+                (fpResult && fpResult.message) ||
+                'FaucetPay API error. Ensure your FaucetPay wallet has sufficient USDT balance.',
+              faucetpayResponse: fpResult || null,
+            });
+            return;
+          }
+          fpPayoutId = String(fpResult.payout_id || fpResult.payout_user_hash || 'FP_' + Date.now());
+        } catch (err: any) {
+          res.status(500).json({ error: err?.message || 'Failed to contact FaucetPay API' });
+          return;
+        }
+      }
+      wd.status = 'completed';
+      wd.utr_or_voucher = fpPayoutId;
+      wd.processed_at = new Date().toISOString();
+      saveDB(db);
+      res.json({
+        ok: true,
+        payoutId: fpPayoutId,
+        message: `Approved & Automatically Transferred via FaucetPay API to ${wd.payout_details_json}!`,
+      });
+      return;
+    }
+
     wd.status = status;
+    wd.processed_at = new Date().toISOString();
     if (status === 'rejected') {
       const u = db.users.find((usr) => usr.id === wd.user_id);
       if (u) {
