@@ -367,7 +367,7 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
         id: h.external_tx_id || h.id,
         title: h.title || 'Offerwall Task',
         coins: c,
-        amountInr: Number((c / 100).toFixed(4)),
+        amountInr: Number(((c * 90) / 100000).toFixed(4)),
         status: (h.status as 'pending_hold' | 'credited') || 'pending_hold',
         createdAt: normalizedCreated,
         unlocksAt: h.unlocks_at ? String(h.unlocks_at) : null,
@@ -719,8 +719,8 @@ async function startServer() {
     const destination = String(body.destination || '').trim();
     const coins = Math.floor(Number(body.coins) || 0);
 
-    if (coins < 1000 || !destination) {
-      res.status(400).json({ error: 'Minimum withdrawal is 1,000 Coins (₹10) and destination is required.' });
+    if (coins < 100000 || !destination) {
+      res.status(400).json({ error: 'Minimum withdrawal is 100,000 Coins ($1.00 USD / ₹90.00 INR) and destination is required.' });
       return;
     }
 
@@ -740,7 +740,7 @@ async function startServer() {
     }
 
     user.availableCoins -= coins;
-    const amountInr = Number((coins / 100).toFixed(2));
+    const amountInr = Number(((coins * 90) / 100000).toFixed(2));
     const wd: ServerWithdrawal = {
       id: 'wd_' + Date.now().toString(36),
       user_id: user.id,

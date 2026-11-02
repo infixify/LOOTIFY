@@ -242,7 +242,7 @@ async function processPendingPostbacksForUser(userId, userEmail, currentAvailabl
           id: txKey,
           title: `${pb.providerLabel}: ${pb.offerName}`,
           coins: pb.coins,
-          amountInr: Number((pb.coins / 100).toFixed(4)),
+          amountInr: Number(((pb.coins * 90) / 100000).toFixed(4)),
           status: "credited",
           createdAt: pb.createdAt || new Date().toISOString(),
           unlocksAt: null,
@@ -625,8 +625,8 @@ function getFaucetPayApiKey(env) {
 
 async function sendFaucetPayPayout(env, toAddress, coinsAmount, currency = "USDT", referral = false) {
   const apiKey = getFaucetPayApiKey(env);
-  // 1,000 Coins = ₹10 (~$0.12 USD) -> 1 Coin = $0.00012 USD = 12,000 satoshis (8 decimals in FaucetPay)
-  const satoshis = Math.max(1, Math.round(Number(coinsAmount || 1) * 12000));
+  // 100,000 Coins = $1.00 USD (₹90 INR) -> 1 Coin = $0.00001 USD = 1,000 satoshis (8 decimals in FaucetPay)
+  const satoshis = Math.max(1, Math.round(Number(coinsAmount || 1) * 1000));
   const form = new URLSearchParams();
   form.set("api_key", apiKey);
   form.set("amount", String(satoshis));
@@ -1071,7 +1071,7 @@ async function formatPlayerPayload(db, userRow) {
         id: h.external_tx_id || h.id,
         title: h.title || "Offerwall Task",
         coins: c,
-        amountInr: Number((c / 100).toFixed(4)),
+        amountInr: Number(((c * 90) / 100000).toFixed(4)),
         status: h.status || "pending_hold",
         createdAt: normalizedCreated,
         unlocksAt: h.unlocks_at ? String(h.unlocks_at) : null,
@@ -1898,9 +1898,9 @@ export default {
         const destination = (body.destination || "").trim();
         const coins = Math.floor(Number(body.coins) || 0);
 
-        if ((!userId && !email) || coins < 1000 || !destination) {
+        if ((!userId && !email) || coins < 100000 || !destination) {
           return Response.json(
-            { error: "Minimum withdrawal is 1,000 Coins (₹10) and destination is required." },
+            { error: "Minimum withdrawal is 100,000 Coins ($1.00 USD / ₹90.00 INR) and destination is required." },
             { status: 400, headers: corsHeaders }
           );
         }
@@ -1931,7 +1931,7 @@ export default {
           );
         }
 
-        const amountInr = Number((coins / 100).toFixed(2));
+        const amountInr = Number(((coins * 90) / 100000).toFixed(2));
         const wdId = "wd_" + Date.now().toString(36);
 
         await env.DB.prepare(

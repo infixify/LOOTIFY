@@ -427,7 +427,7 @@ function loadCurrentUser(): PlayerUser | null {
         return {
           ...h,
           coins,
-          amountInr: Number((coins / 100).toFixed(4)),
+          amountInr: Number(((coins * 90) / 100000).toFixed(4)),
         };
       })
       .sort((a: any, b: any) => parseHistoryTimestampMs(b.createdAt) - parseHistoryTimestampMs(a.createdAt));
@@ -605,7 +605,7 @@ export default function App() {
   // Cashout form state
   const [payoutChannel, setPayoutChannel] = useState<PayoutChannel>('upi');
   const [payoutDestination, setPayoutDestination] = useState('');
-  const [payoutCoins, setPayoutCoins] = useState('1000');
+  const [payoutCoins, setPayoutCoins] = useState('100000');
   const [payoutMessage, setPayoutMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   // Built-in Faucet state
@@ -2641,9 +2641,12 @@ export default function App() {
   }
 
   const totalCoins = user.availableCoins + user.pendingCoins;
-  const totalInr = (totalCoins / 100).toFixed(2);
-  const inrBalance = (user.availableCoins / 100).toFixed(2);
-  const pendingInr = (user.pendingCoins / 100).toFixed(2);
+  const totalInr = ((totalCoins * 90) / 100000).toFixed(2);
+  const totalUsd = (totalCoins / 100000).toFixed(2);
+  const inrBalance = ((user.availableCoins * 90) / 100000).toFixed(2);
+  const usdBalance = (user.availableCoins / 100000).toFixed(2);
+  const pendingInr = ((user.pendingCoins * 90) / 100000).toFixed(2);
+  const pendingUsd = (user.pendingCoins / 100000).toFixed(2);
   const referralLink = `${window.location.origin}${window.location.pathname}?ref=${user.referralCode}`;
 
   const copyReferral = () => {
@@ -2657,14 +2660,14 @@ export default function App() {
     setPayoutMessage(null);
 
     const coinsNum = Math.floor(Number(payoutCoins) || 0);
-    if (coinsNum < 1000) {
-      setPayoutMessage({ type: 'error', text: 'Minimum withdrawal is 1,000 Coins (₹10).' });
+    if (coinsNum < 100000) {
+      setPayoutMessage({ type: 'error', text: 'Minimum withdrawal is 100,000 Coins ($1.00 USD / ₹90.00 INR).' });
       return;
     }
     if (coinsNum > user.availableCoins) {
       setPayoutMessage({
         type: 'error',
-        text: `Insufficient balance. You currently have ${user.availableCoins} available coins.`,
+        text: `Insufficient balance. You currently have ${user.availableCoins.toLocaleString('en-IN')} available coins.`,
       });
       return;
     }
@@ -2679,6 +2682,9 @@ export default function App() {
       gift_card: 'Gift Card Voucher',
       crypto: 'Crypto / FaucetPay (USDT / BTC)',
     };
+
+    const inrVal = Number(((coinsNum * 90) / 100000).toFixed(2));
+    const usdVal = Number((coinsNum / 100000).toFixed(2));
 
     const base = getApiBaseUrl();
     try {
@@ -2702,7 +2708,7 @@ export default function App() {
           setPayoutDestination('');
           setPayoutMessage({
             type: 'success',
-            text: `Withdrawal request for ₹${(coinsNum / 100).toFixed(2)} (${coinsNum} Coins) submitted to server!`,
+            text: `Withdrawal request for ₹${inrVal} ($${usdVal} USD • ${coinsNum.toLocaleString('en-IN')} Coins) submitted to server!`,
           });
           return;
         }
@@ -2717,7 +2723,7 @@ export default function App() {
       methodLabel: channelLabels[payoutChannel],
       destination: payoutDestination.trim(),
       coins: coinsNum,
-      amountInr: Number((coinsNum / 100).toFixed(2)),
+      amountInr: inrVal,
       status: 'pending',
       createdAt: new Date().toISOString().slice(0, 10),
     };
@@ -2733,7 +2739,7 @@ export default function App() {
     setPayoutDestination('');
     setPayoutMessage({
       type: 'success',
-      text: `Withdrawal request for ₹${newRecord.amountInr} (${coinsNum} Coins) submitted!`,
+      text: `Withdrawal request for ₹${newRecord.amountInr} ($${usdVal} USD • ${coinsNum.toLocaleString('en-IN')} Coins) submitted!`,
     });
   };
 
@@ -3084,7 +3090,7 @@ export default function App() {
                   {user.availableCoins.toLocaleString('en-IN')}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Ready for Cashout: <strong style={{ color: 'var(--green)' }}>₹{inrBalance}</strong> (1,000 Coins = ₹10)
+                  Ready for Cashout: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} (${usdBalance})</strong> (100,000 Coins = $1 / ₹90)
                 </div>
               </div>
 
@@ -3782,7 +3788,7 @@ export default function App() {
                         Lootify Hourly Faucet Roll
                       </h2>
                       <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                        Roll Every 60 Minutes • Credits Lootify Wallet Coins (Withdraw at ₹10 via UPI / FaucetPay)
+                        Roll Every 60 Minutes • Credits Lootify Wallet Coins (Withdraw at 100,000 Coins = $1 / ₹90 via UPI / FaucetPay)
                       </p>
                     </div>
                   </div>
@@ -4232,7 +4238,7 @@ export default function App() {
                   <span style={{ fontSize: 14, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Instant Cashout Value: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} INR</strong> (Min ₹10)
+                  Instant Cashout Value: <strong style={{ color: 'var(--green)' }}>₹{inrBalance} INR (${usdBalance} USD)</strong> (Min 100,000 Coins = $1 / ₹90)
                 </div>
               </div>
 
@@ -4267,7 +4273,7 @@ export default function App() {
                   <span style={{ fontSize: 14, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                  Hold Value: <strong style={{ color: 'var(--gold)' }}>₹{pendingInr} INR</strong> — Auto-transfers to Withdrawable once Ad Network settles payout
+                  Hold Value: <strong style={{ color: 'var(--gold)' }}>₹{pendingInr} INR (${pendingUsd} USD)</strong> — Auto-transfers to Withdrawable once Ad Network settles payout
                 </div>
               </div>
             </div>
@@ -4278,7 +4284,7 @@ export default function App() {
                   Withdraw Active Earnings
                 </h2>
                 <p style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 20 }}>
-                  Minimum withdrawal is <strong>1,000 Withdrawable Coins (₹10)</strong>. Coins in Hold automatically move to Withdrawable as soon as Ad Network clearance completes.
+                  Minimum withdrawal is <strong>100,000 Withdrawable Coins ($1.00 USD / ₹90.00 INR)</strong>. Coins in Hold automatically move to Withdrawable as soon as Ad Network clearance completes.
                 </p>
 
                 <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -4359,8 +4365,8 @@ export default function App() {
                     </label>
                     <input
                       type="number"
-                      min={1000}
-                      step={100}
+                      min={100000}
+                      step={1000}
                       value={payoutCoins}
                       onChange={(e) => setPayoutCoins(e.target.value)}
                       className="font-mono"
@@ -4379,7 +4385,7 @@ export default function App() {
                     <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
                       Payout Value:{' '}
                       <strong className="font-mono" style={{ color: 'var(--green)' }}>
-                        ₹{((Math.max(0, Number(payoutCoins) || 0)) / 100).toFixed(2)} INR
+                        ₹{(((Math.max(0, Number(payoutCoins) || 0)) * 90) / 100000).toFixed(2)} INR (${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(2)} USD)
                       </strong>
                     </div>
                   </div>
