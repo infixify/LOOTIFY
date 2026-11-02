@@ -20,7 +20,7 @@ export interface HeldRewardRecord {
   title: string;
   coins: number;
   amountInr: number;
-  status: 'pending_hold' | 'credited' | 'reversed_chargeback';
+  status: 'pending_hold' | 'credited' | 'reversed_chargeback' | 'deducted';
   createdAt: string;
   unlocksAt?: string | null;
 }

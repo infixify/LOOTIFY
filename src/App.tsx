@@ -602,8 +602,22 @@ export default function App() {
   const [testUserId, setTestUserId] = useState('');
   const [testCoins, setTestCoins] = useState('500');
 
+  // Admin Manual Player Wallet Controller state
+  const [adjTargetUser, setAdjTargetUser] = useState('');
+  const [adjAction, setAdjAction] = useState<'add' | 'minus' | 'set'>('add');
+  const [adjWalletType, setAdjWalletType] = useState<'available' | 'pending' | 'both'>('available');
+  const [adjCoins, setAdjCoins] = useState('500');
+  const [adjCategory, setAdjCategory] = useState<string>('admin_bonus');
+  const [adjNote, setAdjNote] = useState('');
+  const [adjCustomTxId, setAdjCustomTxId] = useState('');
+  const [adjHoldDays, setAdjHoldDays] = useState('7');
+  const [adjShowInHistory, setAdjShowInHistory] = useState(true);
+  const [adjSubmitting, setAdjSubmitting] = useState(false);
+  const [adminUserSearch, setAdminUserSearch] = useState('');
+
   // Cashout form state
   const [payoutChannel, setPayoutChannel] = useState<PayoutChannel>('crypto');
+  const [giftCardBrand, setGiftCardBrand] = useState<'Google Play' | 'Amazon Pay' | 'Flipkart'>('Google Play');
   const [payoutDestination, setPayoutDestination] = useState('');
   const [payoutCoins, setPayoutCoins] = useState('1000');
   const [upiInrInput, setUpiInrInput] = useState('1');
@@ -1494,6 +1508,95 @@ export default function App() {
         type: 'error',
         text: 'Failed to reach FaucetPay payout endpoint.',
       });
+    }
+  };
+
+  const handleAdminAdjustWallet = async (
+    e?: React.FormEvent,
+    overrideOpts?: {
+      targetUser?: string;
+      action?: 'add' | 'minus' | 'set';
+      walletType?: 'available' | 'pending' | 'both';
+      coins?: number;
+      category?: string;
+      note?: string;
+    }
+  ) => {
+    if (e) e.preventDefault();
+    const targetUser = (overrideOpts?.targetUser ?? adjTargetUser ?? user?.id ?? '').trim();
+    const action = overrideOpts?.action ?? adjAction;
+    const walletType = overrideOpts?.walletType ?? adjWalletType;
+    const coins = overrideOpts?.coins !== undefined ? overrideOpts.coins : Number(adjCoins) || 0;
+    const category = overrideOpts?.category ?? adjCategory;
+    const note = overrideOpts?.note !== undefined ? overrideOpts.note : adjNote.trim();
+
+    if (!targetUser) {
+      setAdminStatusBanner({
+        type: 'error',
+        text: 'Please select a player or enter a Player ID / Email first.',
+      });
+      return;
+    }
+    if (action !== 'set' && coins <= 0) {
+      setAdminStatusBanner({
+        type: 'error',
+        text: 'Please enter a valid positive coin amount.',
+      });
+      return;
+    }
+
+    setAdjSubmitting(true);
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/users/adjust-wallet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify({
+          targetUser,
+          action,
+          walletType,
+          coins,
+          category,
+          note,
+          customTxId: adjCustomTxId.trim(),
+          holdDays: Number(adjHoldDays) || 0,
+          showInUserHistory: adjShowInHistory,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: data.message || 'Wallet adjustment applied!',
+        });
+        if (!overrideOpts) {
+          setAdjNote('');
+          setAdjCustomTxId('');
+        }
+        fetchAdminDashboard();
+        if (
+          user &&
+          (user.id.toLowerCase() === targetUser.toLowerCase() ||
+            user.email.toLowerCase() === targetUser.toLowerCase())
+        ) {
+          syncUserWithBackend(user, false, true);
+        }
+      } else {
+        setAdminStatusBanner({
+          type: 'error',
+          text: data?.error || 'Could not adjust player wallet.',
+        });
+      }
+    } catch (err: any) {
+      setAdminStatusBanner({
+        type: 'error',
+        text: `Failed to reach wallet adjustment endpoint: ${err?.message || 'Network error'}`,
+      });
+    } finally {
+      setAdjSubmitting(false);
     }
   };
 
@@ -2443,7 +2546,665 @@ export default function App() {
             </form>
           </div>
 
-          {/* 4. Player Withdrawals Queue & Recent Postbacks */}
+          {/* 3B. Admin Player Wallet & Balance Controller (Add / Minus / Set Coins + Custom Note) */}
+          <div className="card card-glow" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                    4. Player Wallet &amp; Coin Balance Controller (Add / Minus / Custom Note)
+                  </h2>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontSize: 10,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      background: 'rgba(255,180,0,0.14)',
+                      border: '1px solid rgba(255,180,0,0.35)',
+                      color: 'var(--gold)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    DIRECT D1 LEDGER CONTROL
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 4 }}>
+                  Kisi bhi user ke <strong>Available (Withdrawable)</strong> ya <strong>Pending (On-Hold)</strong> wallet me coins <strong>Add (+)</strong>, <strong>Minus (-)</strong>, ya <strong>Exact Set</strong> karein aur custom Transaction Note lagayein.
+                </p>
+              </div>
+            </div>
+
+            {(() => {
+              const matchedAdminUser = adminUsers.find(
+                (u) =>
+                  adjTargetUser &&
+                  (String(u.id || '').toLowerCase() === adjTargetUser.trim().toLowerCase() ||
+                    String(u.email || '').toLowerCase() === adjTargetUser.trim().toLowerCase())
+              );
+              const parsedAdjCoins = Math.max(0, Number(adjCoins) || 0);
+              const previewUsd = (parsedAdjCoins / 100000).toFixed(4);
+              const previewInr = ((parsedAdjCoins * 90) / 100000).toFixed(2);
+
+              return (
+                <form
+                  onSubmit={(e) => handleAdminAdjustWallet(e)}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 16,
+                    padding: 18,
+                    borderRadius: 12,
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  {/* Row 1: Select User from Dropdown OR Enter ID/Email */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        QUICK SELECT REGISTERED PLAYER ({adminUsers.length})
+                      </label>
+                      <select
+                        value={matchedAdminUser ? matchedAdminUser.id : ''}
+                        onChange={(e) => {
+                          if (e.target.value) setAdjTargetUser(e.target.value);
+                        }}
+                        className="font-mono"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--txt)',
+                          fontSize: 12,
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="">-- Choose Player from List --</option>
+                        {adminUsers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.email}) — Avail: {u.available_coins} | Hold: {u.pending_coins}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        TARGET PLAYER ID OR EMAIL *
+                      </label>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          type="text"
+                          value={adjTargetUser}
+                          onChange={(e) => setAdjTargetUser(e.target.value)}
+                          placeholder={user ? `e.g. ${user.id} or ${user.email}` : 'Enter Player ID or Email'}
+                          className="font-mono"
+                          style={{
+                            flex: 1,
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            background: 'var(--bg3)',
+                            border: '1px solid var(--border2)',
+                            color: 'var(--green)',
+                            fontSize: 13,
+                            outline: 'none',
+                          }}
+                        />
+                        {user && (
+                          <button
+                            type="button"
+                            onClick={() => setAdjTargetUser(user.id)}
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '0 10px', fontSize: 11, whiteSpace: 'nowrap' }}
+                            title="Fill my own Player ID"
+                          >
+                            My ID
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Selected Player Live Snapshot Banner */}
+                  {matchedAdminUser && (
+                    <div
+                      style={{
+                        padding: '12px 16px',
+                        borderRadius: 10,
+                        background: 'rgba(0,232,154,0.07)',
+                        border: '1px solid rgba(0,232,154,0.28)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 12,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--txt)' }}>
+                          👤 {matchedAdminUser.name}{' '}
+                          <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                            ({matchedAdminUser.id})
+                          </span>
+                        </div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
+                          Email: {matchedAdminUser.email} • Tasks Done: {matchedAdminUser.offerwalls_completed || 0}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 10, color: 'var(--txt2)', fontWeight: 600 }}>AVAILABLE WALLET</div>
+                          <div className="font-mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>
+                            {Number(matchedAdminUser.available_coins || 0).toLocaleString('en-IN')} Coins ($
+                            {(Number(matchedAdminUser.available_coins || 0) / 100000).toFixed(4)})
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 10, color: 'var(--txt2)', fontWeight: 600 }}>PENDING / HOLD WALLET</div>
+                          <div className="font-mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>
+                            {Number(matchedAdminUser.pending_coins || 0).toLocaleString('en-IN')} Coins
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Row 2: Action Type, Desired Wallet Type, Coins Amount */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        ACTION MODE (ADD / MINUS / SET)
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                        {(
+                          [
+                            { id: 'add', label: '➕ Add', color: 'var(--green)' },
+                            { id: 'minus', label: '➖ Minus', color: 'var(--red)' },
+                            { id: 'set', label: '🎯 Set Exact', color: 'var(--gold)' },
+                          ] as const
+                        ).map((mode) => {
+                          const active = adjAction === mode.id;
+                          return (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() => {
+                                setAdjAction(mode.id);
+                                if (mode.id === 'minus' && adjCategory === 'admin_bonus') {
+                                  setAdjCategory('penalty_deduction');
+                                } else if (mode.id === 'add' && adjCategory === 'penalty_deduction') {
+                                  setAdjCategory('admin_bonus');
+                                }
+                              }}
+                              style={{
+                                padding: '9px 6px',
+                                borderRadius: 8,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                background: active ? 'var(--bg3)' : 'transparent',
+                                border: active ? `1.5px solid ${mode.color}` : '1px solid var(--border)',
+                                color: active ? mode.color : 'var(--txt2)',
+                              }}
+                            >
+                              {mode.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        DESIRED WALLET TYPE *
+                      </label>
+                      <select
+                        value={adjWalletType}
+                        onChange={(e) => setAdjWalletType(e.target.value as 'available' | 'pending' | 'both')}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--txt)',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="available">💰 Available / Withdrawable Wallet</option>
+                        <option value="pending">⏳ Pending / On-Hold Escrow Wallet</option>
+                        <option value="both">🔄 Both Wallets (Available + Pending)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)' }}>
+                          COINS AMOUNT *
+                        </label>
+                        <span className="font-mono" style={{ fontSize: 10.5, color: 'var(--gold)' }}>
+                          = ${previewUsd} / ₹{previewInr}
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        step="any"
+                        min={0}
+                        value={adjCoins}
+                        onChange={(e) => setAdjCoins(e.target.value)}
+                        placeholder="e.g. 500"
+                        className="font-mono"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border2)',
+                          color: adjAction === 'minus' ? 'var(--red)' : 'var(--gold)',
+                          fontSize: 14,
+                          fontWeight: 700,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Coin Presets */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginRight: 4 }}>
+                      Quick Coins:
+                    </span>
+                    {['10', '50', '100', '500', '1000', '2500', '5000', '10000', '50000', '100000'].map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setAdjCoins(val)}
+                        className="font-mono"
+                        style={{
+                          padding: '4px 9px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          background: adjCoins === val ? 'rgba(0,232,154,0.16)' : 'var(--bg3)',
+                          border: adjCoins === val ? '1px solid var(--green)' : '1px solid var(--border)',
+                          color: adjCoins === val ? 'var(--green)' : 'var(--txt2)',
+                        }}
+                      >
+                        {Number(val).toLocaleString('en-IN')}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Row 3: Category Badge, Transaction Note & Extra Info */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        TRANSACTION CATEGORY / BADGE
+                      </label>
+                      <select
+                        value={adjCategory}
+                        onChange={(e) => setAdjCategory(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--txt)',
+                          fontSize: 13,
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="admin_bonus">🎁 Admin Bonus</option>
+                        <option value="manual_credit">⚡ Manual Credit</option>
+                        <option value="offerwall_compensation">🛠️ Offerwall Missing Postback Credit</option>
+                        <option value="contest_prize">🏆 Contest / Giveaway Prize</option>
+                        <option value="promo_reward">💎 Special Promo Reward</option>
+                        <option value="penalty_deduction">⚠️ Admin Penalty / Deduction</option>
+                        <option value="chargeback_adjustment">🔄 Chargeback / Reversal Adjustment</option>
+                        <option value="custom">📌 Custom Adjustment</option>
+                      </select>
+                    </div>
+
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        TRANSACTION NOTE / REASON (VISIBLE IN LEDGER &amp; PLAYER HISTORY)
+                      </label>
+                      <input
+                        type="text"
+                        value={adjNote}
+                        onChange={(e) => setAdjNote(e.target.value)}
+                        placeholder="e.g. Missing PubCrypto / Offerwall.me task reward credited by Admin"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border2)',
+                          color: 'var(--txt)',
+                          fontSize: 13,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Note Templates */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginRight: 4 }}>
+                      Quick Notes:
+                    </span>
+                    {[
+                      'Missing Offerwall Task Reward Credited',
+                      'Special Loyalty & Active Player Bonus',
+                      'Giveaway / Promo Code Winner',
+                      'Referral Milestone Bonus',
+                      'Invalid / Reversed Task Deduction',
+                      'Manual Balance Correction by Admin',
+                    ].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setAdjNote(preset)}
+                        style={{
+                          padding: '4px 9px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          background: adjNote === preset ? 'rgba(255,180,0,0.16)' : 'var(--bg3)',
+                          border: adjNote === preset ? '1px solid var(--gold)' : '1px solid var(--border)',
+                          color: adjNote === preset ? 'var(--gold)' : 'var(--txt2)',
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Row 4: Extra Info (Custom Tx ID, Hold Days if Pending, Visibility Toggle & Submit) */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 14,
+                      paddingTop: 8,
+                      borderTop: '1px solid var(--border)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        value={adjCustomTxId}
+                        onChange={(e) => setAdjCustomTxId(e.target.value)}
+                        placeholder="Optional Custom Tx ID (auto ADM_...)"
+                        className="font-mono"
+                        style={{
+                          width: 220,
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--txt2)',
+                          fontSize: 11,
+                        }}
+                      />
+
+                      {(adjWalletType === 'pending' || adjWalletType === 'both') && adjAction !== 'minus' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                            Hold Days:
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={60}
+                            value={adjHoldDays}
+                            onChange={(e) => setAdjHoldDays(e.target.value)}
+                            className="font-mono"
+                            style={{
+                              width: 64,
+                              padding: '7px 8px',
+                              borderRadius: 8,
+                              background: 'var(--bg3)',
+                              border: '1px solid var(--border)',
+                              color: 'var(--gold)',
+                              fontSize: 12,
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 12,
+                          color: 'var(--txt2)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={adjShowInHistory}
+                          onChange={(e) => setAdjShowInHistory(e.target.checked)}
+                        />
+                        Show Note in Player&apos;s Activity History
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={adjSubmitting}
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        padding: '11px 20px',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        background:
+                          adjAction === 'minus'
+                            ? 'linear-gradient(135deg, #FF5566, #CC2936)'
+                            : adjAction === 'set'
+                            ? 'linear-gradient(135deg, var(--gold), #D49000)'
+                            : undefined,
+                        color: adjAction === 'minus' ? '#FFF' : '#03100A',
+                      }}
+                    >
+                      {adjSubmitting
+                        ? 'Applying...'
+                        : adjAction === 'add'
+                        ? `➕ Add +${parsedAdjCoins.toLocaleString('en-IN')} Coins to ${
+                            adjWalletType === 'pending'
+                              ? 'Pending Wallet'
+                              : adjWalletType === 'both'
+                              ? 'Both Wallets'
+                              : 'Available Wallet'
+                          }`
+                        : adjAction === 'minus'
+                        ? `➖ Deduct -${parsedAdjCoins.toLocaleString('en-IN')} Coins from ${
+                            adjWalletType === 'pending'
+                              ? 'Pending Wallet'
+                              : adjWalletType === 'both'
+                              ? 'Both Wallets'
+                              : 'Available Wallet'
+                          }`
+                        : `🎯 Set ${
+                            adjWalletType === 'pending'
+                              ? 'Pending Wallet'
+                              : adjWalletType === 'both'
+                              ? 'Both Wallets'
+                              : 'Available Wallet'
+                          } = ${parsedAdjCoins.toLocaleString('en-IN')} Coins`}
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
+
+            {/* Registered Players Directory & 1-Click Quick Adjust */}
+            <div style={{ marginTop: 20 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>
+                  👥 Registered Players Directory ({adminUsers.length}) — Click Any Player to Select or Quick Adjust
+                </div>
+                <input
+                  type="text"
+                  value={adminUserSearch}
+                  onChange={(e) => setAdminUserSearch(e.target.value)}
+                  placeholder="🔍 Search by Name, Email or Player ID..."
+                  className="font-mono"
+                  style={{
+                    width: 260,
+                    padding: '7px 12px',
+                    borderRadius: 8,
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--border2)',
+                    color: 'var(--txt)',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              {adminUsers.length === 0 ? (
+                <div
+                  style={{
+                    padding: 20,
+                    textAlign: 'center',
+                    borderRadius: 10,
+                    background: 'var(--bg2)',
+                    color: 'var(--txt2)',
+                    fontSize: 12,
+                  }}
+                >
+                  No players loaded yet. Click &quot;🔄 Refresh Database&quot; at the top.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
+                  {adminUsers
+                    .filter((u) => {
+                      const q = adminUserSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return (
+                        String(u.name || '').toLowerCase().includes(q) ||
+                        String(u.email || '').toLowerCase().includes(q) ||
+                        String(u.id || '').toLowerCase().includes(q)
+                      );
+                    })
+                    .map((u) => {
+                      const isSelected =
+                        adjTargetUser.trim().toLowerCase() === String(u.id || '').toLowerCase() ||
+                        adjTargetUser.trim().toLowerCase() === String(u.email || '').toLowerCase();
+                      return (
+                        <div
+                          key={u.id}
+                          style={{
+                            padding: '10px 14px',
+                            borderRadius: 10,
+                            background: isSelected ? 'rgba(0,232,154,0.08)' : 'var(--bg2)',
+                            border: isSelected ? '1px solid var(--green)' : '1px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 10,
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--txt)' }}>
+                              {u.name}{' '}
+                              <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                                ({u.id})
+                              </span>
+                            </div>
+                            <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                              {u.email} • Tasks: {u.offerwalls_completed || 0}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            <div className="font-mono" style={{ fontSize: 12, textAlign: 'right' }}>
+                              <span style={{ color: 'var(--green)', fontWeight: 700 }}>
+                                Avail: {Number(u.available_coins || 0).toLocaleString('en-IN')}
+                              </span>
+                              {' • '}
+                              <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
+                                Hold: {Number(u.pending_coins || 0).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => setAdjTargetUser(u.id)}
+                                className="btn btn-outline btn-sm"
+                                style={{ padding: '5px 10px', fontSize: 11 }}
+                              >
+                                {isSelected ? '✓ Selected' : '🎯 Select'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAdminAdjustWallet(undefined, {
+                                    targetUser: u.id,
+                                    action: 'add',
+                                    walletType: 'available',
+                                    coins: 100,
+                                    category: 'admin_bonus',
+                                    note: 'Quick +100 Coins Admin Credit',
+                                  })
+                                }
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: '5px 8px', fontSize: 11, color: 'var(--green)' }}
+                                title="Instant +100 Available Coins"
+                              >
+                                +100
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAdminAdjustWallet(undefined, {
+                                    targetUser: u.id,
+                                    action: 'minus',
+                                    walletType: 'available',
+                                    coins: 100,
+                                    category: 'penalty_deduction',
+                                    note: 'Quick -100 Coins Admin Deduction',
+                                  })
+                                }
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: '5px 8px', fontSize: 11, color: 'var(--red)' }}
+                                title="Instant -100 Available Coins"
+                              >
+                                -100
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 5. Player Withdrawals Queue & Recent Postbacks */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
             <div className="card" style={{ padding: 24 }}>
               <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
@@ -2664,7 +3425,7 @@ export default function App() {
       crypto: 'FaucetPay (USDT - 0% Fee)',
       upi: 'UPI Direct Transfer (₹)',
       bank: 'Bank Transfer (IMPS)',
-      gift_card: 'Gift Card Voucher',
+      gift_card: `${giftCardBrand} Gift Card`,
     };
 
     let coinsNum = 0;
@@ -2684,6 +3445,14 @@ export default function App() {
       inrVal = inrParsed;
       coinsNum = inrParsed * 1100; // 100 coins extra for every amount (1₹ = 1100 coins, 2₹ = 2200, etc.)
       usdVal = Number((coinsNum / 100000).toFixed(4));
+    } else if (payoutChannel === 'gift_card') {
+      coinsNum = Math.floor(Number(payoutCoins) || 0);
+      if (coinsNum < 1000) {
+        setPayoutMessage({ type: 'error', text: 'Please enter a valid Gift Card coin amount.' });
+        return;
+      }
+      inrVal = Number(((coinsNum * 90) / 100000).toFixed(2));
+      usdVal = Number((coinsNum / 100000).toFixed(2));
     } else {
       coinsNum = Math.floor(Number(payoutCoins) || 0);
       if (coinsNum < 100000) {
@@ -2704,7 +3473,12 @@ export default function App() {
     if (!payoutDestination.trim()) {
       setPayoutMessage({
         type: 'error',
-        text: payoutChannel === 'upi' ? 'Please enter your UPI ID.' : 'Please enter your FaucetPay Email or USDT Address.',
+        text:
+          payoutChannel === 'upi'
+            ? 'Please enter your UPI ID.'
+            : payoutChannel === 'gift_card'
+            ? 'Please enter the Email Address where you want to receive your Gift Card code.'
+            : 'Please enter your FaucetPay Email or USDT Address.',
       });
       return;
     }
@@ -3266,6 +4040,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {(user.heldRewards || []).slice(0, 15).map((item) => {
                     const isHeld = item.status === 'pending_hold';
+                    const isDeducted = Number(item.coins) < 0 || item.status === 'deducted';
                     return (
                       <div
                         key={`ov_task_${item.id}`}
@@ -3275,7 +4050,11 @@ export default function App() {
                           justifyContent: 'space-between',
                           padding: '14px 16px',
                           background: 'var(--bg2)',
-                          border: isHeld ? '1px solid rgba(255,180,0,0.28)' : '1px solid rgba(0,232,154,0.22)',
+                          border: isDeducted
+                            ? '1px solid rgba(255,85,102,0.32)'
+                            : isHeld
+                            ? '1px solid rgba(255,180,0,0.28)'
+                            : '1px solid rgba(0,232,154,0.22)',
                           borderRadius: 10,
                           flexWrap: 'wrap',
                           gap: 10,
@@ -3286,15 +4065,19 @@ export default function App() {
                             {item.title}
                           </div>
                           <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                            Earned: {formatIstDate(item.createdAt)}
+                            Date: {formatIstDate(item.createdAt)}
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span
                             className="font-mono"
-                            style={{ fontSize: 13, fontWeight: 700, color: isHeld ? 'var(--gold)' : 'var(--green)' }}
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
+                            }}
                           >
-                            +{item.coins} Coins (₹{item.amountInr})
+                            {Number(item.coins) >= 0 ? `+${item.coins}` : item.coins} Coins (₹{item.amountInr})
                           </span>
                           <span
                             className="font-mono"
@@ -3302,12 +4085,16 @@ export default function App() {
                               fontSize: 10,
                               padding: '4px 8px',
                               borderRadius: 6,
-                              background: isHeld ? 'rgba(255,180,0,0.12)' : 'rgba(0,232,154,0.12)',
-                              color: isHeld ? 'var(--gold)' : 'var(--green)',
+                              background: isDeducted
+                                ? 'rgba(255,85,102,0.12)'
+                                : isHeld
+                                ? 'rgba(255,180,0,0.12)'
+                                : 'rgba(0,232,154,0.12)',
+                              color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
                               fontWeight: 700,
                             }}
                           >
-                            {isHeld ? '⏳ ON HOLD' : '✅ CREDITED'}
+                            {isDeducted ? '⚠️ DEDUCTED' : isHeld ? '⏳ ON HOLD' : '✅ CREDITED'}
                           </span>
                         </div>
                       </div>
@@ -4336,7 +5123,7 @@ export default function App() {
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.04em', marginBottom: 8 }}>
                       SELECT PAYOUT METHOD
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
                       <button
                         type="button"
                         onClick={() => {
@@ -4355,7 +5142,7 @@ export default function App() {
                         }}
                       >
                         <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span>🪙 FaucetPay (USDT)</span>
+                          <span>🪙 FaucetPay</span>
                         </div>
                         <div style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 3 }}>
                           0% Fee • ⚡ Instant &lt;= $0.01
@@ -4389,38 +5176,28 @@ export default function App() {
 
                       <button
                         type="button"
-                        onClick={() => setPayoutChannel('bank')}
+                        onClick={() => {
+                          setPayoutChannel('gift_card');
+                          if (!payoutDestination) setPayoutDestination(user.email);
+                          setPayoutCoins('10000');
+                        }}
                         style={{
-                          padding: '10px 10px',
+                          padding: '12px 10px',
                           borderRadius: 10,
                           textAlign: 'left',
                           cursor: 'pointer',
-                          background: payoutChannel === 'bank' ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
-                          border: payoutChannel === 'bank' ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                          color: payoutChannel === 'bank' ? 'var(--green)' : 'var(--txt2)',
+                          background: payoutChannel === 'gift_card' ? 'rgba(139,92,246,0.14)' : 'var(--bg2)',
+                          border: payoutChannel === 'gift_card' ? '1.5px solid var(--violet)' : '1px solid var(--border)',
+                          color: payoutChannel === 'gift_card' ? 'var(--violet)' : 'var(--txt)',
                           transition: 'all 0.2s',
                         }}
                       >
-                        <div style={{ fontSize: 12, fontWeight: 600 }}>🏦 Bank IMPS</div>
-                        <div style={{ fontSize: 10, color: 'var(--txt2)' }}>Min ₹90 (100k Coins)</div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPayoutChannel('gift_card')}
-                        style={{
-                          padding: '10px 10px',
-                          borderRadius: 10,
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          background: payoutChannel === 'gift_card' ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
-                          border: payoutChannel === 'gift_card' ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                          color: payoutChannel === 'gift_card' ? 'var(--green)' : 'var(--txt2)',
-                          transition: 'all 0.2s',
-                        }}
-                      >
-                        <div style={{ fontSize: 12, fontWeight: 600 }}>🎁 Gift Vouchers</div>
-                        <div style={{ fontSize: 10, color: 'var(--txt2)' }}>Min ₹90 (100k Coins)</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>🎁 Gift Card</span>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 3 }}>
+                          Google Play • Amazon • Flipkart
+                        </div>
                       </button>
                     </div>
                   </div>
@@ -4442,7 +5219,7 @@ export default function App() {
                       <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 11.5, color: 'var(--txt2)' }}>
                         <li><strong>Zero Transaction Fees:</strong> You receive 100% of your earnings.</li>
                         <li><strong>Minimum:</strong> Just <strong>100 Coins ($0.001 USDT)</strong>.</li>
-                        <li><strong>⚡ Instant Transfer:</strong> Transactions up to <strong>1,000 Coins ($0.01 USDT)</strong> transfer automatically via FaucetPay Merchant API.</li>
+                        <li><strong>⚡ Instant Transfer:</strong> Transactions up to <strong>1,000 Coins ($0.01 USDT)</strong> transfer automatically via FaucetPay API.</li>
                         <li><strong>🛡️ Admin Review:</strong> Above 1,000 Coins ($0.01 USDT), transfers are reviewed and sent via 1-click API approval.</li>
                       </ul>
                     </div>
@@ -4465,7 +5242,55 @@ export default function App() {
                         <li><strong>Direct to VPA:</strong> Direct bank credit to your GooglePay, PhonePe, Paytm, or BHIM UPI ID.</li>
                       </ul>
                     </div>
-                  ) : null}
+                  ) : (
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        background: 'rgba(139,92,246,0.08)',
+                        border: '1px solid rgba(139,92,246,0.3)',
+                        fontSize: 12,
+                        color: 'var(--txt)',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong style={{ color: 'var(--violet)' }}>🎁 GIFT CARD VOUCHERS:</strong>
+                      <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 11.5, color: 'var(--txt2)' }}>
+                        <li><strong>Available Brands:</strong> Google Play Recharge Code, Amazon Pay Gift Card, Flipkart Voucher.</li>
+                        <li><strong>Delivery:</strong> Redeem code delivered directly to your email address.</li>
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Gift Card Brand Selector when gift_card is active */}
+                  {payoutChannel === 'gift_card' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
+                        SELECT GIFT CARD BRAND
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                        {(['Google Play', 'Amazon Pay', 'Flipkart'] as const).map((brand) => (
+                          <button
+                            key={brand}
+                            type="button"
+                            onClick={() => setGiftCardBrand(brand)}
+                            style={{
+                              padding: '9px 8px',
+                              borderRadius: 8,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              background: giftCardBrand === brand ? 'rgba(139,92,246,0.18)' : 'var(--bg3)',
+                              border: giftCardBrand === brand ? '1.5px solid var(--violet)' : '1px solid var(--border)',
+                              color: giftCardBrand === brand ? 'var(--txt)' : 'var(--txt2)',
+                            }}
+                          >
+                            {brand === 'Google Play' ? '▶️ Google Play' : brand === 'Amazon Pay' ? '🛒 Amazon Pay' : '🛍️ Flipkart'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Destination Input */}
                   <div>
@@ -4474,9 +5299,7 @@ export default function App() {
                         ? 'FAUCETPAY LINKED EMAIL OR USDT WALLET ADDRESS'
                         : payoutChannel === 'upi'
                         ? 'UPI ID / VPA (e.g. name@okaxis, 9876543210@paytm)'
-                        : payoutChannel === 'bank'
-                        ? 'ACCOUNT NUMBER & IFSC CODE'
-                        : 'VOUCHER DELIVERY EMAIL ADDRESS'}
+                        : `${giftCardBrand.toUpperCase()} VOUCHER DELIVERY EMAIL ADDRESS`}
                     </label>
                     <input
                       type="text"
@@ -4487,8 +5310,6 @@ export default function App() {
                           ? 'Enter FaucetPay email or TRC20/BEP20/Polygon address'
                           : payoutChannel === 'upi'
                           ? 'yourname@okhdfcbank or 9876543210@paytm'
-                          : payoutChannel === 'bank'
-                          ? 'Account No & IFSC Code'
                           : user.email
                       }
                       style={{
@@ -4653,12 +5474,17 @@ export default function App() {
                     </div>
                   ) : (
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginBottom: 6 }}>
-                        COINS TO WITHDRAW (MIN 100,000 COINS = ₹90 / $1.00)
-                      </label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)' }}>
+                          COINS FOR {giftCardBrand.toUpperCase()} GIFT CARD
+                        </label>
+                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--violet)' }}>
+                          🎁 Redeem Code via Email
+                        </span>
+                      </div>
                       <input
                         type="number"
-                        min={100000}
+                        min={1000}
                         step={1000}
                         value={payoutCoins}
                         onChange={(e) => setPayoutCoins(e.target.value)}
@@ -4675,10 +5501,37 @@ export default function App() {
                           outline: 'none',
                         }}
                       />
-                      <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 6 }}>
-                        Payout Value:{' '}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                        {[
+                          { coins: '11000', label: '₹10 Voucher' },
+                          { coins: '27500', label: '₹25 Voucher' },
+                          { coins: '55000', label: '₹50 Voucher' },
+                          { coins: '110000', label: '₹100 Voucher' },
+                        ].map((btn) => (
+                          <button
+                            key={btn.coins}
+                            type="button"
+                            onClick={() => setPayoutCoins(btn.coins)}
+                            style={{
+                              padding: '5px 9px',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              background: payoutCoins === btn.coins ? 'rgba(139,92,246,0.18)' : 'var(--bg3)',
+                              border: payoutCoins === btn.coins ? '1px solid var(--violet)' : '1px solid var(--border)',
+                              color: payoutCoins === btn.coins ? 'var(--txt)' : 'var(--txt2)',
+                            }}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 8 }}>
+                        Voucher Value:{' '}
                         <strong className="font-mono" style={{ color: 'var(--green)' }}>
-                          ₹{(((Math.max(0, Number(payoutCoins) || 0)) * 90) / 100000).toFixed(2)} INR (${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(2)} USD)
+                          ₹{(((Math.max(0, Number(payoutCoins) || 0)) * 90) / 100000).toFixed(2)} INR
                         </strong>
                       </div>
                     </div>
@@ -4720,7 +5573,7 @@ export default function App() {
                         : `Request FaucetPay Transfer ($${((Math.max(0, Number(payoutCoins) || 0)) / 100000).toFixed(4)} USDT) →`
                       : payoutChannel === 'upi'
                       ? `Request ₹${Math.max(1, Math.floor(Number(upiInrInput) || 1))} UPI Transfer (${(Math.max(1, Math.floor(Number(upiInrInput) || 1)) * 1100).toLocaleString('en-IN')} Coins) →`
-                      : 'Request Cashout →'}
+                      : `🎁 Claim ${giftCardBrand} Gift Card →`}
                   </button>
                 </form>
               </div>
@@ -4762,13 +5615,16 @@ export default function App() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {user.heldRewards.map((item) => {
                         const isHeld = item.status === 'pending_hold';
+                        const isDeducted = Number(item.coins) < 0 || item.status === 'deducted';
                         return (
                           <div
                             key={item.id}
                             style={{
                               padding: '12px 14px',
                               background: 'var(--bg2)',
-                              border: isHeld
+                              border: isDeducted
+                                ? '1px solid rgba(255,85,102,0.32)'
+                                : isHeld
                                 ? '1px solid rgba(255,180,0,0.28)'
                                 : '1px solid rgba(0,232,154,0.22)',
                               borderRadius: 10,
@@ -4784,7 +5640,7 @@ export default function App() {
                                 {item.title}
                               </div>
                               <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>
-                                Earned: {formatIstDate(item.createdAt)}
+                                Date: {formatIstDate(item.createdAt)}
                                 {isHeld && item.unlocksAt ? ` • Auto-Release: ${formatIstDate(item.unlocksAt)}` : ''}
                               </div>
                             </div>
@@ -4794,10 +5650,10 @@ export default function App() {
                                 style={{
                                   fontSize: 13,
                                   fontWeight: 700,
-                                  color: isHeld ? 'var(--gold)' : 'var(--green)',
+                                  color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
                                 }}
                               >
-                                +{item.coins} Coins (₹{item.amountInr})
+                                {Number(item.coins) >= 0 ? `+${item.coins}` : item.coins} Coins (₹{item.amountInr})
                               </span>
                               <span
                                 className="font-mono"
@@ -4805,14 +5661,16 @@ export default function App() {
                                   fontSize: 10,
                                   padding: '3px 7px',
                                   borderRadius: 6,
-                                  background: isHeld
+                                  background: isDeducted
+                                    ? 'rgba(255,85,102,0.12)'
+                                    : isHeld
                                     ? 'rgba(255,180,0,0.12)'
                                     : 'rgba(0,232,154,0.12)',
-                                  color: isHeld ? 'var(--gold)' : 'var(--green)',
+                                  color: isDeducted ? 'var(--red)' : isHeld ? 'var(--gold)' : 'var(--green)',
                                   fontWeight: 700,
                                 }}
                               >
-                                {isHeld ? '⏳ ON HOLD' : '✅ WITHDRAWABLE'}
+                                {isDeducted ? '⚠️ DEDUCTED' : isHeld ? '⏳ ON HOLD' : '✅ WITHDRAWABLE'}
                               </span>
                             </div>
                           </div>

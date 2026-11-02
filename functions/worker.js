@@ -1040,7 +1040,7 @@ async function formatPlayerPayload(db, userRow) {
 
   const heldRes = await db
     .prepare(
-      "SELECT id, external_tx_id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type = 'offerwall' AND status IN ('pending_hold', 'credited') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
+      "SELECT id, external_tx_id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type IN ('offerwall', 'admin_adjustment') AND status IN ('pending_hold', 'credited', 'deducted') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
     )
     .bind(userRow.id)
     .all();
@@ -1059,7 +1059,7 @@ async function formatPlayerPayload(db, userRow) {
   const creditedTxIdsSet = new Set();
   const heldRewards = ((heldRes && heldRes.results) || [])
     .map((h) => {
-      const c = Number(Math.max(0, Number(h.amount_coins) || 0).toFixed(2));
+      const c = Number((Number(h.amount_coins) || 0).toFixed(2));
       const rawCreated = String(h.created_at || "").trim();
       const normalizedCreated =
         /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(rawCreated)
@@ -1072,7 +1072,7 @@ async function formatPlayerPayload(db, userRow) {
         title: h.title || "Offerwall Task",
         coins: c,
         amountInr: Number(((c * 90) / 100000).toFixed(4)),
-        status: h.status || "pending_hold",
+        status: c < 0 ? "deducted" : h.status || "pending_hold",
         createdAt: normalizedCreated,
         unlocksAt: h.unlocks_at ? String(h.unlocks_at) : null,
       };
@@ -1990,8 +1990,23 @@ export default {
               { status: 400, headers: corsHeaders }
             );
           }
+        } else if (method === "gift_card") {
+          if (coinsToDeduct < 1000) {
+            return Response.json(
+              { error: "Please enter a valid Gift Card coin amount." },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          if (userAvail < coinsToDeduct) {
+            return Response.json(
+              { error: `Insufficient available coins. Your available balance is ${userAvail} Coins.` },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          amountInr = Number(((coinsToDeduct * 90) / 100000).toFixed(2));
+          amountUsd = Number((coinsToDeduct / 100000).toFixed(4));
         } else {
-          // Other channels (Bank, Gift Cards): Min 100,000 Coins
+          // Other channels: Min 100,000 Coins
           if (coinsToDeduct < 100000) {
             return Response.json(
               { error: "Minimum withdrawal for this channel is 100,000 Coins ($1.00 USD / ₹90.00 INR)." },
@@ -2792,7 +2807,7 @@ export default {
             "SELECT * FROM withdrawals ORDER BY created_at DESC LIMIT 100"
           ).all();
           const postbacksRes = await env.DB.prepare(
-            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'chargeback_reversal', 'debug_postback', 'verified_ping') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
+            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'chargeback_reversal', 'debug_postback', 'verified_ping', 'admin_adjustment', 'admin_silent') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
           ).all();
           const offerwallsRes = await env.DB.prepare(
             "SELECT * FROM offerwall_configs ORDER BY rowid ASC"
@@ -3049,6 +3064,185 @@ export default {
               ok: true,
               releasedCount,
               releasedCoinsTotal,
+            },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+
+        // Admin Manual Wallet Controller: Add / Minus / Set Coins on Desired User & Wallet Type with Custom Note
+        if (url.pathname === "/api/admin/users/adjust-wallet" && request.method === "POST") {
+          const body = await request.json();
+          const targetRaw = String(body.targetUser || body.userId || body.email || "").trim();
+          const action = String(body.action || "add").trim().toLowerCase(); // 'add' | 'minus' | 'set'
+          const walletType = String(body.walletType || "available").trim().toLowerCase(); // 'available' | 'pending' | 'both'
+          const rawCoins = Math.abs(Number(body.coins) || 0);
+          const category = String(body.category || "admin_bonus").trim();
+          const customNote = String(body.note || "").trim();
+          const customTxId = String(body.customTxId || "").trim();
+          const holdDays = Math.max(0, parseInt(String(body.holdDays ?? "7"), 10) || 0);
+          const showInUserHistory = body.showInUserHistory !== false;
+
+          if (!targetRaw) {
+            return Response.json(
+              { error: "Target Player ID or Email is required." },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          if (action !== "set" && rawCoins <= 0) {
+            return Response.json(
+              { error: "Please enter a valid positive coin amount." },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          let user = await env.DB.prepare(
+            "SELECT * FROM users WHERE LOWER(id) = LOWER(?) OR LOWER(email) = LOWER(?)"
+          )
+            .bind(targetRaw, targetRaw.toLowerCase())
+            .first();
+
+          if (!user) {
+            const isEmail = targetRaw.includes("@");
+            const newId = isEmail ? generatePlayerIdFromEmail(targetRaw) : targetRaw;
+            const newEmail = isEmail ? targetRaw.toLowerCase() : `${targetRaw}@lootify.local`;
+            const newName = isEmail ? targetRaw.split("@")[0] : `Player ${targetRaw.slice(0, 8)}`;
+            const refCode = "LOOT" + Math.floor(100 + Math.random() * 900);
+            await env.DB.prepare(
+              `INSERT INTO users (
+                id, name, email, role, referral_code, available_coins, pending_coins, lifetime_earned_coins
+              ) VALUES (?, ?, ?, 'earner', ?, 0, 0, 0)`
+            )
+              .bind(newId, newName, newEmail, refCode)
+              .run();
+            user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(newId).first();
+          }
+
+          // Ensure available_coins is synced with ledger before calculating delta
+          await formatPlayerPayload(env.DB, user);
+          user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(user.id).first();
+
+          const prevAvail = Number(user.available_coins) || 0;
+          const prevPending = Number(user.pending_coins) || 0;
+          let deltaAvail = 0;
+          let deltaPending = 0;
+
+          if (walletType === "available" || walletType === "both") {
+            if (action === "add") {
+              deltaAvail = Number(rawCoins.toFixed(2));
+            } else if (action === "minus") {
+              deltaAvail = -Number(Math.min(prevAvail, rawCoins).toFixed(2));
+            } else if (action === "set") {
+              deltaAvail = Number((rawCoins - prevAvail).toFixed(2));
+            }
+          }
+
+          if (walletType === "pending" || walletType === "both") {
+            if (action === "add") {
+              deltaPending = Number(rawCoins.toFixed(2));
+            } else if (action === "minus") {
+              deltaPending = -Number(Math.min(prevPending, rawCoins).toFixed(2));
+            } else if (action === "set") {
+              deltaPending = Number((rawCoins - prevPending).toFixed(2));
+            }
+          }
+
+          const categoryLabels = {
+            admin_bonus: "🎁 Admin Bonus",
+            manual_credit: "⚡ Manual Credit",
+            offerwall_compensation: "🛠️ Offerwall Compensation",
+            contest_prize: "🏆 Contest / Giveaway Prize",
+            promo_reward: "💎 Special Promo Reward",
+            penalty_deduction: "⚠️ Admin Penalty / Deduction",
+            chargeback_adjustment: "🔄 Chargeback Adjustment",
+            custom: "📌 Admin Adjustment",
+          };
+          const badgePrefix = categoryLabels[category] || "📌 Admin Adjustment";
+          const walletLabel =
+            walletType === "pending"
+              ? "Pending/Hold Wallet"
+              : walletType === "both"
+              ? "Available + Pending Wallets"
+              : "Available Wallet";
+          const effectiveDelta = walletType === "pending" ? deltaPending : deltaAvail;
+          const defaultNote =
+            effectiveDelta >= 0
+              ? `Added +${Math.abs(effectiveDelta)} Coins to ${walletLabel}`
+              : `Deducted ${effectiveDelta} Coins from ${walletLabel}`;
+          const finalTitle = customNote
+            ? `${badgePrefix}: ${customNote}`
+            : `${badgePrefix} — ${defaultNote}`;
+          const txRef = customTxId || `ADM_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          const nowIso = new Date().toISOString();
+          const sourceType = showInUserHistory ? "admin_adjustment" : "admin_silent";
+
+          if ((walletType === "available" || walletType === "both") && deltaAvail !== 0) {
+            await env.DB.prepare(
+              "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'credited', ?, ?)"
+            )
+              .bind(
+                "ldg_adm_av_" + Date.now(),
+                user.id,
+                user.name,
+                sourceType,
+                finalTitle,
+                deltaAvail,
+                txRef,
+                nowIso
+              )
+              .run();
+
+            await env.DB.prepare(
+              "UPDATE users SET available_coins = MAX(0, ROUND(available_coins + ?, 2)), lifetime_earned_coins = MAX(0, ROUND(lifetime_earned_coins + ?, 2)) WHERE id = ?"
+            )
+              .bind(deltaAvail, deltaAvail > 0 ? deltaAvail : 0, user.id)
+              .run();
+          }
+
+          if ((walletType === "pending" || walletType === "both") && deltaPending !== 0) {
+            const unlocksAt =
+              deltaPending > 0 && holdDays > 0
+                ? new Date(Date.now() + holdDays * 86400000).toISOString()
+                : null;
+            await env.DB.prepare(
+              "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, unlocks_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+              .bind(
+                "ldg_adm_pd_" + Date.now(),
+                user.id,
+                user.name,
+                sourceType,
+                finalTitle,
+                deltaPending,
+                deltaPending >= 0 ? "pending_hold" : "deducted",
+                txRef + "_pd",
+                unlocksAt,
+                nowIso
+              )
+              .run();
+
+            await env.DB.prepare(
+              "UPDATE users SET pending_coins = MAX(0, ROUND(pending_coins + ?, 2)), lifetime_earned_coins = MAX(0, ROUND(lifetime_earned_coins + ?, 2)) WHERE id = ?"
+            )
+              .bind(deltaPending, deltaPending > 0 ? deltaPending : 0, user.id)
+              .run();
+          }
+
+          const updatedUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+            .bind(user.id)
+            .first();
+
+          return Response.json(
+            {
+              ok: true,
+              message: `${
+                effectiveDelta >= 0 ? `✅ +${effectiveDelta}` : `⚠️ ${effectiveDelta}`
+              } Coins applied to ${updatedUser.email} (${updatedUser.id}) [${walletLabel}]! New Balance: ${
+                updatedUser.available_coins
+              } Available / ${updatedUser.pending_coins} Pending.`,
+              user: updatedUser,
+              txId: txRef,
+              deltaAvail,
+              deltaPending,
             },
             { status: 200, headers: corsHeaders }
           );
