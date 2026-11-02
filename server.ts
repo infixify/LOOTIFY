@@ -282,11 +282,124 @@ interface ServerOfferwallConfig {
   postback_macro_query: string;
 }
 
+interface ServerShortlinkConfig {
+  id: string;
+  name: string;
+  provider: string;
+  url: string;
+  reward_coins: number;
+  daily_limit: number;
+  timer_seconds: number;
+  difficulty: 'Easy' | 'Medium' | 'Fast';
+  badge: string;
+  enabled: number;
+}
+
+const DEFAULT_SHORTLINKS: ServerShortlinkConfig[] = [
+  {
+    id: 'shrinkme_vip',
+    name: 'ShrinkMe VIP Link',
+    provider: 'ShrinkMe.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=shrinkme_vip',
+    reward_coins: 120,
+    daily_limit: 3,
+    timer_seconds: 15,
+    difficulty: 'Medium',
+    badge: '🔥 Highest Paying • 3 Steps',
+    enabled: 1,
+  },
+  {
+    id: 'cuty_crypto',
+    name: 'Cuty.io Fast Crypto Link',
+    provider: 'Cuty.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=cuty_crypto',
+    reward_coins: 100,
+    daily_limit: 5,
+    timer_seconds: 12,
+    difficulty: 'Easy',
+    badge: '⚡ Instant Credit • 2 Steps',
+    enabled: 1,
+  },
+  {
+    id: 'exeio_global',
+    name: 'Exe.io Premium Shortlink',
+    provider: 'Exe.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=exeio_global',
+    reward_coins: 110,
+    daily_limit: 3,
+    timer_seconds: 15,
+    difficulty: 'Medium',
+    badge: '💎 High CPM • 3 Steps',
+    enabled: 1,
+  },
+  {
+    id: 'gplinks_india',
+    name: 'GPLinks Express',
+    provider: 'GPLinks',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=gplinks_india',
+    reward_coins: 100,
+    daily_limit: 4,
+    timer_seconds: 15,
+    difficulty: 'Medium',
+    badge: '🇮🇳 Top India CPM • 3 Steps',
+    enabled: 1,
+  },
+  {
+    id: 'clicksfly_turbo',
+    name: 'Clicksfly Turbo Link',
+    provider: 'Clicksfly',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=clicksfly_turbo',
+    reward_coins: 90,
+    daily_limit: 4,
+    timer_seconds: 12,
+    difficulty: 'Easy',
+    badge: '🚀 Fast Timer • 2 Steps',
+    enabled: 1,
+  },
+  {
+    id: 'droplink_fast',
+    name: 'Droplink Quick Claim',
+    provider: 'Droplink',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=droplink_fast',
+    reward_coins: 80,
+    daily_limit: 5,
+    timer_seconds: 10,
+    difficulty: 'Fast',
+    badge: '⚡ Clean 1-Step Ad',
+    enabled: 1,
+  },
+  {
+    id: 'ouo_express',
+    name: 'Ouo.io Global Shortlink',
+    provider: 'Ouo.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=ouo_express',
+    reward_coins: 75,
+    daily_limit: 5,
+    timer_seconds: 10,
+    difficulty: 'Fast',
+    badge: '🌍 Global Fast Link',
+    enabled: 1,
+  },
+  {
+    id: 'linkvertise_pro',
+    name: 'Linkvertise Direct Boost',
+    provider: 'Linkvertise',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=linkvertise_pro',
+    reward_coins: 150,
+    daily_limit: 2,
+    timer_seconds: 15,
+    difficulty: 'Easy',
+    badge: '👑 Premium Advertiser',
+    enabled: 1,
+  },
+];
+
 interface ServerDB {
   users: ServerUser[];
   withdrawals: ServerWithdrawal[];
   postbacks: ServerPostbackLog[];
   offerwalls: ServerOfferwallConfig[];
+  shortlinks: ServerShortlinkConfig[];
 }
 
 function loadDB(): ServerDB {
@@ -300,11 +413,16 @@ function loadDB(): ServerDB {
       if (!rawWalls.some((w) => w.provider_id === 'pubcrypto')) {
         rawWalls.push({ ...DEFAULT_PUBCRYPTO_CONFIG });
       }
+      const rawShortlinks: ServerShortlinkConfig[] =
+        Array.isArray(parsed.shortlinks) && parsed.shortlinks.length > 0
+          ? parsed.shortlinks
+          : DEFAULT_SHORTLINKS.map((s) => ({ ...s }));
       return {
         users: Array.isArray(parsed.users) ? parsed.users : [],
         withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : [],
         postbacks: Array.isArray(parsed.postbacks) ? parsed.postbacks : [],
         offerwalls: rawWalls,
+        shortlinks: rawShortlinks,
       };
     }
   } catch {
@@ -315,6 +433,7 @@ function loadDB(): ServerDB {
     withdrawals: [],
     postbacks: [],
     offerwalls: [{ ...DEFAULT_OFFERWALLME_CONFIG }, { ...DEFAULT_PUBCRYPTO_CONFIG }],
+    shortlinks: DEFAULT_SHORTLINKS.map((s) => ({ ...s })),
   };
 }
 
@@ -355,7 +474,9 @@ function buildPlayerResponse(db: ServerDB, u: ServerUser) {
     .filter(
       (p) =>
         p.user_id === u.id &&
-        (p.source_type === 'offerwall' || p.source_type === 'admin_adjustment') &&
+        (p.source_type === 'offerwall' ||
+          p.source_type === 'shortlink' ||
+          p.source_type === 'admin_adjustment') &&
         (p.status === 'pending_hold' || p.status === 'credited' || p.status === 'deducted')
     )
     .map((h) => {
@@ -661,13 +782,13 @@ async function startServer() {
 
     const claimsSoFar = Number(user.faucetClaimsCount) || 0;
     const offerwallsDone = db.postbacks.filter(
-      (p) => p.user_id === user.id && p.source_type === 'offerwall'
+      (p) => p.user_id === user.id && (p.source_type === 'offerwall' || p.source_type === 'shortlink')
     ).length;
     const maxAllowedRolls = 2 + offerwallsDone * 3;
     if (claimsSoFar >= maxAllowedRolls) {
       res.status(403).json({
         error:
-          '⚡ Faucet Energy Recharged via Offerwalls! Complete 1 quick task, PTC ad, or shortlink on Offerwall.me to unlock 3 more Free Faucet Rolls!',
+          '⚡ Faucet Energy Recharged via Offerwalls & Shortlinks! Complete 1 quick task, PTC ad, or shortlink to unlock 3 more Free Faucet Rolls!',
         requiresOfferwall: true,
       });
       return;
@@ -706,8 +827,133 @@ async function startServer() {
       rollNumber,
       rewardCoins,
       payoutMode: 'wallet',
-      notice: `+${rewardCoins} Coin(s) added to your Lootify Wallet! Complete Offerwall tasks to earn up to 3,000 Coins instantly.`,
+      notice: `+${rewardCoins} Coin(s) added to your Lootify Wallet! Complete Offerwall tasks or Shortlinks to earn up to 3,000 Coins instantly.`,
       user: buildPlayerResponse(db, user),
+    });
+  });
+
+  // ======================================================================
+  // SHORTLINKS EARNING SECTION (GET /api/shortlinks & POST /api/shortlinks/claim)
+  // ======================================================================
+  app.get('/api/shortlinks', (req, res) => {
+    const db = loadDB();
+    const reqUserId = String(req.query.user_id || req.headers['x-user-id'] || '').trim();
+    const todayPrefix = new Date().toISOString().slice(0, 10);
+
+    const list = db.shortlinks.map((s) => {
+      let claimsToday = 0;
+      if (reqUserId) {
+        claimsToday = db.postbacks.filter(
+          (p) =>
+            p.user_id.toLowerCase() === reqUserId.toLowerCase() &&
+            p.source_type === 'shortlink' &&
+            String(p.external_tx_id || '').startsWith(`sl_${s.id}_${todayPrefix}_`)
+        ).length;
+      }
+      return {
+        ...s,
+        claims_today: claimsToday,
+      };
+    });
+
+    res.json({ ok: true, shortlinks: list });
+  });
+
+  app.post('/api/shortlinks/claim', (req, res) => {
+    const db = loadDB();
+    const body = req.body || {};
+    const userId = String(body.userId || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const shortlinkId = String(body.shortlinkId || '').trim();
+
+    if (!shortlinkId) {
+      res.status(400).json({ error: 'Shortlink ID is required.' });
+      return;
+    }
+
+    const user = db.users.find(
+      (u) => (userId && u.id.toLowerCase() === userId.toLowerCase()) || (email && u.email.toLowerCase() === email)
+    );
+    if (!user) {
+      res.status(404).json({ error: 'Player account not found. Please re-login.' });
+      return;
+    }
+
+    const sl = db.shortlinks.find((s) => s.id === shortlinkId);
+    if (!sl || !sl.enabled) {
+      res.status(404).json({ error: 'This shortlink is currently unavailable.' });
+      return;
+    }
+
+    const todayPrefix = new Date().toISOString().slice(0, 10);
+    const claimsToday = db.postbacks.filter(
+      (p) =>
+        p.user_id === user.id &&
+        p.source_type === 'shortlink' &&
+        String(p.external_tx_id || '').startsWith(`sl_${sl.id}_${todayPrefix}_`)
+    ).length;
+
+    const maxDaily = Math.max(1, Number(sl.daily_limit) || 1);
+    if (claimsToday >= maxDaily) {
+      res.status(429).json({
+        error: `Daily limit reached for ${sl.name} (${claimsToday}/${maxDaily} views today). Come back tomorrow or complete another shortlink!`,
+      });
+      return;
+    }
+
+    const rewardCoins = Math.max(0.01, Number(sl.reward_coins) || 50);
+    const nowIso = new Date().toISOString();
+    const txId = `sl_${sl.id}_${todayPrefix}_${claimsToday + 1}_${Date.now()}`;
+
+    user.availableCoins = Number(((Number(user.availableCoins) || 0) + rewardCoins).toFixed(2));
+    user.questsCompleted = (Number(user.questsCompleted) || 0) + 1;
+
+    db.postbacks.unshift({
+      id: 'ldg_sl_' + Date.now(),
+      user_id: user.id,
+      user_name: user.name,
+      source_type: 'shortlink',
+      title: `🔗 SHORTLINK (${sl.provider.toUpperCase()}): ${sl.name} [View ${claimsToday + 1}/${maxDaily}]`,
+      amount_coins: rewardCoins,
+      status: 'credited',
+      external_tx_id: txId,
+      created_at: nowIso,
+      unlocks_at: null,
+    });
+
+    if (user.referredBy) {
+      const referrer = db.users.find(
+        (r) => r.referralCode.toUpperCase() === user.referredBy?.toUpperCase()
+      );
+      if (referrer) {
+        const refBonus = Number(Math.max(0.5, rewardCoins * 0.1).toFixed(2));
+        referrer.availableCoins = Number(((Number(referrer.availableCoins) || 0) + refBonus).toFixed(2));
+      }
+    }
+
+    saveDB(db);
+
+    const updatedShortlinks = db.shortlinks.map((s) => {
+      const cToday = db.postbacks.filter(
+        (p) =>
+          p.user_id === user.id &&
+          p.source_type === 'shortlink' &&
+          String(p.external_tx_id || '').startsWith(`sl_${s.id}_${todayPrefix}_`)
+      ).length;
+      return {
+        ...s,
+        claims_today: cToday,
+      };
+    });
+
+    res.json({
+      ok: true,
+      rewardCoins,
+      claimsToday: claimsToday + 1,
+      dailyLimit: maxDaily,
+      message: `🎉 +${rewardCoins} Coins credited to your Withdrawable Wallet from ${sl.name} (${claimsToday + 1}/${maxDaily} today)!`,
+      user: buildPlayerResponse(db, user),
+      shortlinks: updatedShortlinks,
     });
   });
 
@@ -1190,6 +1436,7 @@ async function startServer() {
       withdrawals: db.withdrawals,
       postbacks: db.postbacks,
       offerwalls: db.offerwalls,
+      shortlinks: db.shortlinks,
     });
   });
 
@@ -1302,6 +1549,59 @@ async function startServer() {
     db.offerwalls = db.offerwalls.filter((w) => w.provider_id !== providerId);
     saveDB(db);
     res.json({ ok: true, offerwalls: db.offerwalls });
+  });
+
+  // Dynamic Shortlinks Add / Update (UPSERT)
+  app.post(['/api/admin/shortlinks/save', '/api/admin/shortlinks/update'], (req, res) => {
+    const db = loadDB();
+    const body = req.body || {};
+    const id = String(body.id || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '');
+
+    if (!id) {
+      res.status(400).json({ error: 'Shortlink ID / Slug is required.' });
+      return;
+    }
+
+    const diffRaw = String(body.difficulty || 'Easy').trim();
+    const difficulty: 'Easy' | 'Medium' | 'Fast' =
+      diffRaw === 'Medium' ? 'Medium' : diffRaw === 'Fast' ? 'Fast' : 'Easy';
+
+    const updatedLink: ServerShortlinkConfig = {
+      id,
+      name: String(body.name || id).trim(),
+      provider: String(body.provider || 'Shortlink Partner').trim(),
+      url: String(
+        body.url || `https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=${id}`
+      ).trim(),
+      reward_coins: Math.max(0.01, Number(body.reward_coins) || 100),
+      daily_limit: Math.max(1, parseInt(String(body.daily_limit || '3'), 10) || 3),
+      timer_seconds: Math.max(3, parseInt(String(body.timer_seconds || '12'), 10) || 12),
+      difficulty,
+      badge: String(body.badge || '⚡ Instant Credit').trim(),
+      enabled: body.enabled !== undefined ? (body.enabled ? 1 : 0) : 1,
+    };
+
+    const idx = db.shortlinks.findIndex((s) => s.id === id);
+    if (idx >= 0) {
+      db.shortlinks[idx] = updatedLink;
+    } else {
+      db.shortlinks.unshift(updatedLink);
+    }
+
+    saveDB(db);
+    res.json({ ok: true, shortlink: updatedLink, shortlinks: db.shortlinks });
+  });
+
+  // Dynamic Shortlink Delete
+  app.post('/api/admin/shortlinks/delete', (req, res) => {
+    const db = loadDB();
+    const id = String(req.body?.id || '').trim().toLowerCase();
+    db.shortlinks = db.shortlinks.filter((s) => s.id !== id);
+    saveDB(db);
+    res.json({ ok: true, shortlinks: db.shortlinks });
   });
 
   // 1-Click Network Payout Settlement -> Auto-Release Held Coins to Withdrawable Balance

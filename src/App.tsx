@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ThemeMode, WithdrawalRecord } from './types.ts';
+import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ShortlinkConfig, ThemeMode, WithdrawalRecord } from './types.ts';
 
 const STORAGE_USER_KEY = 'lootify_player_user';
 const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
 const STORAGE_API_BASE_KEY = 'lootify_api_base_url';
 const STORAGE_OFFERWALLS_CACHE_KEY = 'lootify_offerwalls_dynamic_v7';
+const STORAGE_SHORTLINKS_CACHE_KEY = 'lootify_shortlinks_dynamic_v1';
 
 const OFFERWALLME_PUBLIC_KEY = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
 const PUBCRYPTO_SITE_KEY = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198';
@@ -49,6 +50,113 @@ const DEFAULT_PUBCRYPTO_WALL: OfferwallConfig = {
   hold_days: 0,
   postback_macro_query: '?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}',
 };
+
+const DEFAULT_SHORTLINKS_LIST: ShortlinkConfig[] = [
+  {
+    id: 'shrinkme_vip',
+    name: 'ShrinkMe VIP Link',
+    provider: 'ShrinkMe.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=shrinkme_vip',
+    reward_coins: 120,
+    daily_limit: 3,
+    timer_seconds: 15,
+    difficulty: 'Medium',
+    badge: '🔥 Highest Paying • 3 Steps',
+    enabled: 1,
+    claims_today: 0,
+  },
+  {
+    id: 'cuty_crypto',
+    name: 'Cuty.io Fast Crypto Link',
+    provider: 'Cuty.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=cuty_crypto',
+    reward_coins: 100,
+    daily_limit: 5,
+    timer_seconds: 12,
+    difficulty: 'Easy',
+    badge: '⚡ Instant Credit • 2 Steps',
+    enabled: 1,
+    claims_today: 0,
+  },
+  {
+    id: 'exeio_global',
+    name: 'Exe.io Premium Shortlink',
+    provider: 'Exe.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=exeio_global',
+    reward_coins: 110,
+    daily_limit: 3,
+    timer_seconds: 15,
+    difficulty: 'Medium',
+    badge: '💎 High CPM • 3 Steps',
+    enabled: 1,
+    claims_today: 0,
+  },
+  {
+    id: 'gplinks_india',
+    name: 'GPLinks Express',
+    provider: 'GPLinks',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=gplinks_india',
+    reward_coins: 100,
+    daily_limit: 4,
+    timer_seconds: 15,
+    difficulty: 'Medium',
+    badge: '🇮🇳 Top India CPM • 3 Steps',
+    enabled: 1,
+    claims_today: 0,
+  },
+  {
+    id: 'clicksfly_turbo',
+    name: 'Clicksfly Turbo Link',
+    provider: 'Clicksfly',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=clicksfly_turbo',
+    reward_coins: 90,
+    daily_limit: 4,
+    timer_seconds: 12,
+    difficulty: 'Easy',
+    badge: '🚀 Fast Timer • 2 Steps',
+    enabled: 1,
+    claims_today: 0,
+  },
+  {
+    id: 'droplink_fast',
+    name: 'Droplink Quick Claim',
+    provider: 'Droplink',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=droplink_fast',
+    reward_coins: 80,
+    daily_limit: 5,
+    timer_seconds: 10,
+    difficulty: 'Fast',
+    badge: '⚡ Clean 1-Step Ad',
+    enabled: 1,
+    claims_today: 0,
+  },
+  {
+    id: 'ouo_express',
+    name: 'Ouo.io Global Shortlink',
+    provider: 'Ouo.io',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=ouo_express',
+    reward_coins: 75,
+    daily_limit: 5,
+    timer_seconds: 10,
+    difficulty: 'Fast',
+    badge: '🌍 Global Fast Link',
+    enabled: 1,
+    claims_today: 0,
+  },
+  {
+    id: 'linkvertise_pro',
+    name: 'Linkvertise Direct Boost',
+    provider: 'Linkvertise',
+    url: 'https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=linkvertise_pro',
+    reward_coins: 150,
+    daily_limit: 2,
+    timer_seconds: 15,
+    difficulty: 'Easy',
+    badge: '👑 Premium Advertiser',
+    enabled: 1,
+    claims_today: 0,
+  },
+];
 
 function formatIstDate(dateInput?: string | number | Date | null): string {
   if (!dateInput) {
@@ -370,6 +478,25 @@ function saveCachedOfferwalls(walls: OfferwallConfig[]) {
   } catch {}
 }
 
+function loadCachedShortlinks(): ShortlinkConfig[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_SHORTLINKS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return DEFAULT_SHORTLINKS_LIST.map((s) => ({ ...s }));
+}
+
+function saveCachedShortlinks(links: ShortlinkConfig[]) {
+  try {
+    localStorage.setItem(STORAGE_SHORTLINKS_CACHE_KEY, JSON.stringify(links));
+  } catch {}
+}
+
 function generateUniquePlayerId(emailRaw: string): string {
   const email = String(emailRaw || '').trim().toLowerCase();
   if (email === 'sarthaksinghyadav1@gmail.com') {
@@ -532,8 +659,12 @@ function saveAdminSession(active: boolean) {
 }
 
 function getTabFromHash(): DashboardTab {
-  const hash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
-  if (hash === 'quests' || hash === 'offerwalls' || hash === 'shortlinks' || hash === 'tasks') {
+  const rawHash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+  const hash = rawHash.split('?')[0];
+  if (hash === 'shortlinks' || hash === 'shortlink' || rawHash.includes('sl_verify=')) {
+    return 'shortlinks';
+  }
+  if (hash === 'quests' || hash === 'offerwalls' || hash === 'tasks') {
     return 'quests';
   }
   if (hash === 'faucet' || hash === 'roll') return 'faucet';
@@ -637,6 +768,29 @@ export default function App() {
     notice?: string | null;
   } | null>(null);
   const [faucetError, setFaucetError] = useState<string | null>(null);
+
+  // Shortlinks Earning Section & Admin Shortlinks Manager state
+  const [shortlinks, setShortlinks] = useState<ShortlinkConfig[]>(() => loadCachedShortlinks());
+  const [shortlinkFilter, setShortlinkFilter] = useState<'all' | 'available' | 'completed' | 'highest'>('all');
+  const [activeShortlinkId, setActiveShortlinkId] = useState<string | null>(null);
+  const [shortlinkTimerSecs, setShortlinkTimerSecs] = useState<number>(0);
+  const [shortlinkReadyToClaim, setShortlinkReadyToClaim] = useState<boolean>(false);
+  const [shortlinkClaiming, setShortlinkClaiming] = useState<boolean>(false);
+  const [shortlinkStatusMsg, setShortlinkStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Admin New Shortlink Creator state
+  const [newSlName, setNewSlName] = useState('');
+  const [newSlSlug, setNewSlSlug] = useState('');
+  const [newSlProvider, setNewSlProvider] = useState('ShrinkMe.io');
+  const [newSlUrl, setNewSlUrl] = useState('');
+  const [newSlReward, setNewSlReward] = useState('100');
+  const [newSlLimit, setNewSlLimit] = useState('3');
+  const [newSlTimer, setNewSlTimer] = useState('15');
+  const [newSlDifficulty, setNewSlDifficulty] = useState<'Easy' | 'Medium' | 'Fast'>('Easy');
+  const [newSlBadge, setNewSlBadge] = useState('⚡ Instant Credit • 2 Steps');
+  const [copiedSlDestId, setCopiedSlDestId] = useState<string | null>(null);
+  const [quickLinkProvider, setQuickLinkProvider] = useState<string>('shrinkme');
+  const [quickLinkApiToken, setQuickLinkApiToken] = useState<string>('');
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
@@ -900,6 +1054,24 @@ export default function App() {
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
+  const fetchShortlinksFromBackend = useCallback(async (uid?: string) => {
+    const base = getApiBaseUrl();
+    const activeUid = uid || loadCurrentUser()?.id || '';
+    try {
+      const query = activeUid ? `?user_id=${encodeURIComponent(activeUid)}` : '';
+      const res = await fetch(`${base}/api/shortlinks${query}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.shortlinks) && data.shortlinks.length > 0) {
+          setShortlinks(data.shortlinks);
+          saveCachedShortlinks(data.shortlinks);
+        }
+      }
+    } catch {
+      // Fallback to cached shortlinks
+    }
+  }, []);
+
   const fetchAdminDashboard = useCallback(async () => {
     const base = getApiBaseUrl();
     try {
@@ -915,6 +1087,10 @@ export default function App() {
         if (Array.isArray(data.offerwalls) && data.offerwalls.length > 0) {
           setOfferwalls(data.offerwalls);
           saveCachedOfferwalls(data.offerwalls);
+        }
+        if (Array.isArray(data.shortlinks) && data.shortlinks.length > 0) {
+          setShortlinks(data.shortlinks);
+          saveCachedShortlinks(data.shortlinks);
         }
       } else {
         setBackendOnline(false);
@@ -935,9 +1111,26 @@ export default function App() {
 
     const initialUser = loadCurrentUser();
     fetchOfferwallsFromBackend(initialUser?.id);
+    fetchShortlinksFromBackend(initialUser?.id);
     if (initialUser) {
       syncUserWithBackend(initialUser, false);
     }
+
+    const checkShortlinkCallbackParam = () => {
+      const fullHash = window.location.hash || '';
+      const qIdx = fullHash.indexOf('?');
+      if (qIdx >= 0) {
+        const params = new URLSearchParams(fullHash.slice(qIdx + 1));
+        const verifyId = params.get('sl_verify');
+        if (verifyId) {
+          setActiveShortlinkId(verifyId);
+          setShortlinkTimerSecs(0);
+          setShortlinkReadyToClaim(true);
+          setActiveTab('shortlinks');
+        }
+      }
+    };
+    checkShortlinkCallbackParam();
 
     const onAuthChanged = () => {
       const loaded = loadCurrentUser();
@@ -945,6 +1138,7 @@ export default function App() {
       if (loaded) {
         syncUserWithBackend(loaded, false);
         fetchOfferwallsFromBackend(loaded.id);
+        fetchShortlinksFromBackend(loaded.id);
       }
       setIsAdminRoute(isHashAdmin());
       setAdminLoggedIn(loadAdminSession());
@@ -957,6 +1151,7 @@ export default function App() {
       setIsAdminRoute(isHashAdmin());
       setAdminLoggedIn(loadAdminSession());
       setActiveTab(getTabFromHash());
+      checkShortlinkCallbackParam();
       const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
       setTheme(currentTheme);
     };
@@ -969,7 +1164,7 @@ export default function App() {
       window.removeEventListener('hashchange', onRouteChanged);
       window.removeEventListener('popstate', onRouteChanged);
     };
-  }, [fetchOfferwallsFromBackend, syncUserWithBackend]);
+  }, [fetchOfferwallsFromBackend, fetchShortlinksFromBackend, syncUserWithBackend]);
 
   useEffect(() => {
     const doRefresh = () => {
@@ -1034,11 +1229,136 @@ export default function App() {
         }
         return prev - 1;
       });
+      setShortlinkTimerSecs((prev) => {
+        if (prev <= 1) {
+          if (prev === 1) setShortlinkReadyToClaim(true);
+          return 0;
+        }
+        return prev - 1;
+      });
     };
     updateTimers();
     const id = window.setInterval(updateTimers, 1000);
     return () => window.clearInterval(id);
   }, [user?.lastFaucetClaimAt]);
+
+  const resolveShortlinkDestinationUrl = (sl: ShortlinkConfig, uid?: string) => {
+    const rawUrl = String(sl.url || '').trim();
+    const callbackUrl = `${window.location.origin}${window.location.pathname}#/shortlinks?sl_verify=${encodeURIComponent(sl.id)}`;
+    if (!rawUrl) return callbackUrl;
+    return rawUrl
+      .replace(/\{user_id\}/gi, encodeURIComponent(uid || user?.id || 'guest'))
+      .replace(/\{destination_url\}/gi, encodeURIComponent(callbackUrl))
+      .replace(/\{return_url\}/gi, encodeURIComponent(callbackUrl));
+  };
+
+  const handleStartShortlinkVisit = (sl: ShortlinkConfig) => {
+    setShortlinkStatusMsg(null);
+    const claimsToday = Number(sl.claims_today) || 0;
+    if (claimsToday >= sl.daily_limit) {
+      setShortlinkStatusMsg({
+        type: 'error',
+        text: `Daily limit reached for ${sl.name} (${claimsToday}/${sl.daily_limit} views today). Try another shortlink below!`,
+      });
+      return;
+    }
+    setActiveShortlinkId(sl.id);
+    setShortlinkReadyToClaim(false);
+    setShortlinkTimerSecs(Math.max(5, Number(sl.timer_seconds) || 12));
+  };
+
+  const handleVerifyAndClaimShortlink = async (sl: ShortlinkConfig) => {
+    if (!user) return;
+    if (!shortlinkReadyToClaim || shortlinkTimerSecs > 0) {
+      setShortlinkStatusMsg({
+        type: 'error',
+        text: `Please wait ${shortlinkTimerSecs}s for shortlink verification to finish before claiming.`,
+      });
+      return;
+    }
+    setShortlinkClaiming(true);
+    setShortlinkStatusMsg(null);
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/shortlinks/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          email: user.email,
+          shortlinkId: sl.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setShortlinkStatusMsg({
+          type: 'error',
+          text: data?.error || 'Could not claim shortlink reward.',
+        });
+        setShortlinkClaiming(false);
+        return;
+      }
+      if (data?.user) {
+        saveCurrentUser(data.user);
+        setUser(data.user);
+      }
+      if (Array.isArray(data?.shortlinks)) {
+        setShortlinks(data.shortlinks);
+        saveCachedShortlinks(data.shortlinks);
+      }
+      setShortlinkStatusMsg({
+        type: 'success',
+        text:
+          data?.message ||
+          `🎉 +${sl.reward_coins} Coins credited to your Withdrawable Wallet from ${sl.name}!`,
+      });
+      setActiveShortlinkId(null);
+      setShortlinkReadyToClaim(false);
+      setShortlinkTimerSecs(0);
+      if (window.location.hash.includes('sl_verify=')) {
+        window.location.hash = '#/shortlinks';
+      }
+    } catch {
+      // Offline / local fallback
+      const rewardCoins = Number(sl.reward_coins) || 100;
+      const nowIso = new Date().toISOString();
+      const nextShortlinks = shortlinks.map((item) =>
+        item.id === sl.id
+          ? { ...item, claims_today: (Number(item.claims_today) || 0) + 1 }
+          : item
+      );
+      setShortlinks(nextShortlinks);
+      saveCachedShortlinks(nextShortlinks);
+      const nextUser: PlayerUser = {
+        ...user,
+        availableCoins: Number((user.availableCoins + rewardCoins).toFixed(2)),
+        questsCompleted: (user.questsCompleted || 0) + 1,
+        heldRewards: [
+          {
+            id: `sl_${sl.id}_${Date.now()}`,
+            title: `🔗 SHORTLINK (${sl.provider.toUpperCase()}): ${sl.name}`,
+            coins: rewardCoins,
+            amountInr: Number(((rewardCoins * 90) / 100000).toFixed(4)),
+            status: 'credited',
+            createdAt: nowIso,
+            unlocksAt: null,
+          },
+          ...(user.heldRewards || []),
+        ],
+      };
+      saveCurrentUser(nextUser);
+      setUser(nextUser);
+      setShortlinkStatusMsg({
+        type: 'success',
+        text: `🎉 +${rewardCoins} Coins credited to your Withdrawable Wallet from ${sl.name}!`,
+      });
+      setActiveShortlinkId(null);
+      setShortlinkReadyToClaim(false);
+      setShortlinkTimerSecs(0);
+    } finally {
+      setShortlinkClaiming(false);
+    }
+  };
 
   const startFaucetAntiBotTimer = () => {
     setFaucetError(null);
@@ -1381,6 +1701,131 @@ export default function App() {
     setAdminStatusBanner({
       type: 'success',
       text: `🗑️ Removed "${wallName}" from Offerwalls.`,
+    });
+  };
+
+  const handleAddShortlink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = newSlName.trim();
+    const cleanId = (newSlSlug.trim() || cleanName)
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '');
+
+    if (!cleanName || !cleanId) {
+      setAdminStatusBanner({
+        type: 'error',
+        text: 'Please enter a Shortlink Name and Shortlink ID / Slug.',
+      });
+      return;
+    }
+
+    const defaultVerifyUrl = `${window.location.origin}${window.location.pathname}#/shortlinks?sl_verify=${cleanId}`;
+    const newSl: ShortlinkConfig = {
+      id: cleanId,
+      name: cleanName,
+      provider: newSlProvider.trim() || 'Shortlink Partner',
+      url: newSlUrl.trim() || defaultVerifyUrl,
+      reward_coins: Math.max(0.01, Number(newSlReward) || 100),
+      daily_limit: Math.max(1, parseInt(newSlLimit || '3', 10) || 3),
+      timer_seconds: Math.max(3, parseInt(newSlTimer || '15', 10) || 15),
+      difficulty: newSlDifficulty,
+      badge: newSlBadge.trim() || '⚡ Instant Credit',
+      enabled: 1,
+      claims_today: 0,
+    };
+
+    const nextLinks = [newSl, ...shortlinks.filter((s) => s.id !== cleanId)];
+    setShortlinks(nextLinks);
+    saveCachedShortlinks(nextLinks);
+
+    setNewSlName('');
+    setNewSlSlug('');
+    setNewSlUrl('');
+
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/shortlinks/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify(newSl),
+      });
+      if (res.ok) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: `✅ Added Shortlink "${cleanName}" (+${newSl.reward_coins} Coins, ${newSl.daily_limit}/day) to Database!`,
+        });
+        fetchAdminDashboard();
+        return;
+      }
+    } catch {}
+
+    setAdminStatusBanner({
+      type: 'success',
+      text: `✅ Added Shortlink "${cleanName}"!`,
+    });
+  };
+
+  const handleUpdateShortlinkField = (
+    id: string,
+    field: keyof ShortlinkConfig,
+    value: string | number
+  ) => {
+    setShortlinks((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+    );
+  };
+
+  const handleSaveShortlinkConfig = async (sl: ShortlinkConfig) => {
+    saveCachedShortlinks(shortlinks);
+    const base = getApiBaseUrl();
+    try {
+      const res = await fetch(`${base}/api/admin/shortlinks/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify(sl),
+      });
+      if (res.ok) {
+        setAdminStatusBanner({
+          type: 'success',
+          text: `✅ Shortlink "${sl.name}" saved to database!`,
+        });
+        fetchAdminDashboard();
+        return;
+      }
+    } catch {}
+    setAdminStatusBanner({
+      type: 'success',
+      text: `✅ Shortlink "${sl.name}" saved!`,
+    });
+  };
+
+  const handleDeleteShortlink = async (id: string, name: string) => {
+    const nextLinks = shortlinks.filter((s) => s.id !== id);
+    setShortlinks(nextLinks);
+    saveCachedShortlinks(nextLinks);
+
+    const base = getApiBaseUrl();
+    try {
+      await fetch(`${base}/api/admin/shortlinks/delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': ADMIN_ALLOWED_EMAIL,
+        },
+        body: JSON.stringify({ id }),
+      });
+      fetchAdminDashboard();
+    } catch {}
+
+    setAdminStatusBanner({
+      type: 'success',
+      text: `🗑️ Removed Shortlink "${name}".`,
     });
   };
 
@@ -1972,8 +2417,55 @@ export default function App() {
             </div>
           )}
 
+          {/* Admin Quick-Jump Navigation Bar */}
+          <div
+            className="card"
+            style={{
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+              background: 'var(--bg2)',
+            }}
+          >
+            <span className="font-mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)', marginRight: 4 }}>
+              ⚡ QUICK JUMP:
+            </span>
+            {[
+              { id: 'admin-sec-1', label: '🔌 1. API & FaucetPay' },
+              { id: 'admin-sec-2', label: '🎮 2. Offerwalls' },
+              { id: 'admin-sec-2b', label: '🔗 2B. Shortlinks Manager' },
+              { id: 'admin-sec-3', label: '🧪 3. S2S Tester' },
+              { id: 'admin-sec-4', label: '💰 4. Player Wallet (+/- Coins)' },
+              { id: 'admin-sec-5', label: `🏦 5. Withdrawals (${adminWithdrawals.filter((w) => w.status === 'pending').length} Pending)` },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById(item.id);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="font-mono"
+                style={{
+                  padding: '6px 11px',
+                  borderRadius: 8,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: 'var(--bg3)',
+                  border: '1px solid var(--border2)',
+                  color: 'var(--txt)',
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
           {/* 1. Cloudflare Worker + D1 Backend URL */}
-          <div className="card" style={{ padding: 24 }}>
+          <div id="admin-sec-1" className="card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
               <div>
                 <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
@@ -2014,7 +2506,7 @@ export default function App() {
           </div>
 
           {/* 2. Dynamic Offerwall Creator */}
-          <div className="card" style={{ padding: 24 }}>
+          <div id="admin-sec-2" className="card" style={{ padding: 24 }}>
             <div style={{ marginBottom: 18 }}>
               <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
                 2. Dynamic Offerwall Manager
@@ -2463,8 +2955,627 @@ export default function App() {
             </div>
           </div>
 
+          {/* 2B. Dynamic Shortlinks Manager */}
+          <div id="admin-sec-2b" className="card card-glow" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                    2B. Dynamic Shortlinks Earning Manager
+                  </h2>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontSize: 10,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      background: 'rgba(0,232,154,0.14)',
+                      border: '1px solid rgba(0,232,154,0.35)',
+                      color: 'var(--green)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {shortlinks.filter((s) => s.enabled).length} ACTIVE LINKS
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', marginTop: 4 }}>
+                  ShrinkMe.io, Cuty.io, Exe.io, GPLinks, Clicksfly ya kisi bhi Shortlink network ka link add/edit karein. Jab aap kisi shortener site par link shorten karein, to Destination URL me niche diya gaya{' '}
+                  <code className="font-mono" style={{ color: 'var(--green)' }}>
+                    {effectiveOrigin}/#/shortlinks?sl_verify=SHORTLINK_ID
+                  </code>{' '}
+                  daal dein — ya niche <strong>Quick-Link API Token Builder</strong> se 1-click me automatic link banayein!
+                </p>
+              </div>
+            </div>
+
+            {/* 1-Click Quick-Link API Token Auto-Builder */}
+            <div
+              style={{
+                padding: '14px 16px',
+                borderRadius: 12,
+                background: 'rgba(0,232,154,0.06)',
+                border: '1px solid rgba(0,232,154,0.28)',
+                marginBottom: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span className="font-mono" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--green)' }}>
+                  ⚡ 1-CLICK QUICK-LINK API AUTO-BUILDER (OPTIONAL — NO MANUAL SHORTENING NEEDED)
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                  Shortener Dashboard → Tools → Quick Link API Token paste karein
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, alignItems: 'center' }}>
+                <select
+                  value={quickLinkProvider}
+                  onChange={(e) => setQuickLinkProvider(e.target.value)}
+                  className="font-mono"
+                  style={{
+                    padding: '9px 12px',
+                    borderRadius: 8,
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border2)',
+                    color: 'var(--txt)',
+                    fontSize: 12,
+                  }}
+                >
+                  <option value="shrinkme">ShrinkMe.io (shrinkme.io/st?api=...)</option>
+                  <option value="cuty">Cuty.io (cuty.io/quick?token=...)</option>
+                  <option value="exe">Exe.io (exe.io/st?api=...)</option>
+                  <option value="gplinks">GPLinks (api.gplinks.com/st?api=...)</option>
+                  <option value="clicksfly">Clicksfly (clicksfly.com/st?api=...)</option>
+                  <option value="droplink">Droplink (droplink.co/st?api=...)</option>
+                  <option value="ouo">Ouo.io (ouo.io/qs/...)</option>
+                </select>
+
+                <input
+                  type="text"
+                  value={quickLinkApiToken}
+                  onChange={(e) => setQuickLinkApiToken(e.target.value)}
+                  placeholder="Paste your Shortener API Token here (e.g. 8a9b0c1d2e...)"
+                  className="font-mono"
+                  style={{
+                    padding: '9px 12px',
+                    borderRadius: 8,
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border2)',
+                    color: 'var(--gold)',
+                    fontSize: 12,
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const token = quickLinkApiToken.trim();
+                    if (!token) {
+                      setAdminStatusBanner({
+                        type: 'error',
+                        text: 'Please paste your Shortener Quick-Link API Token first.',
+                      });
+                      return;
+                    }
+                    const templates: Record<string, { url: string; id: string; label: string }> = {
+                      shrinkme: {
+                        id: 'shrinkme',
+                        label: 'ShrinkMe.io',
+                        url: `https://shrinkme.io/st?api=${encodeURIComponent(token)}&url={destination_url}`,
+                      },
+                      cuty: {
+                        id: 'cuty',
+                        label: 'Cuty.io',
+                        url: `https://cuty.io/quick?token=${encodeURIComponent(token)}&url={destination_url}`,
+                      },
+                      exe: {
+                        id: 'exeio',
+                        label: 'Exe.io',
+                        url: `https://exe.io/st?api=${encodeURIComponent(token)}&url={destination_url}`,
+                      },
+                      gplinks: {
+                        id: 'gplinks',
+                        label: 'GPLinks',
+                        url: `https://api.gplinks.com/st?api=${encodeURIComponent(token)}&url={destination_url}`,
+                      },
+                      clicksfly: {
+                        id: 'clicksfly',
+                        label: 'Clicksfly',
+                        url: `https://clicksfly.com/st?api=${encodeURIComponent(token)}&url={destination_url}`,
+                      },
+                      droplink: {
+                        id: 'droplink',
+                        label: 'Droplink',
+                        url: `https://droplink.co/st?api=${encodeURIComponent(token)}&url={destination_url}`,
+                      },
+                      ouo: {
+                        id: 'ouo',
+                        label: 'Ouo.io',
+                        url: `https://ouo.io/qs/${encodeURIComponent(token)}?s={destination_url}`,
+                      },
+                    };
+                    const picked = templates[quickLinkProvider] || templates.shrinkme;
+                    setNewSlUrl(picked.url);
+                    setNewSlProvider(picked.label);
+                    const matchingCard = shortlinks.find((s) => s.id === picked.id);
+                    if (matchingCard) {
+                      const updatedCard = { ...matchingCard, url: picked.url, enabled: 1 };
+                      handleUpdateShortlinkField(picked.id, 'url', picked.url);
+                      handleSaveShortlinkConfig(updatedCard);
+                    } else {
+                      setAdminStatusBanner({
+                        type: 'success',
+                        text: `Quick-Link URL generated for ${picked.label}! Click "+ Add Shortlink to Wall" below to save.`,
+                      });
+                    }
+                  }}
+                  className="btn btn-primary btn-sm"
+                >
+                  ⚡ Apply Quick-Link API to {quickLinkProvider.toUpperCase()}
+                </button>
+              </div>
+            </div>
+
+            <form
+              onSubmit={handleAddShortlink}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14,
+                padding: 18,
+                borderRadius: 12,
+                background: 'var(--bg2)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    SHORTLINK TITLE *
+                  </label>
+                  <input
+                    type="text"
+                    value={newSlName}
+                    onChange={(e) => {
+                      setNewSlName(e.target.value);
+                      if (!newSlSlug) {
+                        setNewSlSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+                      }
+                    }}
+                    placeholder="e.g. ShrinkMe VIP Link"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    SHORTLINK ID / SLUG *
+                  </label>
+                  <input
+                    type="text"
+                    value={newSlSlug}
+                    onChange={(e) => setNewSlSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                    placeholder="e.g. shrinkme_1"
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--green)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    NETWORK / PROVIDER
+                  </label>
+                  <input
+                    type="text"
+                    value={newSlProvider}
+                    onChange={(e) => setNewSlProvider(e.target.value)}
+                    placeholder="e.g. ShrinkMe.io / Cuty.io"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    REWARD COINS PER VIEW *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min={0.01}
+                    value={newSlReward}
+                    onChange={(e) => setNewSlReward(e.target.value)}
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--gold)',
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                    SHORTENED LINK URL (PASTE YOUR SHORTENED LINK HERE)
+                  </label>
+                  <input
+                    type="text"
+                    value={newSlUrl}
+                    onChange={(e) => setNewSlUrl(e.target.value)}
+                    placeholder={`e.g. https://shrinkme.ink/AbCdEf or leave blank for ${effectiveOrigin}/#/shortlinks?sl_verify=${newSlSlug || 'id'}`}
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--bg3)',
+                      border: '1px solid var(--border2)',
+                      color: 'var(--txt)',
+                      fontSize: 12,
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                      DAILY VIEWS
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={newSlLimit}
+                      onChange={(e) => setNewSlLimit(e.target.value)}
+                      className="font-mono"
+                      style={{
+                        width: '100%',
+                        padding: '10px 10px',
+                        borderRadius: 8,
+                        background: 'var(--bg3)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--txt)',
+                        fontSize: 12,
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                      TIMER (SEC)
+                    </label>
+                    <input
+                      type="number"
+                      min={3}
+                      max={120}
+                      value={newSlTimer}
+                      onChange={(e) => setNewSlTimer(e.target.value)}
+                      className="font-mono"
+                      style={{
+                        width: '100%',
+                        padding: '10px 10px',
+                        borderRadius: 8,
+                        background: 'var(--bg3)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--txt)',
+                        fontSize: 12,
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                      DIFFICULTY
+                    </label>
+                    <select
+                      value={newSlDifficulty}
+                      onChange={(e) => setNewSlDifficulty(e.target.value as 'Easy' | 'Medium' | 'Fast')}
+                      style={{
+                        width: '100%',
+                        padding: '10px 8px',
+                        borderRadius: 8,
+                        background: 'var(--bg3)',
+                        border: '1px solid var(--border2)',
+                        color: 'var(--txt)',
+                        fontSize: 12,
+                      }}
+                    >
+                      <option value="Fast">Fast</option>
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, paddingTop: 4 }}>
+                <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', wordBreak: 'break-all' }}>
+                  Destination URL to Shorten:{' '}
+                  <span style={{ color: 'var(--green)' }}>
+                    {effectiveOrigin}/#/shortlinks?sl_verify={newSlSlug || 'your_slug'}
+                  </span>
+                </div>
+                <button type="submit" className="btn btn-primary btn-sm">
+                  + Add Shortlink to Wall
+                </button>
+              </div>
+            </form>
+
+            {/* Configured Shortlinks Grid */}
+            <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 14 }}>
+              {shortlinks.map((sl) => {
+                const destToShorten = `${effectiveOrigin}/#/shortlinks?sl_verify=${sl.id}`;
+                return (
+                  <div
+                    key={sl.id}
+                    style={{
+                      padding: 16,
+                      borderRadius: 12,
+                      background: 'var(--bg2)',
+                      border: sl.enabled ? '1px solid rgba(0,232,154,0.35)' : '1px solid var(--border)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div>
+                        <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                          🔗 {sl.name}{' '}
+                          <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                            ({sl.provider})
+                          </span>
+                        </div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--gold)' }}>
+                          +{sl.reward_coins} Coins • {sl.daily_limit} Views/Day • {sl.timer_seconds}s
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--txt2)', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(sl.enabled)}
+                            onChange={(e) => handleUpdateShortlinkField(sl.id, 'enabled', e.target.checked ? 1 : 0)}
+                          />
+                          Active
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteShortlink(sl.id, sl.name)}
+                          style={{
+                            background: 'rgba(255,85,102,0.12)',
+                            border: '1px solid rgba(255,85,102,0.3)',
+                            color: 'var(--red)',
+                            borderRadius: 6,
+                            padding: '4px 8px',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                          }}
+                          title="Delete Shortlink"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--txt2)', marginBottom: 4 }}>
+                        DESTINATION URL (SHORTEN THIS IN {sl.provider.toUpperCase()})
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '6px 10px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <code className="font-mono" style={{ fontSize: 10.5, color: 'var(--green)', wordBreak: 'break-all', flex: 1 }}>
+                          {destToShorten}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(destToShorten).catch(() => {});
+                            setCopiedSlDestId(sl.id);
+                            setTimeout(() => setCopiedSlDestId(null), 2000);
+                          }}
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '4px 8px', fontSize: 10 }}
+                        >
+                          {copiedSlDestId === sl.id ? '✅ Copied' : '📋 Copy'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 10.5, color: 'var(--txt2)', marginBottom: 3 }}>
+                        SHORTENED URL (PLAYERS CLICK THIS)
+                      </label>
+                      <input
+                        type="text"
+                        value={sl.url}
+                        onChange={(e) => handleUpdateShortlinkField(sl.id, 'url', e.target.value)}
+                        className="font-mono"
+                        style={{
+                          width: '100%',
+                          padding: '7px 10px',
+                          borderRadius: 8,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--txt)',
+                          fontSize: 11,
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10, color: 'var(--txt2)', marginBottom: 3 }}>
+                          REWARD COINS
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min={0.01}
+                          value={sl.reward_coins}
+                          onChange={(e) => handleUpdateShortlinkField(sl.id, 'reward_coins', Number(e.target.value) || 0)}
+                          className="font-mono"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            borderRadius: 6,
+                            background: 'var(--bg3)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--gold)',
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10, color: 'var(--txt2)', marginBottom: 3 }}>
+                          DAILY LIMIT
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={sl.daily_limit}
+                          onChange={(e) => handleUpdateShortlinkField(sl.id, 'daily_limit', Number(e.target.value) || 1)}
+                          className="font-mono"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            borderRadius: 6,
+                            background: 'var(--bg3)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--txt)',
+                            fontSize: 12,
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10, color: 'var(--txt2)', marginBottom: 3 }}>
+                          TIMER (S)
+                        </label>
+                        <input
+                          type="number"
+                          min={3}
+                          value={sl.timer_seconds}
+                          onChange={(e) => handleUpdateShortlinkField(sl.id, 'timer_seconds', Number(e.target.value) || 10)}
+                          className="font-mono"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            borderRadius: 6,
+                            background: 'var(--bg3)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--txt)',
+                            fontSize: 12,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10, color: 'var(--txt2)', marginBottom: 3 }}>
+                          DIFFICULTY TAG
+                        </label>
+                        <select
+                          value={sl.difficulty}
+                          onChange={(e) =>
+                            handleUpdateShortlinkField(
+                              sl.id,
+                              'difficulty',
+                              e.target.value as 'Easy' | 'Medium' | 'Fast'
+                            )
+                          }
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            borderRadius: 6,
+                            background: 'var(--bg3)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--txt)',
+                            fontSize: 11.5,
+                          }}
+                        >
+                          <option value="Fast">Fast</option>
+                          <option value="Easy">Easy</option>
+                          <option value="Medium">Medium</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10, color: 'var(--txt2)', marginBottom: 3 }}>
+                          STEPS / INFO BADGE
+                        </label>
+                        <input
+                          type="text"
+                          value={sl.badge || ''}
+                          onChange={(e) => handleUpdateShortlinkField(sl.id, 'badge', e.target.value)}
+                          placeholder="⚡ Instant Credit • 2 Steps"
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            borderRadius: 6,
+                            background: 'var(--bg3)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--txt)',
+                            fontSize: 11.5,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSaveShortlinkConfig(sl)}
+                      className="btn btn-primary btn-sm"
+                    >
+                      💾 Save {sl.name}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 3. Live S2S Postback Webhook Simulator */}
-          <div className="card" style={{ padding: 24 }}>
+          <div id="admin-sec-3" className="card" style={{ padding: 24 }}>
             <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
               3. Universal S2S Postback Webhook Tester (`/api/postback/:provider`)
             </h2>
@@ -2547,7 +3658,7 @@ export default function App() {
           </div>
 
           {/* 3B. Admin Player Wallet & Balance Controller (Add / Minus / Set Coins + Custom Note) */}
-          <div className="card card-glow" style={{ padding: 24 }}>
+          <div id="admin-sec-4" className="card card-glow" style={{ padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3205,7 +4316,7 @@ export default function App() {
           </div>
 
           {/* 5. Player Withdrawals Queue & Recent Postbacks */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+          <div id="admin-sec-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
             <div className="card" style={{ padding: 24 }}>
               <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>
                 Player Withdrawal Requests ({adminWithdrawals.length})
@@ -3605,38 +4716,51 @@ export default function App() {
           </a>
 
           <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {(
-              [
-                { id: 'overview', label: 'Overview' },
-                { id: 'quests', label: 'Offerwalls & Quests' },
-                { id: 'faucet', label: '🚰 Free Faucet' },
-                { id: 'referrals', label: 'Refer & Earn' },
-                { id: 'wallet', label: 'Cashout' },
-              ] as { id: DashboardTab; label: string }[]
-            ).map((tab) => {
-              const active = activeTab === tab.id;
+            {(() => {
+              const remSlViews = shortlinks
+                .filter((s) => s.enabled)
+                .reduce(
+                  (acc, s) =>
+                    acc + Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0)),
+                  0
+                );
               return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => switchTab(tab.id)}
-                  className="font-display"
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: 8,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: active ? '1px solid rgba(0,232,154,0.35)' : '1px solid transparent',
-                    background: active ? 'rgba(0,232,154,0.1)' : 'transparent',
-                    color: active ? 'var(--green)' : 'var(--txt2)',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+                [
+                  { id: 'overview', label: 'Overview' },
+                  { id: 'quests', label: 'Offerwalls & Quests' },
+                  {
+                    id: 'shortlinks',
+                    label: remSlViews > 0 ? `🔗 Shortlinks (${remSlViews})` : '🔗 Shortlinks',
+                  },
+                  { id: 'faucet', label: '🚰 Free Faucet' },
+                  { id: 'referrals', label: 'Refer & Earn' },
+                  { id: 'wallet', label: 'Cashout' },
+                ] as { id: DashboardTab; label: string }[]
+              ).map((tab) => {
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => switchTab(tab.id)}
+                    className="font-display"
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: active ? '1px solid rgba(0,232,154,0.35)' : '1px solid transparent',
+                      background: active ? 'rgba(0,232,154,0.1)' : 'transparent',
+                      color: active ? 'var(--green)' : 'var(--txt2)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              });
+            })()}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -3728,7 +4852,8 @@ export default function App() {
               [
                 { id: 'overview', label: '⚡ Overview' },
                 { id: 'quests', label: '🎮 Offerwalls & Quests' },
-                { id: 'faucet', label: '🚰 Free Faucet (Every 30m)' },
+                { id: 'shortlinks', label: '🔗 Paid Shortlinks Wall' },
+                { id: 'faucet', label: '🚰 Free Faucet (Hourly)' },
                 { id: 'referrals', label: '👥 Refer & Earn' },
                 { id: 'wallet', label: '🏦 Cashout Wallet' },
               ] as { id: DashboardTab; label: string }[]
@@ -3956,13 +5081,26 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="card qcard" style={{ padding: 26 }} onClick={() => switchTab('shortlinks')}>
+                <div style={{ fontSize: 26, marginBottom: 10 }}>🔗</div>
+                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
+                  Paid Shortlinks Wall
+                </h3>
+                <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 16 }}>
+                  Complete daily shortlinks to earn up to <strong style={{ color: 'var(--green)' }}>+150 Coins per link</strong> &amp; unlock +3 Free Faucet Rolls!
+                </p>
+                <button type="button" className="btn btn-primary btn-sm btn-full">
+                  🔗 Open Shortlinks →
+                </button>
+              </div>
+
               <div className="card qcard" style={{ padding: 26 }} onClick={() => switchTab('faucet')}>
                 <div style={{ fontSize: 26, marginBottom: 10 }}>🚰</div>
                 <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
                   Free Coin &amp; FaucetPay Roll
                 </h3>
                 <p style={{ fontSize: 13, color: 'var(--txt2)', lineHeight: 1.65, marginBottom: 16 }}>
-                  Roll every 30 minutes to win up to <strong style={{ color: 'var(--gold)' }}>250 Coins</strong> directly to your Wallet or FaucetPay account!
+                  Roll every 60 minutes to win up to <strong style={{ color: 'var(--gold)' }}>50 Coins</strong> directly to your Lootify Wallet!
                 </p>
                 <button type="button" className="btn btn-primary btn-sm btn-full">
                   🎲 Claim Free Faucet →
@@ -4555,7 +5693,676 @@ export default function App() {
           </div>
         )}
 
-        {/* ── TAB 2B: LOOTIFY BUILT-IN FREE FAUCET + FAUCETPAY INSTANT ROLL ── */}
+        {/* ── TAB 2B: SHORTLINKS EARNING SECTION ── */}
+        {activeTab === 'shortlinks' && (() => {
+          const enabledShortlinks = shortlinks.filter((s) => s.enabled);
+          const totalViewsPossible = enabledShortlinks.reduce((acc, s) => acc + (Number(s.daily_limit) || 1), 0);
+          const totalViewsDoneToday = enabledShortlinks.reduce(
+            (acc, s) => acc + Math.min(Number(s.daily_limit) || 1, Number(s.claims_today) || 0),
+            0
+          );
+          const totalViewsLeftToday = Math.max(0, totalViewsPossible - totalViewsDoneToday);
+          const totalCoinsLeftToday = Number(
+            enabledShortlinks
+              .reduce((acc, s) => {
+                const rem = Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0));
+                return acc + rem * (Number(s.reward_coins) || 0);
+              }, 0)
+              .toFixed(2)
+          );
+          const totalCoinsEarnedToday = Number(
+            enabledShortlinks
+              .reduce((acc, s) => {
+                const done = Math.min(Number(s.daily_limit) || 1, Number(s.claims_today) || 0);
+                return acc + done * (Number(s.reward_coins) || 0);
+              }, 0)
+              .toFixed(2)
+          );
+          const activeShortlinkObj =
+            enabledShortlinks.find((s) => s.id === activeShortlinkId) || null;
+
+          const filteredShortlinks = enabledShortlinks
+            .filter((s) => {
+              const done = (Number(s.claims_today) || 0) >= (Number(s.daily_limit) || 1);
+              if (shortlinkFilter === 'available') return !done;
+              if (shortlinkFilter === 'completed') return done;
+              return true;
+            })
+            .sort((a, b) => {
+              if (shortlinkFilter === 'highest') {
+                return (Number(b.reward_coins) || 0) - (Number(a.reward_coins) || 0);
+              }
+              const aDone = (Number(a.claims_today) || 0) >= (Number(a.daily_limit) || 1) ? 1 : 0;
+              const bDone = (Number(b.claims_today) || 0) >= (Number(b.daily_limit) || 1) ? 1 : 0;
+              if (aDone !== bDone) return aDone - bDone;
+              return (Number(b.reward_coins) || 0) - (Number(a.reward_coins) || 0);
+            });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              {/* Header & Refresh Bar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                      🔗 Paid Shortlinks Wall
+                    </h2>
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: 11,
+                        padding: '3px 9px',
+                        borderRadius: 6,
+                        background: 'rgba(0,232,154,0.14)',
+                        border: '1px solid rgba(0,232,154,0.35)',
+                        color: 'var(--green)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      INSTANT WALLET CREDIT + 3 FAUCET ROLLS
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Visit sponsor shortlinks, complete the quick captcha/timer step, and earn instant withdrawable coins + Faucet Energy!
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => fetchShortlinksFromBackend(user.id)}
+                    className="btn btn-outline btn-sm"
+                  >
+                    🔄 Refresh Shortlinks
+                  </button>
+                  {user.email.toLowerCase() === ADMIN_ALLOWED_EMAIL && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.hash = '#/admin';
+                      }}
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--gold)' }}
+                    >
+                      ⚙️ Manage Links in Admin
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 4-Card Daily Shortlinks Summary Stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+                <div className="card" style={{ padding: 20, border: '1px solid rgba(0,232,154,0.3)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                    COINS AVAILABLE TODAY
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--green)' }}>
+                    +{totalCoinsLeftToday.toLocaleString('en-IN')}{' '}
+                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Value: ₹{((totalCoinsLeftToday * 90) / 100000).toFixed(3)} (${(totalCoinsLeftToday / 100000).toFixed(4)} USDT)
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                    SHORTLINKS REMAINING
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--txt)' }}>
+                    {totalViewsLeftToday}{' '}
+                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>/ {totalViewsPossible} Views</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Resets daily at 00:00 UTC • {enabledShortlinks.length} Active Networks
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: 20, border: '1px solid rgba(255,180,0,0.28)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gold)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                    CLAIMED TODAY
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--gold)' }}>
+                    +{totalCoinsEarnedToday.toLocaleString('en-IN')}{' '}
+                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Completed {totalViewsDoneToday} Shortlink View(s) Today
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--violet)', letterSpacing: '0.06em', marginBottom: 6 }}>
+                    FAUCET ENERGY BONUS
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 26, fontWeight: 700, color: 'var(--violet)' }}>
+                    +3 Free Rolls
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Unlocked automatically per Shortlink completed!
+                  </div>
+                </div>
+              </div>
+
+              {/* Overall Daily Shortlink Completion Progress Bar */}
+              <div
+                className="card"
+                style={{
+                  padding: '16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  background: 'var(--bg2)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <span className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt)' }}>
+                    📈 Daily Shortlinks Completion Progress: {totalViewsDoneToday} / {totalViewsPossible} Views ({totalViewsPossible > 0 ? Math.round((totalViewsDoneToday / totalViewsPossible) * 100) : 0}%)
+                  </span>
+                  <span className="font-mono" style={{ fontSize: 11.5, color: 'var(--green)', fontWeight: 700 }}>
+                    ⚡ +{totalViewsDoneToday * 3} Free Faucet Rolls Unlocked Today
+                  </span>
+                </div>
+                <div
+                  style={{
+                    width: '100%',
+                    height: 9,
+                    borderRadius: 999,
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${totalViewsPossible > 0 ? Math.min(100, Math.round((totalViewsDoneToday / totalViewsPossible) * 100)) : 0}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, var(--green), var(--gold))',
+                      transition: 'width 0.35s ease',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Status Banner */}
+              {shortlinkStatusMsg && (
+                <div
+                  style={{
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background:
+                      shortlinkStatusMsg.type === 'success'
+                        ? 'rgba(0,232,154,0.12)'
+                        : 'rgba(255,85,102,0.12)',
+                    border:
+                      shortlinkStatusMsg.type === 'success'
+                        ? '1.5px solid rgba(0,232,154,0.4)'
+                        : '1.5px solid rgba(255,85,102,0.4)',
+                    color: shortlinkStatusMsg.type === 'success' ? 'var(--green)' : 'var(--red)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <span>{shortlinkStatusMsg.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => setShortlinkStatusMsg(null)}
+                    style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 15 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Active Shortlink Step Verification Box */}
+              {activeShortlinkObj && (() => {
+                const maxTimer = Math.max(5, Number(activeShortlinkObj.timer_seconds) || 12);
+                const verifyPct =
+                  shortlinkTimerSecs <= 0
+                    ? 100
+                    : Math.min(100, Math.max(5, Math.round(((maxTimer - shortlinkTimerSecs) / maxTimer) * 100)));
+                return (
+                  <div
+                    className="card card-glow"
+                    style={{
+                      padding: '22px 24px',
+                      border: '2px solid var(--green)',
+                      background: 'linear-gradient(135deg, rgba(0,232,154,0.11), rgba(255,180,0,0.05))',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 14,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                      <div>
+                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
+                          🛡️ ACTIVE SHORTLINK VERIFICATION SESSION ({verifyPct}%)
+                        </div>
+                        <h3 className="font-display" style={{ fontSize: 19, fontWeight: 700, color: 'var(--txt)', marginTop: 2 }}>
+                          {activeShortlinkObj.name} ({activeShortlinkObj.provider}) — +{activeShortlinkObj.reward_coins} Coins
+                        </h3>
+                        <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 2 }}>
+                          {shortlinkTimerSecs > 0
+                            ? `Complete the shortlink steps in the opened tab. Verification unlocks in ${shortlinkTimerSecs} second(s)...`
+                            : '✅ Shortlink visit timer verified! Click the button below to credit your Coins immediately.'}
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <a
+                          href={resolveShortlinkDestinationUrl(activeShortlinkObj, user.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-outline btn-sm"
+                        >
+                          ↗ Re-open Shortlink Tab
+                        </a>
+
+                        <button
+                          type="button"
+                          disabled={!shortlinkReadyToClaim || shortlinkTimerSecs > 0 || shortlinkClaiming}
+                          onClick={() => handleVerifyAndClaimShortlink(activeShortlinkObj)}
+                          className="btn btn-primary btn-sm"
+                          style={{
+                            padding: '11px 20px',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            opacity: !shortlinkReadyToClaim || shortlinkTimerSecs > 0 || shortlinkClaiming ? 0.65 : 1,
+                          }}
+                        >
+                          {shortlinkClaiming
+                            ? '⏳ Crediting Coins...'
+                            : shortlinkTimerSecs > 0
+                            ? `⏳ Waiting ${shortlinkTimerSecs}s...`
+                            : `✅ Verify & Claim +${activeShortlinkObj.reward_coins} Coins!`}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveShortlinkId(null);
+                            setShortlinkTimerSecs(0);
+                            setShortlinkReadyToClaim(false);
+                          }}
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '8px 12px', fontSize: 12 }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Verification Countdown Progress Bar */}
+                    <div
+                      style={{
+                        width: '100%',
+                        height: 8,
+                        borderRadius: 999,
+                        background: 'var(--bg3)',
+                        overflow: 'hidden',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${verifyPct}%`,
+                          height: '100%',
+                          background:
+                            verifyPct >= 100
+                              ? 'linear-gradient(90deg, var(--green), #10B981)'
+                              : 'linear-gradient(90deg, var(--gold), var(--green))',
+                          transition: 'width 0.8s linear',
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Filter Tabs */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {(
+                    [
+                      { id: 'all', label: `All Shortlinks (${enabledShortlinks.length})` },
+                      { id: 'available', label: '⚡ Available Now' },
+                      { id: 'highest', label: '🔥 Highest Paying' },
+                      { id: 'completed', label: '✅ Completed Today' },
+                    ] as const
+                  ).map((f) => {
+                    const active = shortlinkFilter === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setShortlinkFilter(f.id)}
+                        className="font-mono"
+                        style={{
+                          padding: '7px 14px',
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          background: active ? 'rgba(0,232,154,0.14)' : 'var(--bg2)',
+                          border: active ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: active ? 'var(--green)' : 'var(--txt2)',
+                        }}
+                      >
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                  100,000 Coins = $1.00 USD (₹90 INR) • 0% Fee FaucetPay Cashout
+                </div>
+              </div>
+
+              {/* Shortlinks Cards Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
+                {filteredShortlinks.map((sl) => {
+                  const claimsDone = Math.min(Number(sl.daily_limit) || 1, Number(sl.claims_today) || 0);
+                  const maxViews = Math.max(1, Number(sl.daily_limit) || 1);
+                  const isCompletedToday = claimsDone >= maxViews;
+                  const isActiveSession = activeShortlinkId === sl.id;
+                  const progressPct = Math.min(100, Math.round((claimsDone / maxViews) * 100));
+                  const inrEq = ((Number(sl.reward_coins) * 90) / 100000).toFixed(3);
+                  const destHref = resolveShortlinkDestinationUrl(sl, user.id);
+
+                  return (
+                    <div
+                      key={sl.id}
+                      className="card"
+                      style={{
+                        padding: 20,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: 14,
+                        border: isActiveSession
+                          ? '2px solid var(--green)'
+                          : isCompletedToday
+                          ? '1px solid var(--border)'
+                          : '1px solid rgba(0,232,154,0.28)',
+                        opacity: isCompletedToday ? 0.68 : 1,
+                        background: isActiveSession
+                          ? 'linear-gradient(135deg, rgba(0,232,154,0.08), var(--bg2))'
+                          : 'var(--bg2)',
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
+                                {sl.name}
+                              </h3>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: 10,
+                                  padding: '2px 7px',
+                                  borderRadius: 5,
+                                  background:
+                                    sl.difficulty === 'Fast'
+                                      ? 'rgba(0,232,154,0.15)'
+                                      : sl.difficulty === 'Easy'
+                                      ? 'rgba(56,189,248,0.15)'
+                                      : 'rgba(255,180,0,0.15)',
+                                  color:
+                                    sl.difficulty === 'Fast'
+                                      ? 'var(--green)'
+                                      : sl.difficulty === 'Easy'
+                                      ? '#38BDF8'
+                                      : 'var(--gold)',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {sl.difficulty.toUpperCase()} • {sl.timer_seconds}s
+                              </span>
+                            </div>
+                            <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 3 }}>
+                              Provider: <strong style={{ color: 'var(--txt)' }}>{sl.provider}</strong> • {sl.badge || '⚡ Instant Credit'}
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              textAlign: 'right',
+                              padding: '6px 10px',
+                              borderRadius: 8,
+                              background: 'rgba(0,232,154,0.1)',
+                              border: '1px solid rgba(0,232,154,0.3)',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
+                              +{sl.reward_coins}
+                            </div>
+                            <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
+                              COINS (₹{inrEq})
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Daily Views Progress Bar */}
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 5 }}>
+                            <span className="font-mono" style={{ color: 'var(--txt2)' }}>
+                              Daily Limit Progress
+                            </span>
+                            <span
+                              className="font-mono"
+                              style={{
+                                fontWeight: 700,
+                                color: isCompletedToday ? 'var(--gold)' : 'var(--green)',
+                              }}
+                            >
+                              {claimsDone} / {maxViews} Views Today
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              width: '100%',
+                              height: 7,
+                              borderRadius: 999,
+                              background: 'var(--bg3)',
+                              overflow: 'hidden',
+                              border: '1px solid var(--border)',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${progressPct}%`,
+                                height: '100%',
+                                background: isCompletedToday
+                                  ? 'linear-gradient(90deg, var(--gold), #D97706)'
+                                  : 'linear-gradient(90deg, var(--green), #059669)',
+                                transition: 'width 0.3s ease',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Button */}
+                      {isCompletedToday ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="btn btn-outline btn-sm btn-full"
+                          style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                        >
+                          ✅ Completed for Today ({claimsDone}/{maxViews})
+                        </button>
+                      ) : isActiveSession && shortlinkReadyToClaim && shortlinkTimerSecs === 0 ? (
+                        <button
+                          type="button"
+                          disabled={shortlinkClaiming}
+                          onClick={() => handleVerifyAndClaimShortlink(sl)}
+                          className="btn btn-primary btn-sm btn-full"
+                          style={{ fontWeight: 700 }}
+                        >
+                          {shortlinkClaiming
+                            ? '⏳ Crediting...'
+                            : `✅ Verify & Claim +${sl.reward_coins} Coins!`}
+                        </button>
+                      ) : isActiveSession && shortlinkTimerSecs > 0 ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="btn btn-outline btn-sm btn-full"
+                          style={{ color: 'var(--gold)', borderColor: 'rgba(255,180,0,0.45)' }}
+                        >
+                          ⏳ Visiting Shortlink... ({shortlinkTimerSecs}s left)
+                        </button>
+                      ) : (
+                        <a
+                          href={destHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => handleStartShortlinkVisit(sl)}
+                          className="btn btn-primary btn-sm btn-full"
+                          style={{
+                            textAlign: 'center',
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          🔗 Visit &amp; Claim (+{sl.reward_coins} Coins) ↗
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Partner Shortlink Offerwalls Banner + Sponsored Banner */}
+              <div
+                className="card"
+                style={{
+                  padding: '20px 24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 14,
+                  background: 'linear-gradient(135deg, rgba(155,110,255,0.08), rgba(0,232,154,0.05))',
+                }}
+              >
+                <div>
+                  <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
+                    ⚡ Want 50+ More Daily Shortlinks &amp; PTC Ads?
+                  </h3>
+                  <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 2 }}>
+                    PubCrypto &amp; Offerwall.me also include dozens of built-in Shortlinks &amp; PTC ads that credit automatically via S2S Postback!
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => switchTab('quests')}
+                  className="btn btn-primary btn-sm"
+                >
+                  🎮 Open Partner Offerwalls →
+                </button>
+              </div>
+
+              {/* Recent Shortlink Claims History */}
+              {(() => {
+                const shortlinkClaimsHistory = (user.heldRewards || []).filter((h) =>
+                  String(h.title || '').toUpperCase().includes('SHORTLINK')
+                );
+                return (
+                  <div className="card" style={{ padding: 22 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                      <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
+                        📜 Your Recent Shortlink Claims ({shortlinkClaimsHistory.length})
+                      </h3>
+                      <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                        INSTANT WALLET LEDGER
+                      </span>
+                    </div>
+                    {shortlinkClaimsHistory.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '18px 14px',
+                          borderRadius: 10,
+                          background: 'var(--bg2)',
+                          border: '1px dashed var(--border2)',
+                          textAlign: 'center',
+                          fontSize: 12.5,
+                          color: 'var(--txt2)',
+                        }}
+                      >
+                        No shortlinks claimed yet today. Click <strong>&ldquo;🔗 Visit &amp; Claim&rdquo;</strong> on any shortlink card above to earn instant Coins + 3 Free Faucet Rolls!
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {shortlinkClaimsHistory.slice(0, 8).map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 10,
+                              background: 'var(--bg2)',
+                              border: '1px solid var(--border)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{item.title}</div>
+                              <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)' }}>
+                                {formatIstDate(item.createdAt)} • Credited to Withdrawable Wallet
+                              </div>
+                            </div>
+                            <span className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
+                              +{item.coins} Coins
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div
+                className="card"
+                style={{
+                  padding: '16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.08em' }}>
+                    SHORTLINKS SPONSOR PLACEMENT • OFFERWALL.ME
+                  </span>
+                  <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
+                    ACTIVE AD SLOT
+                  </span>
+                </div>
+                <OfferwallMeBanner size="728x90" />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── TAB 2C: LOOTIFY BUILT-IN FREE FAUCET + FAUCETPAY INSTANT ROLL ── */}
         {activeTab === 'faucet' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
             {/* Top Sponsored Banner Slot (728x90 & 468x60) */}
@@ -4708,14 +6515,24 @@ export default function App() {
                           Every 1 Offerwall task/shortlink completed unlocks <strong>+3 Free Faucet Rolls</strong> &amp; pays up to 3,000 Coins!
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => switchTab('quests')}
-                        className="btn btn-outline btn-sm"
-                        style={{ padding: '6px 12px', fontSize: 11 }}
-                      >
-                        🚀 Recharge via Offerwalls (+3 Rolls) →
-                      </button>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => switchTab('shortlinks')}
+                          className="btn btn-primary btn-sm"
+                          style={{ padding: '6px 12px', fontSize: 11 }}
+                        >
+                          🔗 1 Shortlink (+3 Rolls) →
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => switchTab('quests')}
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '6px 12px', fontSize: 11 }}
+                        >
+                          🚀 Offerwalls (+3 Rolls) →
+                        </button>
+                      </div>
                     </div>
                   );
                 })()}

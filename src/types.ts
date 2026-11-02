@@ -1,6 +1,6 @@
 export type ThemeMode = 'dark' | 'light';
 
-export type DashboardTab = 'overview' | 'quests' | 'faucet' | 'referrals' | 'wallet';
+export type DashboardTab = 'overview' | 'quests' | 'shortlinks' | 'faucet' | 'referrals' | 'wallet';
 
 export type PayoutChannel = 'upi' | 'bank' | 'gift_card' | 'crypto';
 
@@ -32,6 +32,20 @@ export interface FaucetClaimRecord {
   payoutMode: 'wallet' | 'faucetpay';
   faucetpayTxId?: string | null;
   createdAt: string;
+}
+
+export interface ShortlinkConfig {
+  id: string;
+  name: string;
+  provider: string;
+  url: string;
+  reward_coins: number;
+  daily_limit: number;
+  timer_seconds: number;
+  difficulty: 'Easy' | 'Medium' | 'Fast';
+  badge?: string;
+  enabled: number;
+  claims_today?: number;
 }
 
 export interface PlayerUser {

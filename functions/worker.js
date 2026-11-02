@@ -403,6 +403,45 @@ async function ensureSchema(db) {
       )
       .run();
 
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS shortlink_configs (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          provider TEXT DEFAULT 'Shortlink Partner',
+          url TEXT NOT NULL,
+          reward_coins REAL DEFAULT 100,
+          daily_limit INTEGER DEFAULT 3,
+          timer_seconds INTEGER DEFAULT 15,
+          difficulty TEXT DEFAULT 'Easy',
+          badge TEXT DEFAULT '⚡ Instant Credit',
+          enabled INTEGER DEFAULT 1,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`
+      )
+      .run();
+
+    const defaultShortlinks = [
+      ["shrinkme_vip", "ShrinkMe VIP Link", "ShrinkMe.io", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=shrinkme_vip", 120, 3, 15, "Medium", "🔥 Highest Paying • 3 Steps", 1],
+      ["cuty_crypto", "Cuty.io Fast Crypto Link", "Cuty.io", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=cuty_crypto", 100, 5, 12, "Easy", "⚡ Instant Credit • 2 Steps", 1],
+      ["exeio_global", "Exe.io Premium Shortlink", "Exe.io", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=exeio_global", 110, 3, 15, "Medium", "💎 High CPM • 3 Steps", 1],
+      ["gplinks_india", "GPLinks Express", "GPLinks", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=gplinks_india", 100, 4, 15, "Medium", "🇮🇳 Top India CPM • 3 Steps", 1],
+      ["clicksfly_turbo", "Clicksfly Turbo Link", "Clicksfly", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=clicksfly_turbo", 90, 4, 12, "Easy", "🚀 Fast Timer • 2 Steps", 1],
+      ["droplink_fast", "Droplink Quick Claim", "Droplink", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=droplink_fast", 80, 5, 10, "Fast", "⚡ Clean 1-Step Ad", 1],
+      ["ouo_express", "Ouo.io Global Shortlink", "Ouo.io", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=ouo_express", 75, 5, 10, "Fast", "🌍 Global Fast Link", 1],
+      ["linkvertise_pro", "Linkvertise Direct Boost", "Linkvertise", "https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=linkvertise_pro", 150, 2, 15, "Easy", "👑 Premium Advertiser", 1],
+    ];
+    for (const s of defaultShortlinks) {
+      try {
+        await db
+          .prepare(
+            "INSERT OR IGNORE INTO shortlink_configs (id, name, provider, url, reward_coins, daily_limit, timer_seconds, difficulty, badge, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9])
+          .run();
+      } catch {}
+    }
+
     // Auto-migrate latest PubCrypto approved keys & zero-hold instant credit
     try {
       await db
@@ -1040,7 +1079,7 @@ async function formatPlayerPayload(db, userRow) {
 
   const heldRes = await db
     .prepare(
-      "SELECT id, external_tx_id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type IN ('offerwall', 'admin_adjustment') AND status IN ('pending_hold', 'credited', 'deducted') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
+      "SELECT id, external_tx_id, title, amount_coins, status, created_at, unlocks_at FROM ledger_entries WHERE user_id = ? AND source_type IN ('offerwall', 'shortlink', 'admin_adjustment') AND status IN ('pending_hold', 'credited', 'deducted') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
     )
     .bind(userRow.id)
     .all();
@@ -2252,15 +2291,15 @@ export default {
           }
         }
 
-        // Profit Protection Gate: First 2 rolls are free; after that, each Offerwall task unlocks +3 Faucet rolls
+        // Profit Protection Gate: First 2 rolls are free; after that, each Offerwall/Shortlink task unlocks +3 Faucet rolls
         const claimsSoFar = Number(user.faucet_claims_count) || 0;
-        const offerwallsDone = Number(user.offerwalls_completed) || 0;
+        const offerwallsDone = (Number(user.offerwalls_completed) || 0) + (Number(user.shortlinks_completed) || 0);
         const maxAllowedRolls = 2 + offerwallsDone * 3;
         if (claimsSoFar >= maxAllowedRolls) {
           return Response.json(
             {
               error:
-                "⚡ Faucet Energy Recharged via Offerwalls! Complete 1 quick task, PTC ad, or shortlink on Offerwall.me to unlock 3 more Free Faucet Rolls!",
+                "⚡ Faucet Energy Recharged via Offerwalls & Shortlinks! Complete 1 quick task, PTC ad, or shortlink to unlock 3 more Free Faucet Rolls!",
               requiresOfferwall: true,
             },
             { status: 403, headers: corsHeaders }
@@ -2310,8 +2349,192 @@ export default {
             rollNumber,
             rewardCoins,
             payoutMode: "wallet",
-            notice: `+${rewardCoins} Coin(s) added to your Lootify Wallet! Complete Offerwall tasks to earn up to 3,000 Coins instantly.`,
+            notice: `+${rewardCoins} Coin(s) added to your Lootify Wallet! Complete Offerwall tasks or Shortlinks to earn up to 3,000 Coins instantly.`,
             user: player,
+          },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      // ======================================================================
+      // 4C. SHORTLINKS EARNING SECTION (GET /api/shortlinks & POST /api/shortlinks/claim)
+      // ======================================================================
+      if (url.pathname === "/api/shortlinks" && request.method === "GET") {
+        const reqUserId = (
+          url.searchParams.get("user_id") ||
+          request.headers.get("x-user-id") ||
+          ""
+        ).trim();
+        const todayPrefix = new Date().toISOString().slice(0, 10);
+
+        const slRows = await env.DB.prepare(
+          "SELECT id, name, provider, url, reward_coins, daily_limit, timer_seconds, difficulty, badge, enabled FROM shortlink_configs ORDER BY reward_coins DESC, rowid ASC"
+        ).all();
+        const rawList = (slRows && slRows.results) || [];
+
+        let userClaimsRows = [];
+        if (reqUserId) {
+          const cRes = await env.DB.prepare(
+            "SELECT external_tx_id FROM ledger_entries WHERE LOWER(user_id) = LOWER(?) AND source_type = 'shortlink' AND external_tx_id LIKE ?"
+          )
+            .bind(reqUserId, `sl_%_${todayPrefix}_%`)
+            .all();
+          userClaimsRows = (cRes && cRes.results) || [];
+        }
+
+        const list = rawList.map((s) => {
+          const prefix = `sl_${s.id}_${todayPrefix}_`;
+          const claimsToday = userClaimsRows.filter((r) =>
+            String(r.external_tx_id || "").startsWith(prefix)
+          ).length;
+          return {
+            ...s,
+            reward_coins: Number(s.reward_coins) || 100,
+            daily_limit: Number(s.daily_limit) || 3,
+            timer_seconds: Number(s.timer_seconds) || 15,
+            enabled: Number(s.enabled) ? 1 : 0,
+            claims_today: claimsToday,
+          };
+        });
+
+        return Response.json(
+          { ok: true, shortlinks: list },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      if (url.pathname === "/api/shortlinks/claim" && request.method === "POST") {
+        const body = await request.json();
+        const userId = String(body.userId || "").trim();
+        const email = String(body.email || "").trim().toLowerCase();
+        const shortlinkId = String(body.shortlinkId || "").trim();
+
+        if (!shortlinkId) {
+          return Response.json(
+            { error: "Shortlink ID is required." },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        let user = userId
+          ? await env.DB.prepare("SELECT * FROM users WHERE LOWER(id) = LOWER(?)").bind(userId).first()
+          : null;
+        if (!user && email) {
+          user = await env.DB.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").bind(email).first();
+        }
+        if (!user) {
+          return Response.json(
+            { error: "Player account not found. Please re-login." },
+            { status: 404, headers: corsHeaders }
+          );
+        }
+
+        const sl = await env.DB.prepare(
+          "SELECT * FROM shortlink_configs WHERE id = ?"
+        )
+          .bind(shortlinkId)
+          .first();
+
+        if (!sl || !Number(sl.enabled)) {
+          return Response.json(
+            { error: "This shortlink is currently unavailable." },
+            { status: 404, headers: corsHeaders }
+          );
+        }
+
+        const todayPrefix = new Date().toISOString().slice(0, 10);
+        const prefix = `sl_${sl.id}_${todayPrefix}_`;
+        const cntRow = await env.DB.prepare(
+          "SELECT COUNT(*) as cnt FROM ledger_entries WHERE user_id = ? AND source_type = 'shortlink' AND external_tx_id LIKE ?"
+        )
+          .bind(user.id, `${prefix}%`)
+          .first();
+        const claimsToday = Number(cntRow && cntRow.cnt) || 0;
+        const maxDaily = Math.max(1, Number(sl.daily_limit) || 1);
+
+        if (claimsToday >= maxDaily) {
+          return Response.json(
+            {
+              error: `Daily limit reached for ${sl.name} (${claimsToday}/${maxDaily} views today). Come back tomorrow or complete another shortlink!`,
+            },
+            { status: 429, headers: corsHeaders }
+          );
+        }
+
+        const rewardCoins = Math.max(0.01, Number(sl.reward_coins) || 50);
+        const nowIso = new Date().toISOString();
+        const txId = `sl_${sl.id}_${todayPrefix}_${claimsToday + 1}_${Date.now()}`;
+
+        await env.DB.prepare(
+          "INSERT INTO ledger_entries (id, user_id, user_name, source_type, title, amount_coins, status, external_tx_id, created_at) VALUES (?, ?, ?, 'shortlink', ?, ?, 'credited', ?, ?)"
+        )
+          .bind(
+            "ldg_sl_" + Date.now(),
+            user.id,
+            user.name,
+            `🔗 SHORTLINK (${String(sl.provider || "SHORTLINK").toUpperCase()}): ${sl.name} [View ${claimsToday + 1}/${maxDaily}]`,
+            rewardCoins,
+            txId,
+            nowIso
+          )
+          .run();
+
+        await env.DB.prepare(
+          "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2), shortlinks_completed = COALESCE(shortlinks_completed, 0) + 1 WHERE id = ?"
+        )
+          .bind(rewardCoins, rewardCoins, user.id)
+          .run();
+
+        if (user.referred_by) {
+          const commission = Number(Math.max(0.5, rewardCoins * 0.1).toFixed(2));
+          const referrer = await env.DB.prepare(
+            "SELECT id FROM users WHERE referral_code = ?"
+          )
+            .bind(user.referred_by)
+            .first();
+          if (referrer) {
+            await env.DB.prepare(
+              "UPDATE users SET available_coins = ROUND(available_coins + ?, 2), lifetime_earned_coins = ROUND(lifetime_earned_coins + ?, 2) WHERE id = ?"
+            )
+              .bind(commission, commission, referrer.id)
+              .run();
+          }
+        }
+
+        const updatedUserRow = await env.DB.prepare("SELECT * FROM users WHERE id = ?")
+          .bind(user.id)
+          .first();
+        const player = await formatPlayerPayload(env.DB, updatedUserRow);
+
+        const slRows = await env.DB.prepare(
+          "SELECT id, name, provider, url, reward_coins, daily_limit, timer_seconds, difficulty, badge, enabled FROM shortlink_configs ORDER BY reward_coins DESC, rowid ASC"
+        ).all();
+        const cRes = await env.DB.prepare(
+          "SELECT external_tx_id FROM ledger_entries WHERE user_id = ? AND source_type = 'shortlink' AND external_tx_id LIKE ?"
+        )
+          .bind(user.id, `sl_%_${todayPrefix}_%`)
+          .all();
+        const userClaimsRows = (cRes && cRes.results) || [];
+        const updatedShortlinks = ((slRows && slRows.results) || []).map((s) => ({
+          ...s,
+          reward_coins: Number(s.reward_coins) || 100,
+          daily_limit: Number(s.daily_limit) || 3,
+          timer_seconds: Number(s.timer_seconds) || 15,
+          enabled: Number(s.enabled) ? 1 : 0,
+          claims_today: userClaimsRows.filter((r) =>
+            String(r.external_tx_id || "").startsWith(`sl_${s.id}_${todayPrefix}_`)
+          ).length,
+        }));
+
+        return Response.json(
+          {
+            ok: true,
+            rewardCoins,
+            claimsToday: claimsToday + 1,
+            dailyLimit: maxDaily,
+            message: `🎉 +${rewardCoins} Coins credited to your Withdrawable Wallet from ${sl.name} (${claimsToday + 1}/${maxDaily} today)!`,
+            user: player,
+            shortlinks: updatedShortlinks,
           },
           { status: 200, headers: corsHeaders }
         );
@@ -2807,10 +3030,13 @@ export default {
             "SELECT * FROM withdrawals ORDER BY created_at DESC LIMIT 100"
           ).all();
           const postbacksRes = await env.DB.prepare(
-            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'chargeback_reversal', 'debug_postback', 'verified_ping', 'admin_adjustment', 'admin_silent') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
+            "SELECT * FROM ledger_entries WHERE source_type IN ('offerwall', 'shortlink', 'chargeback_reversal', 'debug_postback', 'verified_ping', 'admin_adjustment', 'admin_silent') ORDER BY REPLACE(created_at, ' ', 'T') DESC, rowid DESC LIMIT 100"
           ).all();
           const offerwallsRes = await env.DB.prepare(
             "SELECT * FROM offerwall_configs ORDER BY rowid ASC"
+          ).all();
+          const shortlinksRes = await env.DB.prepare(
+            "SELECT * FROM shortlink_configs ORDER BY reward_coins DESC, rowid ASC"
           ).all();
 
           return Response.json(
@@ -2820,6 +3046,7 @@ export default {
               withdrawals: (withdrawalsRes && withdrawalsRes.results) || [],
               postbacks: (postbacksRes && postbacksRes.results) || [],
               offerwalls: (offerwallsRes && offerwallsRes.results) || [],
+              shortlinks: (shortlinksRes && shortlinksRes.results) || [],
             },
             { status: 200, headers: corsHeaders }
           );
@@ -2992,6 +3219,98 @@ export default {
             .run();
 
           return Response.json({ ok: true }, { status: 200, headers: corsHeaders });
+        }
+
+        // Dynamic Shortlink Add / Update (UPSERT)
+        if (
+          (url.pathname === "/api/admin/shortlinks/save" ||
+            url.pathname === "/api/admin/shortlinks/update") &&
+          request.method === "POST"
+        ) {
+          const body = await request.json();
+          const id = String(body.id || "")
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]/g, "");
+          if (!id) {
+            return Response.json(
+              { error: "Shortlink ID / Slug is required." },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          const name = String(body.name || id).trim();
+          const provider = String(body.provider || "Shortlink Partner").trim();
+          const linkUrl = String(
+            body.url || `https://lootify.eternant.c0m.to/#/shortlinks?sl_verify=${id}`
+          ).trim();
+          const rewardCoins = Math.max(0.01, Number(body.reward_coins) || 100);
+          const dailyLimit = Math.max(1, parseInt(String(body.daily_limit || "3"), 10) || 3);
+          const timerSeconds = Math.max(3, parseInt(String(body.timer_seconds || "12"), 10) || 12);
+          const diffRaw = String(body.difficulty || "Easy").trim();
+          const difficulty =
+            diffRaw === "Medium" ? "Medium" : diffRaw === "Fast" ? "Fast" : "Easy";
+          const badge = String(body.badge || "⚡ Instant Credit").trim();
+          const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : 1;
+
+          await env.DB.prepare(
+            `INSERT INTO shortlink_configs (
+              id, name, provider, url, reward_coins, daily_limit, timer_seconds, difficulty, badge, enabled, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              name = excluded.name,
+              provider = excluded.provider,
+              url = excluded.url,
+              reward_coins = excluded.reward_coins,
+              daily_limit = excluded.daily_limit,
+              timer_seconds = excluded.timer_seconds,
+              difficulty = excluded.difficulty,
+              badge = excluded.badge,
+              enabled = excluded.enabled,
+              updated_at = CURRENT_TIMESTAMP`
+          )
+            .bind(
+              id,
+              name,
+              provider,
+              linkUrl,
+              rewardCoins,
+              dailyLimit,
+              timerSeconds,
+              difficulty,
+              badge,
+              enabled
+            )
+            .run();
+
+          const slRes = await env.DB.prepare(
+            "SELECT * FROM shortlink_configs ORDER BY reward_coins DESC, rowid ASC"
+          ).all();
+          return Response.json(
+            { ok: true, shortlinks: (slRes && slRes.results) || [] },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+
+        // Dynamic Shortlink Delete
+        if (url.pathname === "/api/admin/shortlinks/delete" && request.method === "POST") {
+          const body = await request.json();
+          const id = String(body.id || "").trim().toLowerCase();
+          if (!id) {
+            return Response.json(
+              { error: "Shortlink ID is required." },
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          await env.DB.prepare("DELETE FROM shortlink_configs WHERE id = ?")
+            .bind(id)
+            .run();
+          const slRes = await env.DB.prepare(
+            "SELECT * FROM shortlink_configs ORDER BY reward_coins DESC, rowid ASC"
+          ).all();
+          return Response.json(
+            { ok: true, shortlinks: (slRes && slRes.results) || [] },
+            { status: 200, headers: corsHeaders }
+          );
         }
 
         // 1-Click Network Payout Settlement -> Auto-Release Held Coins to Withdrawable Balance
