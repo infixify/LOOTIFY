@@ -819,14 +819,24 @@ async function startServer() {
     const rawUsdPayout = pickCleanFromObj(merged, ['payout_pb', 'payout', 'usd']);
 
     let coins = 0;
-    const rawCoinsParam = explicitRewardPb || explicitFullReward || explicitAmount;
-    if (rawCoinsParam && Number(rawCoinsParam) > 0) {
-      const parsedVal = Math.abs(parseFloat(rawCoinsParam) || 0);
-      coins = Number(Math.max(0.01, parsedVal).toFixed(2));
+    const pbVal = explicitRewardPb ? Math.abs(parseFloat(explicitRewardPb) || 0) : 0;
+    const fullVal = explicitFullReward ? Math.abs(parseFloat(explicitFullReward) || 0) : 0;
+    const amtVal = explicitAmount ? Math.abs(parseFloat(explicitAmount) || 0) : 0;
+    const highestCoins = Math.max(pbVal, fullVal, amtVal);
+
+    if (highestCoins > 0) {
+      coins = Number(Math.max(0.01, highestCoins).toFixed(2));
     } else if (rawUsdPayout && Number(rawUsdPayout) > 0) {
       const pVal = Math.abs(parseFloat(rawUsdPayout) || 0);
       const rate = isPubCryptoPayload || providerId === 'pubcrypto' ? 9000 : 3000;
       coins = pVal < 1.0 ? Number((pVal * rate).toFixed(2)) : Number(pVal.toFixed(2));
+    }
+    if ((isPubCryptoPayload || providerId === 'pubcrypto') && coins > 0) {
+      if (fullVal > 0) {
+        coins = Math.max(coins, fullVal);
+      } else {
+        coins = Number((coins * 1.259259).toFixed(2));
+      }
     }
     const parsedAmount = coins;
 
@@ -846,7 +856,7 @@ async function startServer() {
           ? merged.reward_pb
           : merged.reward !== undefined
           ? merged.reward
-          : rawCoinsParam;
+          : coins;
 
       const owmWall = db.offerwalls.find((w) => w.provider_id === 'offerwallme');
       const owmSecret = getOfferwallMeSecret(owmWall && owmWall.secret_key);

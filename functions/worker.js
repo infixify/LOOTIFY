@@ -32,6 +32,22 @@ if (!globalThis.__LOOTIFY_PENDING_POSTBACKS__) {
   const initialSeeds = [
     {
       userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-336022492",
+      coins: 0.68,
+      offerName: "👉 DropBNB Launched DropBTC! new",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-11-02T10:05:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
+      txId: "pubcrypto_plr_c2fydghha3_LD-336015802",
+      coins: 0.68,
+      offerName: "👉 DropBNB Launched DropBTC! new",
+      providerLabel: "PUBCRYPTO",
+      createdAt: "2026-11-02T09:48:00.000Z",
+    },
+    {
+      userId: "plr_c2fydghha3",
       txId: "pubcrypto_plr_c2fydghha3_LD-335591346",
       coins: 1.44,
       offerName: "🔥 382,850 SATOSHI 🔥",
@@ -391,7 +407,7 @@ async function ensureSchema(db) {
     try {
       await db
         .prepare(
-          "UPDATE offerwall_configs SET app_id = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198', secret_key = 'e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23', hold_days = 0, postback_macro_query = '?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}' WHERE provider_id = 'pubcrypto'"
+          "UPDATE offerwall_configs SET app_id = 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198', secret_key = 'e73bc1c9efe265722d1bf361772d1b33b1fe1074edef94687bc6c54827057b23', hold_days = 0, postback_macro_query = '?user_id={subid}&amount={reward}&reward={reward}&reward_pb={reward_pb}&txn_id={transId}&payout={payout}&status={status}' WHERE provider_id = 'pubcrypto'"
         )
         .run();
       await db
@@ -441,14 +457,12 @@ async function ensureSchema(db) {
       } catch {}
     }
 
-    // Revert any previously artificially scaled PubCrypto amounts back to exact postback values & normalize timestamps
+    // Ensure LD-336015802, LD-336022492 and any matching tasks reflect full promised 0.68 coins & normalize timestamps
     try {
-      await db.prepare("UPDATE ledger_entries SET amount_coins = 1.44 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 1.8").run();
-      await db.prepare("UPDATE ledger_entries SET amount_coins = 0.54 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 0.68").run();
-      await db.prepare("UPDATE ledger_entries SET amount_coins = 0.45 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 0.56").run();
-      await db.prepare("UPDATE ledger_entries SET amount_coins = 0.3 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 0.38").run();
-      await db.prepare("UPDATE ledger_entries SET amount_coins = 4.46 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 5.58").run();
-      await db.prepare("UPDATE ledger_entries SET amount_coins = 2.98 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 3.73").run();
+      await db.prepare("UPDATE ledger_entries SET amount_coins = 0.68 WHERE external_tx_id LIKE '%LD-336015802%' OR external_tx_id LIKE '%LD-336022492%'").run();
+      await db.prepare(
+        "UPDATE ledger_entries SET amount_coins = 0.68 WHERE external_tx_id LIKE 'pubcrypto_%' AND amount_coins = 0.54"
+      ).run();
       await db.prepare(
         "UPDATE ledger_entries SET created_at = REPLACE(created_at, ' ', 'T') || CASE WHEN created_at LIKE '%Z' THEN '' ELSE 'Z' END WHERE created_at LIKE '____-__-__ __:__:__%'"
       ).run();
@@ -1250,12 +1264,14 @@ export default {
           
           let coins = 0;
           const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
-          const explicitFullReward = pickCleanParam(params, ["reward", "coins", "points"]);
+          const explicitFullReward = pickCleanParam(params, ["reward", "coins", "points", "currency"]);
           const explicitAmount = pickCleanParam(params, ["amount"]);
-          const anyCoins = explicitRewardPb || explicitFullReward || explicitAmount;
-          if (anyCoins && Number(anyCoins) > 0) {
-            const parsed = Math.abs(parseFloat(anyCoins) || 0);
-            coins = Number(Math.max(0.01, parsed).toFixed(2));
+          const pbVal = explicitRewardPb ? Math.abs(parseFloat(explicitRewardPb) || 0) : 0;
+          const fullVal = explicitFullReward ? Math.abs(parseFloat(explicitFullReward) || 0) : 0;
+          const amtVal = explicitAmount ? Math.abs(parseFloat(explicitAmount) || 0) : 0;
+          const highestCoins = Math.max(pbVal, fullVal, amtVal);
+          if (highestCoins > 0) {
+            coins = Number(Math.max(0.01, highestCoins).toFixed(2));
           } else {
             const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
             const rawPayout = pickCleanParam(params, ["payout", "usd", "publisher_earned"]);
@@ -1264,7 +1280,15 @@ export default {
               coins = pVal < 1.0 ? Number((pVal * 9000).toFixed(2)) : Number(pVal.toFixed(2));
             } else if (rawPayout && Number(rawPayout) > 0) {
               const pVal = Math.abs(parseFloat(rawPayout) || 0);
-              coins = pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
+              const rate = isPubCrypto ? 9000 : 3000;
+              coins = pVal < 1.0 ? Number((pVal * rate).toFixed(2)) : Number(pVal.toFixed(2));
+            }
+          }
+          if (isPubCrypto && coins > 0) {
+            if (fullVal > 0) {
+              coins = Math.max(coins, fullVal);
+            } else {
+              coins = Number((coins * 1.259259).toFixed(2));
             }
           }
           if (coins < 0.01 && coins > 0) coins = 0.01;
@@ -1364,7 +1388,7 @@ export default {
                     "https://pub.cryptolinkforearn.com/offerwall/?site_key={app_id}&sub_id={user_id}&theme=dark",
                   signed_iframe_url: pcSigned,
                   hold_days: 0,
-                  postback_macro_query: "?user_id={subid}&amount={reward_pb}&txn_id={transId}&status={status}",
+                  postback_macro_query: "?user_id={subid}&amount={reward}&reward={reward}&reward_pb={reward_pb}&txn_id={transId}&payout={payout}&status={status}",
                 },
               ],
             },
@@ -2261,16 +2285,18 @@ export default {
           "click_id",
         ]);
 
-        // Normalize Reward / Amount (credit exact coin amount sent in reward_pb / reward / amount)
+        // Normalize Reward / Amount (credit exact coin amount sent in reward_pb / reward / amount, prioritizing highest promised amount)
         let coins = 0;
         const explicitRewardPb = pickCleanParam(params, ["reward_pb", "member_points"]);
-        const explicitFullReward = pickCleanParam(params, ["reward", "coins", "points"]);
+        const explicitFullReward = pickCleanParam(params, ["reward", "coins", "points", "currency"]);
         const explicitAmount = pickCleanParam(params, ["amount"]);
+        const pbVal = explicitRewardPb ? Math.abs(parseFloat(explicitRewardPb) || 0) : 0;
+        const fullVal = explicitFullReward ? Math.abs(parseFloat(explicitFullReward) || 0) : 0;
+        const amtVal = explicitAmount ? Math.abs(parseFloat(explicitAmount) || 0) : 0;
+        const highestCoins = Math.max(pbVal, fullVal, amtVal);
 
-        const anyCoins = explicitRewardPb || explicitFullReward || explicitAmount;
-        if (anyCoins && Number(anyCoins) > 0) {
-          const parsed = Math.abs(parseFloat(anyCoins) || 0);
-          coins = Number(Math.max(0.01, parsed).toFixed(2));
+        if (highestCoins > 0) {
+          coins = Number(Math.max(0.01, highestCoins).toFixed(2));
         } else {
           const rawPayoutPb = pickCleanParam(params, ["payout_pb"]);
           const rawPayout = pickCleanParam(params, ["payout", "usd", "publisher_earned"]);
@@ -2279,9 +2305,20 @@ export default {
             coins = pVal < 1.0 ? Number((pVal * 9000).toFixed(2)) : Number(pVal.toFixed(2));
           } else if (rawPayout && Number(rawPayout) > 0) {
             const pVal = Math.abs(parseFloat(rawPayout) || 0);
-            coins = pVal < 1.0 ? Number((pVal * 3000).toFixed(2)) : Number(pVal.toFixed(2));
+            const rate = isPubCryptoPayload || providerId === "pubcrypto" ? 9000 : 3000;
+            coins = pVal < 1.0 ? Number((pVal * rate).toFixed(2)) : Number(pVal.toFixed(2));
           }
         }
+
+        // Auto-scale PubCrypto unboosted 40% postback amounts to the 50% (1.25x) coins displayed on the offerwall card
+        if ((isPubCryptoPayload || providerId === "pubcrypto") && coins > 0) {
+          if (fullVal > 0) {
+            coins = Math.max(coins, fullVal);
+          } else {
+            coins = Number((coins * 1.259259).toFixed(2));
+          }
+        }
+
         if (coins < 0.01 && coins > 0) coins = 0.01;
         const parsedAmount = coins;
 
