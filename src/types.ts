@@ -1,6 +1,6 @@
 export type ThemeMode = 'dark' | 'light';
 
-export type DashboardTab = 'overview' | 'offerwalls' | 'quests' | 'ptc' | 'tasks' | 'shortlinks' | 'faucet' | 'referrals' | 'wallet';
+export type DashboardTab = 'overview' | 'offerwalls' | 'quests' | 'ptc' | 'youtube' | 'surveys' | 'tasks' | 'shortlinks' | 'faucet' | 'referrals' | 'wallet';
 
 export type PayoutChannel = 'upi' | 'bank' | 'gift_card' | 'crypto';
 

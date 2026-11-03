@@ -346,6 +346,29 @@ async function buildSignedOfferwallMeUrl(
   return buildSignedOfferwallMeUrlSync(publicKey, userId, customSecret);
 }
 
+function buildOfferwallMeTabUrl(
+  baseSignedUrl: string,
+  tab: 'offers' | 'surveys' | 'iframe' | 'window' | 'video' | 'shortlinks' | 'tasks',
+  taskType?: 'general' | 'telegram'
+): string {
+  if (!baseSignedUrl) return '';
+  try {
+    const u = new URL(baseSignedUrl);
+    u.searchParams.set('tab', tab);
+    if (tab === 'tasks' && taskType) {
+      u.searchParams.set('taskType', taskType);
+    } else {
+      u.searchParams.delete('taskType');
+    }
+    return u.toString();
+  } catch {
+    const sep = baseSignedUrl.includes('?') ? '&' : '?';
+    return `${baseSignedUrl}${sep}tab=${encodeURIComponent(tab)}${
+      tab === 'tasks' && taskType ? `&taskType=${encodeURIComponent(taskType)}` : ''
+    }`;
+  }
+}
+
 function loadCachedPubCryptoUrl(uid?: string, themeMode?: string): string {
   if (!uid) return '';
   const cleanTheme = themeMode === 'light' ? 'light' : 'dark';
@@ -673,6 +696,12 @@ function getTabFromHash(): DashboardTab {
   if (hash === 'ptc') {
     return 'ptc';
   }
+  if (hash === 'youtube' || hash === 'video') {
+    return 'youtube';
+  }
+  if (hash === 'surveys' || hash === 'survey') {
+    return 'surveys';
+  }
   if (hash === 'tasks') {
     return 'tasks';
   }
@@ -808,6 +837,9 @@ export default function App() {
   >('all');
   const [copiedPlayerId, setCopiedPlayerId] = useState<boolean>(false);
   const [earningsPopupOpen, setEarningsPopupOpen] = useState<boolean>(false);
+  const [ptcSubMode, setPtcSubMode] = useState<'owm_iframe' | 'owm_window' | 'pubcrypto'>('owm_iframe');
+  const [tasksSubMode, setTasksSubMode] = useState<'owm_general' | 'owm_telegram' | 'pubcrypto'>('owm_general');
+  const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(true);
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
@@ -1187,9 +1219,16 @@ export default function App() {
     const doRefresh = () => {
       const activeUid = user?.id || loadCurrentUser()?.id;
       if (!activeUid) return;
-      if ((activeTab === 'quests' || activeTab === 'offerwalls' || activeTab === 'ptc') && selectedWallId === 'offerwallme') {
+      const isWallSection =
+        activeTab === 'quests' ||
+        activeTab === 'offerwalls' ||
+        activeTab === 'ptc' ||
+        activeTab === 'youtube' ||
+        activeTab === 'surveys' ||
+        activeTab === 'tasks' ||
+        activeTab === 'shortlinks';
+      if (isWallSection) {
         refreshOfferwallMeSignedUrl(activeUid, false);
-      } else if ((activeTab === 'quests' || activeTab === 'offerwalls' || activeTab === 'ptc') && selectedWallId === 'pubcrypto') {
         refreshPubCryptoSignedUrl(activeUid, false);
       }
     };
@@ -5998,138 +6037,351 @@ export default function App() {
           );
         })()}
 
-        {/* ── TAB: TASKS (Micro-Jobs & Custom Tasks) ── */}
-        {activeTab === 'tasks' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-              <div>
-                <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                  Player Tasks &amp; Micro-Jobs
-                </h2>
-                <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
-                  Dedicated task section for Player ID <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>. Awaiting your instructions on what tasks to add here!
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => syncUserWithBackend(user, true)}
-                className="btn btn-outline btn-sm"
-              >
-                🔄 Refresh Tasks Status
-              </button>
-            </div>
+        {/* ── TAB: TASKS (Diversified Offerwall.me Micro-Tasks, Telegram Tasks & PubCrypto Tasks) ── */}
+        {activeTab === 'tasks' && (() => {
+          const baseOwmUrl =
+            signedOfferwallMeUrl ||
+            buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id);
+          const taskIframeUrl =
+            tasksSubMode === 'owm_telegram'
+              ? buildOfferwallMeTabUrl(baseOwmUrl, 'tasks', 'telegram')
+              : tasksSubMode === 'owm_general'
+              ? buildOfferwallMeTabUrl(baseOwmUrl, 'tasks', 'general')
+              : signedPubCryptoUrl ||
+                `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
+                  PUBCRYPTO_SITE_KEY
+                )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`;
 
-            <div
-              className="card card-glow"
-              style={{
-                padding: '64px 28px',
-                textAlign: 'center',
-                background: 'linear-gradient(135deg, rgba(0,232,154,0.06), rgba(155,110,255,0.04))',
-                border: '1px solid rgba(0,232,154,0.3)',
-              }}
-            >
-              <div style={{ fontSize: 44, marginBottom: 16 }}>📋</div>
-              <h3 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)', marginBottom: 10 }}>
-                Tasks Section Initialized &amp; Ready
-              </h3>
-              <p style={{ fontSize: 14, color: 'var(--txt2)', maxWidth: 540, margin: '0 auto 24px', lineHeight: 1.7 }}>
-                The Tasks section has been successfully added to Lootify as requested. Please let us know what specific tasks, offers, or micro-jobs you would like to display and reward in this section!
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => switchTab('overview')}
-                  className="btn btn-primary btn-sm"
-                >
-                  ⚡ Back to Overview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchTab('shortlinks')}
-                  className="btn btn-outline btn-sm"
-                >
-                  🔗 Explore Paid Shortlinks →
-                </button>
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                    Micro-Tasks &amp; Social Quests
+                  </h2>
+                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Complete micro-jobs, Telegram community joins, and review tasks for Player ID{' '}
+                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'owm_general', label: 'Offerwall.me — Micro-Tasks' },
+                    { id: 'owm_telegram', label: 'Offerwall.me — Telegram Join Tasks' },
+                    { id: 'pubcrypto', label: 'PubCrypto — MoneyTask & Review Map' },
+                  ].map((mode) => {
+                    const active = tasksSubMode === mode.id;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setTasksSubMode(mode.id as any)}
+                        className="btn btn-sm"
+                        style={{
+                          background: active ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                          border: active ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: active ? 'var(--green)' : 'var(--txt2)',
+                        }}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* ── TAB: PTC ADS (Diversified Offerwall.me & PubCrypto PTC + Partner PTC) ── */}
-        {activeTab === 'ptc' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-              <div>
-                <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                  📺 PTC Ads (Pay-To-Click)
-                </h2>
-                <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
-                  Click sponsored websites from Offerwall.me, PubCrypto &amp; Ad Partners for instant Coin rewards to Player ID{' '}
-                  <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
-                </p>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {enabledOfferwalls.map((wall) => (
-                  <button
-                    key={`ptc_wall_${wall.provider_id}`}
-                    type="button"
-                    onClick={() => setSelectedWallId(wall.provider_id)}
-                    className="btn btn-sm"
-                    style={{
-                      background: selectedWall?.provider_id === wall.provider_id ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
-                      border: selectedWall?.provider_id === wall.provider_id ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                      color: selectedWall?.provider_id === wall.provider_id ? 'var(--green)' : 'var(--txt2)',
-                    }}
-                  >
-                    📺 {wall.name} PTC Wall
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {selectedWall && resolvedIframeUrl && (
               <div className="card card-glow" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                   <div>
                     <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      {selectedWall.name} — Live PTC &amp; Ad Feed
+                      {tasksSubMode === 'owm_telegram'
+                        ? 'Offerwall.me — Telegram Join Tasks (?tab=tasks&taskType=telegram)'
+                        : tasksSubMode === 'owm_general'
+                        ? 'Offerwall.me — General Micro-Tasks (?tab=tasks)'
+                        : 'PubCrypto — MoneyTask & Review Map Quests'}
                     </h3>
                     <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                      Select the <strong>PTC / Ads</strong> tab inside the {selectedWall.name} wall below to view and claim all available PTC ads.
+                      Directly filtered to Tasks mode. Submit required proof inside the task card to credit your Lootify wallet via <code className="font-mono">lootify/api/postback</code>.
                     </p>
                   </div>
-                  <a
-                    href={resolvedIframeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-ghost btn-sm"
-                  >
-                    ↗ Open Fullscreen
-                  </a>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => syncUserWithBackend(user, true)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      Sync Balance
+                    </button>
+                    {taskIframeUrl && (
+                      <a
+                        href={taskIframeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-ghost btn-sm"
+                      >
+                        ↗ Open Fullscreen
+                      </a>
+                    )}
+                  </div>
                 </div>
                 <iframe
-                  key={`ptc_${selectedWall.provider_id}_${user.id}`}
-                  src={resolvedIframeUrl}
-                  title={`${selectedWall.name} PTC`}
+                  key={`tasks_${tasksSubMode}_${user.id}`}
+                  src={taskIframeUrl}
+                  title="Tasks Feed"
                   width="100%"
-                  height={selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                  height={tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
                   frameBorder={0}
                   allow="clipboard-write; fullscreen; popups"
                   style={{
                     display: 'block',
                     width: '100%',
-                    height: selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680,
+                    height: tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
                     border: '1px solid var(--border)',
                     borderRadius: 12,
                     background: '#0B121E',
                   }}
                 />
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
-        {/* ── TAB 2: OFFERWALLS & QUEST MODES (100% Dynamic) ── */}
+        {/* ── TAB: YOUTUBE / VIDEO EARNING (Direct Offerwall.me ?tab=video) ── */}
+        {activeTab === 'youtube' && (() => {
+          const baseOwmUrl =
+            signedOfferwallMeUrl ||
+            buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id);
+          const videoIframeUrl = buildOfferwallMeTabUrl(baseOwmUrl, 'video');
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                    YouTube &amp; Video Earning
+                  </h2>
+                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Watch sponsored videos and YouTube campaigns from Offerwall.me (<code className="font-mono">?tab=video</code>) for Player ID{' '}
+                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => syncUserWithBackend(user, true)}
+                    className="btn btn-outline btn-sm"
+                  >
+                    Sync Earned Coins
+                  </button>
+                  {videoIframeUrl && (
+                    <a
+                      href={videoIframeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-ghost btn-sm"
+                    >
+                      ↗ Open Fullscreen
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="card card-glow" style={{ padding: 20 }}>
+                <iframe
+                  key={`youtube_video_${user.id}`}
+                  src={videoIframeUrl}
+                  title="YouTube & Video Ads"
+                  width="100%"
+                  height={680}
+                  frameBorder={0}
+                  allow="clipboard-write; fullscreen; popups; autoplay"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: 680,
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    background: '#0B121E',
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── TAB: SURVEYS (Direct Offerwall.me ?tab=surveys) ── */}
+        {activeTab === 'surveys' && (() => {
+          const baseOwmUrl =
+            signedOfferwallMeUrl ||
+            buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id);
+          const surveysIframeUrl = buildOfferwallMeTabUrl(baseOwmUrl, 'surveys');
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                    Paid Surveys (CPX, TimeWall, OpinionUniverse)
+                  </h2>
+                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    High-paying research surveys directly filtered via Offerwall.me (<code className="font-mono">?tab=surveys</code>) for Player ID{' '}
+                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => syncUserWithBackend(user, true)}
+                    className="btn btn-outline btn-sm"
+                  >
+                    Sync Earned Coins
+                  </button>
+                  {surveysIframeUrl && (
+                    <a
+                      href={surveysIframeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-ghost btn-sm"
+                    >
+                      ↗ Open Fullscreen
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="card card-glow" style={{ padding: 20 }}>
+                <iframe
+                  key={`surveys_${user.id}`}
+                  src={surveysIframeUrl}
+                  title="Paid Surveys"
+                  width="100%"
+                  height={680}
+                  frameBorder={0}
+                  allow="clipboard-write; fullscreen; popups"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: 680,
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    background: '#0B121E',
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── TAB: PTC ADS (Diversified Offerwall.me Iframe PTC, Window PTC & PubCrypto PTC) ── */}
+        {activeTab === 'ptc' && (() => {
+          const baseOwmUrl =
+            signedOfferwallMeUrl ||
+            buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id);
+          const ptcIframeUrl =
+            ptcSubMode === 'owm_iframe'
+              ? buildOfferwallMeTabUrl(baseOwmUrl, 'iframe')
+              : ptcSubMode === 'owm_window'
+              ? buildOfferwallMeTabUrl(baseOwmUrl, 'window')
+              : signedPubCryptoUrl ||
+                `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
+                  PUBCRYPTO_SITE_KEY
+                )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                    PTC Ads (Pay-To-Click)
+                  </h2>
+                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
+                    Directly separated Iframe PTC Ads (<code className="font-mono">?tab=iframe</code>), Window PTC Ads (<code className="font-mono">?tab=window</code>), and PubCrypto PTC Ads for Player ID{' '}
+                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'owm_iframe', label: 'Offerwall.me — Iframe PTC' },
+                    { id: 'owm_window', label: 'Offerwall.me — Window PTC' },
+                    { id: 'pubcrypto', label: 'PubCrypto — PTC & Link Ads' },
+                  ].map((mode) => {
+                    const active = ptcSubMode === mode.id;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setPtcSubMode(mode.id as any)}
+                        className="btn btn-sm"
+                        style={{
+                          background: active ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                          border: active ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                          color: active ? 'var(--green)' : 'var(--txt2)',
+                        }}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="card card-glow" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                      {ptcSubMode === 'owm_iframe'
+                        ? 'Offerwall.me — Iframe PTC Ads (?tab=iframe)'
+                        : ptcSubMode === 'owm_window'
+                        ? 'Offerwall.me — Window PTC Ads (?tab=window)'
+                        : 'PubCrypto — PTC & Link Ads Wall'}
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                      Opens directly on the selected PTC section. Every completed view credits automatically via <code className="font-mono">lootify/api/postback</code>.
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => syncUserWithBackend(user, true)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      Sync Balance
+                    </button>
+                    {ptcIframeUrl && (
+                      <a
+                        href={ptcIframeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-ghost btn-sm"
+                      >
+                        ↗ Open Fullscreen
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <iframe
+                  key={`ptc_${ptcSubMode}_${user.id}`}
+                  src={ptcIframeUrl}
+                  title="PTC Ads Wall"
+                  width="100%"
+                  height={ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                  frameBorder={0}
+                  allow="clipboard-write; fullscreen; popups"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    background: '#0B121E',
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── TAB 2: OFFERWALLS & QUEST MODES (Apps & Games ?tab=offers) ── */}
         {(activeTab === 'quests' || activeTab === 'offerwalls') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -6281,9 +6533,13 @@ export default function App() {
 
                     {resolvedIframeUrl ? (
                       <iframe
-                        key={`${selectedWall.provider_id}_${user.id}`}
+                        key={`${selectedWall.provider_id}_${user.id}_offers`}
                         data-pubcrypto-offerwall={selectedWall.provider_id === 'pubcrypto' ? true : undefined}
-                        src={resolvedIframeUrl}
+                        src={
+                          selectedWall.provider_id === 'offerwallme'
+                            ? buildOfferwallMeTabUrl(resolvedIframeUrl, 'offers')
+                            : resolvedIframeUrl
+                        }
                         title={selectedWall.name}
                         width="100%"
                         height={selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680}
@@ -7041,34 +7297,59 @@ export default function App() {
                 })}
               </div>
 
-              {/* Partner Shortlink Offerwalls Banner + Sponsored Banner */}
-              <div
-                className="card"
-                style={{
-                  padding: '20px 24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 14,
-                  background: 'linear-gradient(135deg, rgba(155,110,255,0.08), rgba(0,232,154,0.05))',
-                }}
-              >
-                <div>
-                  <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
-                    ⚡ Want 50+ More Daily Shortlinks &amp; PTC Ads?
-                  </h3>
-                  <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 2 }}>
-                    PubCrypto &amp; Offerwall.me also include dozens of built-in Shortlinks &amp; PTC ads that credit automatically via S2S Postback!
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => switchTab('quests')}
-                  className="btn btn-primary btn-sm"
+              {/* Partner Shortlink Offerwalls Integrated directly inside Shortlinks Section (?tab=shortlinks) */}
+              <div className="card card-glow" style={{ padding: '20px 24px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 14,
+                    marginBottom: showPartnerShortlinksWall ? 14 : 0,
+                  }}
                 >
-                  🎮 Open Partner Offerwalls →
-                </button>
+                  <div>
+                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                      Offerwall.me — Partner Shortlinks Feed (<code className="font-mono">?tab=shortlinks</code>)
+                    </h3>
+                    <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 2 }}>
+                      Directly separated Shortlinks feed from Offerwall.me. Every completed shortlink credits automatically via S2S Postback!
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowPartnerShortlinksWall((prev) => !prev)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      {showPartnerShortlinksWall ? 'Hide Partner Shortlinks' : 'Show Partner Shortlinks'}
+                    </button>
+                  </div>
+                </div>
+                {showPartnerShortlinksWall && (
+                  <iframe
+                    key={`shortlinks_owm_${user.id}`}
+                    src={buildOfferwallMeTabUrl(
+                      signedOfferwallMeUrl ||
+                        buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
+                      'shortlinks'
+                    )}
+                    title="Offerwall.me Shortlinks"
+                    width="100%"
+                    height={620}
+                    frameBorder={0}
+                    allow="clipboard-write; fullscreen; popups"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      height: 620,
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      background: '#0B121E',
+                    }}
+                  />
+                )}
               </div>
 
               {/* Recent Shortlink Claims History */}
@@ -8490,8 +8771,8 @@ export default function App() {
                   ),
                 },
                 {
-                  id: 'tasks',
-                  target: 'tasks',
+                  id: 'youtube',
+                  target: 'youtube',
                   label: 'Youtube Earning',
                   sub: 'Watch & earn',
                   color: '#38BDF8',
@@ -8554,8 +8835,8 @@ export default function App() {
                   ),
                 },
                 {
-                  id: 'overview',
-                  target: 'offerwalls',
+                  id: 'surveys',
+                  target: 'surveys',
                   label: 'Surveys',
                   sub: 'Paid surveys',
                   color: '#9B6EFF',
@@ -8759,6 +9040,8 @@ export default function App() {
               activeTab === 'offerwalls' ||
               activeTab === 'quests' ||
               activeTab === 'ptc' ||
+              activeTab === 'youtube' ||
+              activeTab === 'surveys' ||
               activeTab === 'tasks' ||
               activeTab === 'shortlinks'
             : !earningsPopupOpen && activeTab === tab.id;
