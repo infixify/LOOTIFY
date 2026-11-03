@@ -807,6 +807,7 @@ export default function App() {
     'all' | 'tasks' | 'faucet' | 'withdrawals'
   >('all');
   const [copiedPlayerId, setCopiedPlayerId] = useState<boolean>(false);
+  const [earningsPopupOpen, setEarningsPopupOpen] = useState<boolean>(false);
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
@@ -5077,133 +5078,6 @@ export default function App() {
         )}
       </nav>
 
-      {/* ── STICKY SUB-NAVIGATION & LIVE STATUS BAR (DESKTOP + MOBILE) ── */}
-      {(() => {
-        const remSlViews = shortlinks
-          .filter((s) => s.enabled)
-          .reduce(
-            (acc, s) =>
-              acc + Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0)),
-            0
-          );
-        const claimsUsed = Number(user.faucetClaimsCount) || 0;
-        const offerwallTasks = Math.max(0, (Number(user.questsCompleted) || 0) - claimsUsed);
-        const remainingFaucetRolls = Math.max(0, 2 + offerwallTasks * 3 - claimsUsed);
-
-        return (
-          <div
-            style={{
-              background: 'var(--bg2)',
-              borderBottom: '1px solid var(--border)',
-              padding: '8px 0',
-              position: 'sticky',
-              top: 64,
-              zIndex: 40,
-            }}
-          >
-            <div
-              className="wrap"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                overflowX: 'auto',
-                scrollbarWidth: 'none',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                {(
-                  [
-                    { id: 'overview', label: '⚡ Overview' },
-                    { id: 'offerwalls', label: '🎮 Offerwalls' },
-                    { id: 'ptc', label: '📺 PTC Ads' },
-                    { id: 'tasks', label: '📋 Tasks' },
-                    {
-                      id: 'shortlinks',
-                      label: remSlViews > 0 ? `🔗 Shortlinks (${remSlViews})` : '🔗 Shortlinks',
-                    },
-                    {
-                      id: 'faucet',
-                      label:
-                        faucetCooldownSecs > 0
-                          ? `🚰 Faucet (${Math.ceil(faucetCooldownSecs / 60)}m)`
-                          : '🚰 Free Faucet',
-                    },
-                    { id: 'referrals', label: '👥 Refer (10%)' },
-                    { id: 'wallet', label: '🏦 Cashout' },
-                  ] as { id: DashboardTab; label: string }[]
-                ).map((t) => {
-                  const active = activeTab === t.id;
-                  return (
-                    <button
-                      key={`subnav_${t.id}`}
-                      type="button"
-                      onClick={() => switchTab(t.id)}
-                      className="font-mono"
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: 8,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        background: active ? 'rgba(0,232,154,0.14)' : 'var(--bg3)',
-                        border: active ? '1px solid var(--green)' : '1px solid var(--border)',
-                        color: active ? 'var(--green)' : 'var(--txt2)',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                <span
-                  onClick={() => switchTab('faucet')}
-                  className="font-mono"
-                  style={{
-                    fontSize: 11,
-                    padding: '4px 9px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    background: remainingFaucetRolls > 0 ? 'rgba(0,232,154,0.1)' : 'rgba(255,180,0,0.1)',
-                    border:
-                      remainingFaucetRolls > 0
-                        ? '1px solid rgba(0,232,154,0.28)'
-                        : '1px solid rgba(255,180,0,0.28)',
-                    color: remainingFaucetRolls > 0 ? 'var(--green)' : 'var(--gold)',
-                    fontWeight: 600,
-                  }}
-                >
-                  ⚡ Faucet Energy: {remainingFaucetRolls} Rolls
-                </span>
-                <span
-                  onClick={() => switchTab('wallet')}
-                  className="font-mono"
-                  style={{
-                    fontSize: 11,
-                    padding: '4px 9px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    background: 'var(--bg3)',
-                    border: '1px solid var(--border)',
-                    color: user.availableCoins >= 100 ? 'var(--green)' : 'var(--txt2)',
-                    fontWeight: 600,
-                  }}
-                >
-                  {user.availableCoins >= 100
-                    ? '✅ Ready for Instant FaucetPay Cashout!'
-                    : `🪙 ${Math.max(0, 100 - Math.floor(user.availableCoins))} Coins to Instant Cashout`}
-                </span>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* ── MAIN CONTENT ── */}
       <main className="wrap" style={{ flex: 1, width: '100%', padding: '24px 20px 64px' }}>
         {/* Compact Unified Player Command Header */}
@@ -8438,6 +8312,146 @@ export default function App() {
         </div>
       </footer>
 
+      {/* ── EARNINGS MINI POPUP MODAL (6 METHODS) ── */}
+      {earningsPopupOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(3, 16, 10, 0.75)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 2000,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            padding: '0 0 70px 0',
+          }}
+          onClick={() => setEarningsPopupOpen(false)}
+        >
+          <div
+            className="card card-glow"
+            style={{
+              width: '100%',
+              maxWidth: 520,
+              background: 'var(--bg2)',
+              borderRadius: '20px 20px 0 0',
+              padding: '24px 20px 28px',
+              border: '1px solid rgba(0,232,154,0.3)',
+              boxShadow: '0 -10px 40px rgba(0,0,0,0.5)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: 'rgba(0,232,154,0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--green)',
+                    fontSize: 18,
+                  }}
+                >
+                  🪙
+                </div>
+                <div>
+                  <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                    Earnings <span style={{ color: 'var(--green)', fontSize: 13, fontWeight: 500 }}>6 methods</span>
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEarningsPopupOpen(false)}
+                style={{
+                  background: 'var(--bg3)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--txt2)',
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              {[
+                { id: 'ptc', label: 'PTC Ads', sub: 'Pay-to-click ads', icon: '📺' },
+                { id: 'tasks', label: 'Youtube Earning', sub: 'Watch & earn', icon: '▶️', target: 'tasks' },
+                { id: 'faucet', label: 'Faucet', icon: '🚰', sub: 'Free crypto claims' },
+                { id: 'tasks', label: 'Tasks', icon: '📋', sub: 'Micro-tasks' },
+                { id: 'offerwalls', label: 'Offerwalls', icon: '🎮', sub: 'Apps & games' },
+                { id: 'overview', label: 'Surveys', icon: '📊', sub: 'Paid surveys', target: 'offerwalls' },
+              ].map((item, idx) => (
+                <div
+                  key={`earn_pop_${idx}`}
+                  onClick={() => {
+                    setEarningsPopupOpen(false);
+                    switchTab((item.target || item.id) as DashboardTab);
+                  }}
+                  style={{
+                    padding: '14px 14px',
+                    borderRadius: 12,
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ fontSize: 22 }}>{item.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--txt)' }}>{item.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>{item.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingTop: 12,
+                borderTop: '1px solid var(--border)',
+              }}
+            >
+              <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                More rewards &amp; contests
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEarningsPopupOpen(false);
+                  switchTab('shortlinks');
+                }}
+                className="font-mono"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--green)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                All options →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── FIXED MOBILE & APP BOTTOM NAVIGATION BAR (HOME, EARN, FAUCET, REFER, WALLET) ── */}
       <div
         style={{
@@ -8472,7 +8486,13 @@ export default function App() {
             <button
               key={`bnav_${tab.id}`}
               type="button"
-              onClick={() => switchTab(tab.id as DashboardTab)}
+              onClick={() => {
+                if (tab.id === 'offerwalls') {
+                  setEarningsPopupOpen(true);
+                } else {
+                  switchTab(tab.id as DashboardTab);
+                }
+              }}
               style={{
                 flex: 1,
                 display: 'flex',
