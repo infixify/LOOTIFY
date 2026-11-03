@@ -1490,6 +1490,7 @@ export default function App() {
     setActiveTab(tab);
     setIsAdminRoute(false);
     setMobileNavOpen(false);
+    setEarningsPopupOpen(false);
     setPayoutMessage(null);
     const hashTarget = tab === 'overview' ? '#/dashboard' : `#/${tab}`;
     if (window.location.hash !== hashTarget) {
@@ -8360,14 +8361,17 @@ export default function App() {
         <div
           style={{
             position: 'fixed',
-            inset: 0,
-            background: 'rgba(3, 16, 10, 0.75)',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 64,
+            background: 'rgba(3, 16, 10, 0.72)',
             backdropFilter: 'blur(8px)',
-            zIndex: 2000,
+            zIndex: 1900,
             display: 'flex',
             alignItems: 'flex-end',
             justifyContent: 'center',
-            padding: '0 0 70px 0',
+            padding: '12px',
           }}
           onClick={() => setEarningsPopupOpen(false)}
         >
@@ -8377,10 +8381,10 @@ export default function App() {
               width: '100%',
               maxWidth: 520,
               background: 'var(--bg2)',
-              borderRadius: '20px 20px 0 0',
-              padding: '24px 20px 28px',
+              borderRadius: 20,
+              padding: '22px 18px 20px',
               border: '1px solid rgba(0,232,154,0.3)',
-              boxShadow: '0 -10px 40px rgba(0,0,0,0.5)',
+              boxShadow: '0 -10px 40px rgba(0,0,0,0.55)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -8508,7 +8512,7 @@ export default function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-around',
-          zIndex: 1000,
+          zIndex: 2100,
           paddingBottom: 'env(safe-area-inset-bottom)',
           boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
           backdropFilter: 'blur(12px)',
@@ -8521,18 +8525,24 @@ export default function App() {
           { id: 'referrals', label: 'Refer', icon: '👥' },
           { id: 'wallet', label: 'Wallet', icon: '🏦' },
         ].map((tab) => {
-          const active =
-            activeTab === tab.id ||
-            (tab.id === 'offerwalls' &&
-              (activeTab === 'quests' || activeTab === 'ptc' || activeTab === 'tasks' || activeTab === 'shortlinks'));
+          const isEarnTab = tab.id === 'offerwalls';
+          const active = isEarnTab
+            ? earningsPopupOpen ||
+              activeTab === 'offerwalls' ||
+              activeTab === 'quests' ||
+              activeTab === 'ptc' ||
+              activeTab === 'tasks' ||
+              activeTab === 'shortlinks'
+            : !earningsPopupOpen && activeTab === tab.id;
           return (
             <button
               key={`bnav_${tab.id}`}
               type="button"
               onClick={() => {
-                if (tab.id === 'offerwalls') {
-                  setEarningsPopupOpen(true);
+                if (isEarnTab) {
+                  setEarningsPopupOpen((prev) => !prev);
                 } else {
+                  setEarningsPopupOpen(false);
                   switchTab(tab.id as DashboardTab);
                 }
               }}
