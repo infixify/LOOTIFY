@@ -837,9 +837,37 @@ export default function App() {
   >('all');
   const [copiedPlayerId, setCopiedPlayerId] = useState<boolean>(false);
   const [earningsPopupOpen, setEarningsPopupOpen] = useState<boolean>(false);
-  const [ptcSubMode, setPtcSubMode] = useState<'owm_iframe' | 'owm_window' | 'pubcrypto'>('owm_iframe');
-  const [tasksSubMode, setTasksSubMode] = useState<'owm_general' | 'owm_telegram' | 'pubcrypto'>('owm_general');
-  const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(true);
+  const [ptcSubMode, setPtcSubMode] = useState<'cards' | 'owm_iframe' | 'owm_window' | 'pubcrypto'>('cards');
+  const [ptcCardTypeFilter, setPtcCardTypeFilter] = useState<'all' | 'iframe' | 'window'>('all');
+  const [tasksSubMode, setTasksSubMode] = useState<'cards' | 'owm_general' | 'owm_telegram' | 'pubcrypto'>('cards');
+  const [offersViewMode, setOffersViewMode] = useState<'cards' | 'walls'>('cards');
+  const [surveysViewMode, setSurveysViewMode] = useState<'cards' | 'wall'>('cards');
+  const [youtubeViewMode, setYoutubeViewMode] = useState<'cards' | 'wall'>('cards');
+  const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(false);
+
+  // Offerwall.me Single-Piece Feed State (PTC, Shortlinks, Tasks, Offers, Surveys)
+  const [owmFeed, setOwmFeed] = useState<{
+    ptc: any[];
+    shortlinks: any[];
+    tasks: any[];
+    offers: any[];
+    surveys: any[];
+  }>({
+    ptc: [],
+    shortlinks: [],
+    tasks: [],
+    offers: [],
+    surveys: [],
+  });
+  const [owmFeedLoading, setOwmFeedLoading] = useState<boolean>(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [taskProofInputs, setTaskProofInputs] = useState<Record<string, string>>({});
+  const [taskSubmittingId, setTaskSubmittingId] = useState<string | null>(null);
+  const [taskSubmitNotice, setTaskSubmitNotice] = useState<{
+    taskId: string;
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
@@ -1121,6 +1149,110 @@ export default function App() {
     }
   }, []);
 
+  const fetchOfferwallMeFeed = useCallback(async (uid?: string, forceRefresh = false) => {
+    const activeUid = uid || loadCurrentUser()?.id || 'plr_c2fydghha3';
+    setOwmFeedLoading(true);
+    const base = getApiBaseUrl();
+    const qs = `?user_id=${encodeURIComponent(activeUid)}${forceRefresh ? '&refresh=1' : ''}`;
+    try {
+      let data: any = null;
+      try {
+        const res = await fetch(`${base}/api/offerwallme/items${qs}`);
+        if (res.ok) {
+          const parsed = await res.json();
+          if (parsed && parsed.ok) data = parsed;
+        }
+      } catch {}
+
+      if (!data && base) {
+        try {
+          const localRes = await fetch(`/api/offerwallme/items${qs}`);
+          if (localRes.ok) {
+            const parsed = await localRes.json();
+            if (parsed && parsed.ok) data = parsed;
+          }
+        } catch {}
+      }
+
+      if (data && data.ok) {
+        setOwmFeed({
+          ptc: Array.isArray(data.ptc) ? data.ptc : [],
+          shortlinks: Array.isArray(data.shortlinks) ? data.shortlinks : [],
+          tasks: Array.isArray(data.tasks) ? data.tasks : [],
+          offers: Array.isArray(data.offers) ? data.offers : [],
+          surveys: Array.isArray(data.surveys) ? data.surveys : [],
+        });
+      }
+    } catch {} finally {
+      setOwmFeedLoading(false);
+    }
+  }, []);
+
+  const handleSubmitOwmTaskProof = async (taskId: string) => {
+    const activeUid = user?.id || loadCurrentUser()?.id || 'plr_c2fydghha3';
+    const proofText = String(taskProofInputs[taskId] || '').trim();
+    if (!proofText) {
+      setTaskSubmitNotice({
+        taskId,
+        type: 'error',
+        text: 'Please enter your task proof (or screenshot link) before submitting.',
+      });
+      return;
+    }
+    setTaskSubmittingId(taskId);
+    setTaskSubmitNotice(null);
+    const base = getApiBaseUrl();
+    try {
+      let res = await fetch(`${base}/api/offerwallme/task-submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: activeUid,
+          taskId,
+          proof: proofText,
+        }),
+      }).catch(() => null);
+
+      if ((!res || !res.ok) && base) {
+        res = await fetch(`/api/offerwallme/task-submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: activeUid,
+            taskId,
+            proof: proofText,
+          }),
+        }).catch(() => null);
+      }
+
+      const data = res ? await res.json().catch(() => ({})) : {};
+      if (!res || !res.ok || !data.ok) {
+        setTaskSubmitNotice({
+          taskId,
+          type: 'error',
+          text: data?.error || data?.message || 'Task submission failed. Please verify your proof and try again.',
+        });
+      } else {
+        setTaskSubmitNotice({
+          taskId,
+          type: 'success',
+          text:
+            data?.message ||
+            'Task proof submitted! Once approved by the advertiser, Coins will credit automatically via lootify/api/postback.',
+        });
+        setTaskProofInputs((prev) => ({ ...prev, [taskId]: '' }));
+      }
+    } catch {
+      setTaskSubmitNotice({
+        taskId,
+        type: 'error',
+        text: 'Network error while submitting task proof. Please try again.',
+      });
+    } finally {
+      setTaskSubmittingId(null);
+    }
+  };
+
   const fetchAdminDashboard = useCallback(async () => {
     const base = getApiBaseUrl();
     try {
@@ -1161,6 +1293,7 @@ export default function App() {
     const initialUser = loadCurrentUser();
     fetchOfferwallsFromBackend(initialUser?.id);
     fetchShortlinksFromBackend(initialUser?.id);
+    fetchOfferwallMeFeed(initialUser?.id, false);
     if (initialUser) {
       syncUserWithBackend(initialUser, false);
     }
@@ -1188,6 +1321,7 @@ export default function App() {
         syncUserWithBackend(loaded, false);
         fetchOfferwallsFromBackend(loaded.id);
         fetchShortlinksFromBackend(loaded.id);
+        fetchOfferwallMeFeed(loaded.id, false);
       }
       setIsAdminRoute(isHashAdmin());
       setAdminLoggedIn(loadAdminSession());
@@ -1213,7 +1347,7 @@ export default function App() {
       window.removeEventListener('hashchange', onRouteChanged);
       window.removeEventListener('popstate', onRouteChanged);
     };
-  }, [fetchOfferwallsFromBackend, fetchShortlinksFromBackend, syncUserWithBackend]);
+  }, [fetchOfferwallMeFeed, fetchOfferwallsFromBackend, fetchShortlinksFromBackend, syncUserWithBackend]);
 
   useEffect(() => {
     const doRefresh = () => {
@@ -1230,13 +1364,14 @@ export default function App() {
       if (isWallSection) {
         refreshOfferwallMeSignedUrl(activeUid, false);
         refreshPubCryptoSignedUrl(activeUid, false);
+        fetchOfferwallMeFeed(activeUid, false);
       }
     };
 
     doRefresh();
     const intervalId = window.setInterval(doRefresh, 15 * 60 * 1000);
     return () => window.clearInterval(intervalId);
-  }, [user?.id, selectedWallId, activeTab, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
+  }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
 
   // Automatic Offerwall & Wallet sync on event-driven triggers (window focus / visibilitychange & instant data arrival) without background polling
   useEffect(() => {
@@ -6037,7 +6172,7 @@ export default function App() {
           );
         })()}
 
-        {/* ── TAB: TASKS (Diversified Offerwall.me Micro-Tasks, Telegram Tasks & PubCrypto Tasks) ── */}
+        {/* ── TAB: TASKS (Single-Piece Offerwall.me Micro-Tasks + Partner Task Walls) ── */}
         {activeTab === 'tasks' && (() => {
           const baseOwmUrl =
             signedOfferwallMeUrl ||
@@ -6055,20 +6190,43 @@ export default function App() {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                    Micro-Tasks &amp; Social Quests
-                  </h2>
-                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Complete micro-jobs, Telegram community joins, and review tasks for Player ID{' '}
-                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: 'rgba(245,158,11,0.14)',
+                      border: '1px solid rgba(245,158,11,0.35)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#F59E0B',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                      <path d="m9 14 2 2 4-4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                      Micro-Tasks &amp; Social Quests
+                    </h2>
+                    <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
+                      Single-piece extracted micro-tasks for Player ID{' '}
+                      <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Postback: <code className="font-mono">lootify/api/postback</code>
+                    </p>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
-                    { id: 'owm_general', label: 'Offerwall.me — Micro-Tasks' },
-                    { id: 'owm_telegram', label: 'Offerwall.me — Telegram Join Tasks' },
-                    { id: 'pubcrypto', label: 'PubCrypto — MoneyTask & Review Map' },
+                    { id: 'cards', label: `Single-Piece Tasks (${owmFeed.tasks.length})` },
+                    { id: 'owm_general', label: 'Offerwall.me Wall' },
+                    { id: 'owm_telegram', label: 'Telegram Join Wall' },
+                    { id: 'pubcrypto', label: 'PubCrypto MoneyTask' },
                   ].map((mode) => {
                     const active = tasksSubMode === mode.id;
                     return (
@@ -6087,85 +6245,405 @@ export default function App() {
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    onClick={() => fetchOfferwallMeFeed(user.id, true)}
+                    className="btn btn-outline btn-sm"
+                  >
+                    {owmFeedLoading ? 'Refreshing...' : 'Refresh Tasks'}
+                  </button>
                 </div>
               </div>
 
-              <div className="card card-glow" style={{ padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                  <div>
-                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      {tasksSubMode === 'owm_telegram'
-                        ? 'Offerwall.me — Telegram Join Tasks (?tab=tasks&taskType=telegram)'
-                        : tasksSubMode === 'owm_general'
-                        ? 'Offerwall.me — General Micro-Tasks (?tab=tasks)'
-                        : 'PubCrypto — MoneyTask & Review Map Quests'}
-                    </h3>
-                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                      Directly filtered to Tasks mode. Submit required proof inside the task card to credit your Lootify wallet via <code className="font-mono">lootify/api/postback</code>.
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => syncUserWithBackend(user, true)}
-                      className="btn btn-outline btn-sm"
-                    >
-                      Sync Balance
-                    </button>
-                    {taskIframeUrl && (
-                      <a
-                        href={taskIframeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-ghost btn-sm"
-                      >
-                        ↗ Open Fullscreen
-                      </a>
-                    )}
-                  </div>
+              {tasksSubMode === 'cards' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {owmFeedLoading && owmFeed.tasks.length === 0 ? (
+                    <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                      Loading individual micro-tasks from Offerwall.me API...
+                    </div>
+                  ) : owmFeed.tasks.length === 0 ? (
+                    <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                      No individual micro-tasks available for your region right now. Try switching to the Offerwall.me Wall or PubCrypto MoneyTask tab above.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 16 }}>
+                      {owmFeed.tasks.map((task: any, idx: number) => {
+                        const tid = String(task.id || idx);
+                        const rewardCoins = Number(task.reward) || 0;
+                        const inrVal = ((rewardCoins * 90) / 100000).toFixed(2);
+                        const isExpanded = expandedTaskId === tid;
+                        const approvalDays = task.approval_time
+                          ? Math.max(1, Math.round(Number(task.approval_time) / 1440))
+                          : 1;
+                        return (
+                          <div
+                            key={tid}
+                            className="card"
+                            style={{
+                              padding: 20,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              gap: 14,
+                              border: isExpanded
+                                ? '1.5px solid var(--green)'
+                                : '1px solid rgba(245,158,11,0.28)',
+                              background: 'var(--bg2)',
+                            }}
+                          >
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                  {task.image ? (
+                                    <img
+                                      src={task.image}
+                                      alt={task.title}
+                                      style={{
+                                        width: 44,
+                                        height: 44,
+                                        borderRadius: 10,
+                                        objectFit: 'cover',
+                                        border: '1px solid var(--border)',
+                                        flexShrink: 0,
+                                      }}
+                                    />
+                                  ) : (
+                                    <div
+                                      style={{
+                                        width: 44,
+                                        height: 44,
+                                        borderRadius: 10,
+                                        background: 'rgba(245,158,11,0.14)',
+                                        border: '1px solid rgba(245,158,11,0.32)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#F59E0B',
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M9 11l3 3L22 4" />
+                                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                                      {task.title}
+                                    </h3>
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
+                                      <span
+                                        className="font-mono"
+                                        style={{
+                                          fontSize: 10,
+                                          padding: '2px 7px',
+                                          borderRadius: 5,
+                                          background: 'rgba(245,158,11,0.14)',
+                                          color: '#F59E0B',
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        PROOF: {String(task.proof_type || 'Text').toUpperCase()}
+                                      </span>
+                                      <span
+                                        className="font-mono"
+                                        style={{
+                                          fontSize: 10,
+                                          padding: '2px 7px',
+                                          borderRadius: 5,
+                                          background: 'rgba(56,189,248,0.14)',
+                                          color: '#38BDF8',
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        REVIEW: ~{approvalDays}d
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    textAlign: 'right',
+                                    padding: '6px 10px',
+                                    borderRadius: 8,
+                                    background: 'rgba(0,232,154,0.1)',
+                                    border: '1px solid rgba(0,232,154,0.3)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
+                                    +{rewardCoins.toLocaleString('en-IN')}
+                                  </div>
+                                  <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
+                                    COINS (₹{inrVal})
+                                  </div>
+                                </div>
+                              </div>
+
+                              {task.description && (
+                                <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.55 }}>
+                                  {task.description}
+                                </p>
+                              )}
+                            </div>
+
+                            {isExpanded && (
+                              <div
+                                style={{
+                                  padding: 14,
+                                  borderRadius: 10,
+                                  background: 'var(--bg3)',
+                                  border: '1px solid var(--border2)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 12,
+                                }}
+                              >
+                                <div className="font-mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>
+                                  STEP-BY-STEP INSTRUCTIONS
+                                </div>
+                                <div
+                                  style={{ fontSize: 12.5, color: 'var(--txt)', lineHeight: 1.6 }}
+                                  dangerouslySetInnerHTML={{
+                                    __html: String(task.instructions || task.description || 'Complete the task and submit proof below.'),
+                                  }}
+                                />
+
+                                {task.url && (
+                                  <a
+                                    href={task.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn-outline btn-sm"
+                                    style={{ textAlign: 'center', textDecoration: 'none' }}
+                                  >
+                                    Open Task Destination Link ↗
+                                  </a>
+                                )}
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                                  <label className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 700 }}>
+                                    SUBMIT PROOF ({task.proof_text || 'Enter username, text proof, or screenshot link'}):
+                                  </label>
+                                  <textarea
+                                    rows={2}
+                                    value={taskProofInputs[tid] || ''}
+                                    onChange={(e) =>
+                                      setTaskProofInputs((prev) => ({
+                                        ...prev,
+                                        [tid]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder={
+                                      task.proof_text ||
+                                      (task.proof_type === 'Image'
+                                        ? 'Paste screenshot image URL or proof details...'
+                                        : 'Enter your required proof text...')
+                                    }
+                                    style={{
+                                      width: '100%',
+                                      padding: '9px 12px',
+                                      borderRadius: 8,
+                                      background: 'var(--bg2)',
+                                      border: '1px solid var(--border2)',
+                                      color: 'var(--txt)',
+                                      fontSize: 12.5,
+                                    }}
+                                  />
+
+                                  {taskSubmitNotice && taskSubmitNotice.taskId === tid && (
+                                    <div
+                                      style={{
+                                        padding: '8px 12px',
+                                        borderRadius: 8,
+                                        fontSize: 12,
+                                        background:
+                                          taskSubmitNotice.type === 'success'
+                                            ? 'rgba(0,232,154,0.12)'
+                                            : 'rgba(255,85,102,0.12)',
+                                        border:
+                                          taskSubmitNotice.type === 'success'
+                                            ? '1px solid rgba(0,232,154,0.35)'
+                                            : '1px solid rgba(255,85,102,0.35)',
+                                        color:
+                                          taskSubmitNotice.type === 'success' ? 'var(--green)' : 'var(--red)',
+                                      }}
+                                    >
+                                      {taskSubmitNotice.text}
+                                    </div>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    disabled={taskSubmittingId === tid}
+                                    onClick={() => handleSubmitOwmTaskProof(tid)}
+                                    className="btn btn-primary btn-sm btn-full"
+                                  >
+                                    {taskSubmittingId === tid
+                                      ? 'Submitting Proof...'
+                                      : `Submit Proof & Claim +${rewardCoins.toLocaleString('en-IN')} Coins`}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              {task.url && !isExpanded && (
+                                <a
+                                  href={task.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-outline btn-sm"
+                                  style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
+                                >
+                                  Open Link ↗
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTaskId(isExpanded ? null : tid)}
+                                className="btn btn-primary btn-sm"
+                                style={{ flex: 1 }}
+                              >
+                                {isExpanded
+                                  ? 'Hide Instructions'
+                                  : `Start Task (+${rewardCoins.toLocaleString('en-IN')} Coins)`}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <iframe
-                  key={`tasks_${tasksSubMode}_${user.id}`}
-                  src={taskIframeUrl}
-                  title="Tasks Feed"
-                  width="100%"
-                  height={tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
-                  frameBorder={0}
-                  allow="clipboard-write; fullscreen; popups"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    height: tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    background: '#0B121E',
-                  }}
-                />
-              </div>
+              ) : (
+                <div className="card card-glow" style={{ padding: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                        {tasksSubMode === 'owm_telegram'
+                          ? 'Offerwall.me — Telegram Join Tasks (?tab=tasks&taskType=telegram)'
+                          : tasksSubMode === 'owm_general'
+                          ? 'Offerwall.me — General Micro-Tasks (?tab=tasks)'
+                          : 'PubCrypto — MoneyTask & Review Map Quests'}
+                      </h3>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                        Directly filtered to Tasks mode. Submit required proof inside the task card to credit your Lootify wallet via <code className="font-mono">lootify/api/postback</code>.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => syncUserWithBackend(user, true)}
+                        className="btn btn-outline btn-sm"
+                      >
+                        Sync Balance
+                      </button>
+                      {taskIframeUrl && (
+                        <a
+                          href={taskIframeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-ghost btn-sm"
+                        >
+                          ↗ Open Fullscreen
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <iframe
+                    key={`tasks_${tasksSubMode}_${user.id}`}
+                    src={taskIframeUrl}
+                    title="Tasks Feed"
+                    width="100%"
+                    height={tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                    frameBorder={0}
+                    allow="clipboard-write; fullscreen; popups"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      height: tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      background: '#0B121E',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           );
         })()}
 
-        {/* ── TAB: YOUTUBE / VIDEO EARNING (Direct Offerwall.me ?tab=video) ── */}
+        {/* ── TAB: YOUTUBE / VIDEO EARNING (Single-Piece Video Ads + Offerwall.me Video Wall) ── */}
         {activeTab === 'youtube' && (() => {
           const baseOwmUrl =
             signedOfferwallMeUrl ||
             buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id);
           const videoIframeUrl = buildOfferwallMeTabUrl(baseOwmUrl, 'video');
+          const videoPtcItems = owmFeed.ptc.filter(
+            (item: any) => Number(item.type) === 2 || String(item.title || '').toLowerCase().includes('video') || String(item.title || '').toLowerCase().includes('youtube')
+          );
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                    YouTube &amp; Video Earning
-                  </h2>
-                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Watch sponsored videos and YouTube campaigns from Offerwall.me (<code className="font-mono">?tab=video</code>) for Player ID{' '}
-                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: 'rgba(244,63,94,0.14)',
+                      border: '1px solid rgba(244,63,94,0.35)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#F43F5E',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="4" width="20" height="16" rx="4" />
+                      <polygon points="10 9 15 12 10 15 10 9" fill="currentColor" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                      YouTube &amp; Video Earning
+                    </h2>
+                    <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
+                      Watch sponsored video campaigns for Player ID{' '}
+                      <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Postback: <code className="font-mono">lootify/api/postback</code>
+                    </p>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setYoutubeViewMode('cards')}
+                    className="btn btn-sm"
+                    style={{
+                      background: youtubeViewMode === 'cards' ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                      border: youtubeViewMode === 'cards' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                      color: youtubeViewMode === 'cards' ? 'var(--green)' : 'var(--txt2)',
+                    }}
+                  >
+                    Single-Piece Video Cards ({videoPtcItems.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setYoutubeViewMode('wall')}
+                    className="btn btn-sm"
+                    style={{
+                      background: youtubeViewMode === 'wall' ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                      border: youtubeViewMode === 'wall' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                      color: youtubeViewMode === 'wall' ? 'var(--green)' : 'var(--txt2)',
+                    }}
+                  >
+                    Offerwall.me Video Wall
+                  </button>
                   <button
                     type="button"
                     onClick={() => syncUserWithBackend(user, true)}
@@ -6173,6 +6651,55 @@ export default function App() {
                   >
                     Sync Earned Coins
                   </button>
+                </div>
+              </div>
+
+              {youtubeViewMode === 'cards' && videoPtcItems.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
+                  {videoPtcItems.map((vid: any, idx: number) => {
+                    const rewardCoins = Number(vid.reward) || 0;
+                    return (
+                      <div key={idx} className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14 }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                            <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                              {vid.title}
+                            </h3>
+                            <span className="font-mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>
+                              +{rewardCoins} Coins
+                            </span>
+                          </div>
+                          <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 6 }}>
+                            {vid.description || `Watch video for ${vid.duration || 15}s to earn +${rewardCoins} Coins.`}
+                          </p>
+                        </div>
+                        <a
+                          href={vid.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-primary btn-sm btn-full"
+                          style={{ textAlign: 'center', textDecoration: 'none' }}
+                        >
+                          Watch Video ({vid.duration || 15}s) &amp; Earn ↗
+                        </a>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              <div className="card card-glow" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                      Offerwall.me — Video Campaigns Feed (<code className="font-mono">?tab=video</code>)
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                      {videoPtcItems.length === 0
+                        ? 'Live video campaigns load directly inside the Video feed below as soon as advertisers publish new clips.'
+                        : 'You can also watch directly inside the Offerwall.me Video player below.'}
+                    </p>
+                  </div>
                   {videoIframeUrl && (
                     <a
                       href={videoIframeUrl}
@@ -6184,21 +6711,18 @@ export default function App() {
                     </a>
                   )}
                 </div>
-              </div>
-
-              <div className="card card-glow" style={{ padding: 20 }}>
                 <iframe
                   key={`youtube_video_${user.id}`}
                   src={videoIframeUrl}
                   title="YouTube & Video Ads"
                   width="100%"
-                  height={680}
+                  height={620}
                   frameBorder={0}
                   allow="clipboard-write; fullscreen; popups; autoplay"
                   style={{
                     display: 'block',
                     width: '100%',
-                    height: 680,
+                    height: 620,
                     border: '1px solid var(--border)',
                     borderRadius: 12,
                     background: '#0B121E',
@@ -6209,7 +6733,7 @@ export default function App() {
           );
         })()}
 
-        {/* ── TAB: SURVEYS (Direct Offerwall.me ?tab=surveys) ── */}
+        {/* ── TAB: SURVEYS (Single-Piece Offerwall.me Surveys + Full Survey Wall) ── */}
         {activeTab === 'surveys' && (() => {
           const baseOwmUrl =
             signedOfferwallMeUrl ||
@@ -6219,60 +6743,218 @@ export default function App() {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                    Paid Surveys (CPX, TimeWall, OpinionUniverse)
-                  </h2>
-                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    High-paying research surveys directly filtered via Offerwall.me (<code className="font-mono">?tab=surveys</code>) for Player ID{' '}
-                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: 'rgba(16,185,129,0.14)',
+                      border: '1px solid rgba(16,185,129,0.35)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#10B981',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                      <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                      Paid Surveys (Single-Piece Research Routers)
+                    </h2>
+                    <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
+                      High-paying individual surveys extracted for Player ID{' '}
+                      <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Postback: <code className="font-mono">lootify/api/postback</code>
+                    </p>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    onClick={() => syncUserWithBackend(user, true)}
+                    onClick={() => setSurveysViewMode('cards')}
+                    className="btn btn-sm"
+                    style={{
+                      background: surveysViewMode === 'cards' ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                      border: surveysViewMode === 'cards' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                      color: surveysViewMode === 'cards' ? 'var(--green)' : 'var(--txt2)',
+                    }}
+                  >
+                    Single-Piece Surveys ({owmFeed.surveys.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSurveysViewMode('wall')}
+                    className="btn btn-sm"
+                    style={{
+                      background: surveysViewMode === 'wall' ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                      border: surveysViewMode === 'wall' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                      color: surveysViewMode === 'wall' ? 'var(--green)' : 'var(--txt2)',
+                    }}
+                  >
+                    Full Survey Wall
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fetchOfferwallMeFeed(user.id, true)}
                     className="btn btn-outline btn-sm"
                   >
-                    Sync Earned Coins
+                    {owmFeedLoading ? 'Refreshing...' : 'Refresh Surveys'}
                   </button>
-                  {surveysIframeUrl && (
-                    <a
-                      href={surveysIframeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-ghost btn-sm"
-                    >
-                      ↗ Open Fullscreen
-                    </a>
-                  )}
                 </div>
               </div>
 
-              <div className="card card-glow" style={{ padding: 20 }}>
-                <iframe
-                  key={`surveys_${user.id}`}
-                  src={surveysIframeUrl}
-                  title="Paid Surveys"
-                  width="100%"
-                  height={680}
-                  frameBorder={0}
-                  allow="clipboard-write; fullscreen; popups"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    height: 680,
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    background: '#0B121E',
-                  }}
-                />
-              </div>
+              {surveysViewMode === 'cards' ? (
+                owmFeedLoading && owmFeed.surveys.length === 0 ? (
+                  <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                    Loading individual paid surveys from Offerwall.me API...
+                  </div>
+                ) : owmFeed.surveys.length === 0 ? (
+                  <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                    No individual surveys available right now. Switch to Full Survey Wall above.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+                    {owmFeed.surveys.map((sv: any, idx: number) => {
+                      const rewardCoins = Number(sv.reward) || 0;
+                      const inrVal = ((rewardCoins * 90) / 100000).toFixed(2);
+                      const cleanDesc = String(sv.description || '')
+                        .replace(/<[^>]+>/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                      return (
+                        <div
+                          key={sv.id || idx}
+                          className="card"
+                          style={{
+                            padding: 20,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: 14,
+                            border: '1px solid rgba(16,185,129,0.28)',
+                            background: 'var(--bg2)',
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                {sv.image ? (
+                                  <img
+                                    src={sv.image}
+                                    alt={sv.title || sv.name}
+                                    style={{
+                                      width: 46,
+                                      height: 46,
+                                      borderRadius: 10,
+                                      objectFit: 'cover',
+                                      border: '1px solid var(--border)',
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: 46,
+                                      height: 46,
+                                      borderRadius: 10,
+                                      background: 'rgba(16,185,129,0.14)',
+                                      border: '1px solid rgba(16,185,129,0.32)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: '#10B981',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                                      <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                <div>
+                                  <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                                    {sv.title || sv.name}
+                                  </h3>
+                                  <div className="font-mono" style={{ fontSize: 10.5, color: '#10B981', fontWeight: 700, marginTop: 3 }}>
+                                    {String(sv.provider || 'SURVEY ROUTER').toUpperCase()} • {Array.isArray(sv.countries) ? sv.countries.join(', ') : 'GLOBAL'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  textAlign: 'right',
+                                  padding: '6px 10px',
+                                  borderRadius: 8,
+                                  background: 'rgba(0,232,154,0.1)',
+                                  border: '1px solid rgba(0,232,154,0.3)',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
+                                  +{rewardCoins.toLocaleString('en-IN')}
+                                </div>
+                                <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
+                                  COINS (₹{inrVal})
+                                </div>
+                              </div>
+                            </div>
+
+                            <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
+                              {cleanDesc
+                                ? cleanDesc.length > 140
+                                  ? cleanDesc.slice(0, 140) + '...'
+                                  : cleanDesc
+                                : 'Complete this research survey router with honest answers to earn instant Coins.'}
+                            </p>
+                          </div>
+
+                          <a
+                            href={sv.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-primary btn-sm btn-full"
+                            style={{ textAlign: 'center', textDecoration: 'none' }}
+                          >
+                            Start Survey (+{rewardCoins.toLocaleString('en-IN')} Coins) ↗
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                <div className="card card-glow" style={{ padding: 20 }}>
+                  <iframe
+                    key={`surveys_${user.id}`}
+                    src={surveysIframeUrl}
+                    title="Paid Surveys"
+                    width="100%"
+                    height={680}
+                    frameBorder={0}
+                    allow="clipboard-write; fullscreen; popups"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      height: 680,
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      background: '#0B121E',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           );
         })()}
 
-        {/* ── TAB: PTC ADS (Diversified Offerwall.me Iframe PTC, Window PTC & PubCrypto PTC) ── */}
+        {/* ── TAB: PTC ADS (Single-Piece Extracted PTC Cards + Iframe/Window/PubCrypto Walls) ── */}
         {activeTab === 'ptc' && (() => {
           const baseOwmUrl =
             signedOfferwallMeUrl ||
@@ -6287,23 +6969,56 @@ export default function App() {
                   PUBCRYPTO_SITE_KEY
                 )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`;
 
+          const filteredPtcCards = owmFeed.ptc.filter((ad: any) => {
+            if (ptcCardTypeFilter === 'iframe') return Number(ad.type) === 0;
+            if (ptcCardTypeFilter === 'window') return Number(ad.type) === 1;
+            return true;
+          });
+
+          const totalPtcCoins = Number(
+            filteredPtcCards.reduce((sum: number, ad: any) => sum + (Number(ad.reward) || 0), 0).toFixed(2)
+          );
+
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                    PTC Ads (Pay-To-Click)
-                  </h2>
-                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Directly separated Iframe PTC Ads (<code className="font-mono">?tab=iframe</code>), Window PTC Ads (<code className="font-mono">?tab=window</code>), and PubCrypto PTC Ads for Player ID{' '}
-                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: 'rgba(56,189,248,0.14)',
+                      border: '1px solid rgba(56,189,248,0.35)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#38BDF8',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="3" width="20" height="14" rx="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                      PTC Ads (Single-Piece Pay-To-Click Cards)
+                    </h2>
+                    <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
+                      {owmFeed.ptc.length} Individual PTC Ads ready (+{totalPtcCoins} Coins) for Player ID{' '}
+                      <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Postback: <code className="font-mono">lootify/api/postback</code>
+                    </p>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
-                    { id: 'owm_iframe', label: 'Offerwall.me — Iframe PTC' },
-                    { id: 'owm_window', label: 'Offerwall.me — Window PTC' },
-                    { id: 'pubcrypto', label: 'PubCrypto — PTC & Link Ads' },
+                    { id: 'cards', label: `Single-Piece PTC (${owmFeed.ptc.length})` },
+                    { id: 'owm_iframe', label: 'Iframe PTC Wall' },
+                    { id: 'owm_window', label: 'Window PTC Wall' },
+                    { id: 'pubcrypto', label: 'PubCrypto PTC Wall' },
                   ].map((mode) => {
                     const active = ptcSubMode === mode.id;
                     return (
@@ -6322,91 +7037,501 @@ export default function App() {
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetchOfferwallMeFeed(user.id, true);
+                      syncUserWithBackend(user, true);
+                    }}
+                    className="btn btn-outline btn-sm"
+                  >
+                    {owmFeedLoading ? 'Refreshing...' : 'Refresh & Sync'}
+                  </button>
                 </div>
               </div>
 
-              <div className="card card-glow" style={{ padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                  <div>
-                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      {ptcSubMode === 'owm_iframe'
-                        ? 'Offerwall.me — Iframe PTC Ads (?tab=iframe)'
-                        : ptcSubMode === 'owm_window'
-                        ? 'Offerwall.me — Window PTC Ads (?tab=window)'
-                        : 'PubCrypto — PTC & Link Ads Wall'}
-                    </h3>
-                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                      Opens directly on the selected PTC section. Every completed view credits automatically via <code className="font-mono">lootify/api/postback</code>.
-                    </p>
+              {ptcSubMode === 'cards' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Sub-filter for Single-Piece PTC Cards */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {[
+                        { id: 'all', label: `All PTC Ads (${owmFeed.ptc.length})` },
+                        {
+                          id: 'window',
+                          label: `Window PTC (${owmFeed.ptc.filter((x: any) => Number(x.type) === 1).length})`,
+                        },
+                        {
+                          id: 'iframe',
+                          label: `Iframe PTC (${owmFeed.ptc.filter((x: any) => Number(x.type) === 0).length})`,
+                        },
+                      ].map((f) => {
+                        const active = ptcCardTypeFilter === f.id;
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setPtcCardTypeFilter(f.id as any)}
+                            className="font-mono"
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 8,
+                              fontSize: 11.5,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              background: active ? 'rgba(56,189,248,0.15)' : 'var(--bg2)',
+                              border: active ? '1.5px solid #38BDF8' : '1px solid var(--border)',
+                              color: active ? '#38BDF8' : 'var(--txt2)',
+                            }}
+                          >
+                            {f.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                      Click any card below to watch &amp; earn instant Coins
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => syncUserWithBackend(user, true)}
-                      className="btn btn-outline btn-sm"
-                    >
-                      Sync Balance
-                    </button>
-                    {ptcIframeUrl && (
-                      <a
-                        href={ptcIframeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-ghost btn-sm"
-                      >
-                        ↗ Open Fullscreen
-                      </a>
-                    )}
-                  </div>
+
+                  {owmFeedLoading && filteredPtcCards.length === 0 ? (
+                    <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                      Loading individual PTC ads from Offerwall.me API...
+                    </div>
+                  ) : filteredPtcCards.length === 0 ? (
+                    <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                      No PTC ads in this filter right now. Try switching filter or open PubCrypto PTC Wall above.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
+                      {filteredPtcCards.map((ad: any, idx: number) => {
+                        const rewardCoins = Number(ad.reward) || 0;
+                        const durationSec = Number(ad.duration) || 5;
+                        const isWindow = Number(ad.type) === 1;
+                        return (
+                          <div
+                            key={`${ad.title}_${idx}`}
+                            className="card"
+                            style={{
+                              padding: 20,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              gap: 14,
+                              border: '1px solid rgba(56,189,248,0.28)',
+                              background: 'var(--bg2)',
+                            }}
+                          >
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                  <div
+                                    style={{
+                                      width: 38,
+                                      height: 38,
+                                      borderRadius: 10,
+                                      background: isWindow ? 'rgba(56,189,248,0.14)' : 'rgba(0,232,154,0.14)',
+                                      border: isWindow
+                                        ? '1px solid rgba(56,189,248,0.32)'
+                                        : '1px solid rgba(0,232,154,0.32)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: isWindow ? '#38BDF8' : 'var(--green)',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <polyline points="12 6 12 12 16 14" />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <h3 className="font-display" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--txt)' }}>
+                                      {ad.title}
+                                    </h3>
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                                      <span
+                                        className="font-mono"
+                                        style={{
+                                          fontSize: 10,
+                                          padding: '2px 7px',
+                                          borderRadius: 5,
+                                          background: isWindow ? 'rgba(56,189,248,0.15)' : 'rgba(0,232,154,0.15)',
+                                          color: isWindow ? '#38BDF8' : 'var(--green)',
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        {isWindow ? 'WINDOW PTC' : 'IFRAME PTC'}
+                                      </span>
+                                      <span
+                                        className="font-mono"
+                                        style={{
+                                          fontSize: 10,
+                                          padding: '2px 7px',
+                                          borderRadius: 5,
+                                          background: 'rgba(245,158,11,0.15)',
+                                          color: '#F59E0B',
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        {durationSec}s TIMER
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    textAlign: 'right',
+                                    padding: '6px 10px',
+                                    borderRadius: 8,
+                                    background: 'rgba(0,232,154,0.1)',
+                                    border: '1px solid rgba(0,232,154,0.3)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
+                                    +{rewardCoins}
+                                  </div>
+                                  <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
+                                    COINS
+                                  </div>
+                                </div>
+                              </div>
+
+                              {ad.description && (
+                                <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
+                                  {ad.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <a
+                              href={ad.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-primary btn-sm btn-full"
+                              style={{ textAlign: 'center', textDecoration: 'none' }}
+                            >
+                              Watch Ad ({durationSec}s) &amp; Earn +{rewardCoins} Coins ↗
+                            </a>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <iframe
-                  key={`ptc_${ptcSubMode}_${user.id}`}
-                  src={ptcIframeUrl}
-                  title="PTC Ads Wall"
-                  width="100%"
-                  height={ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
-                  frameBorder={0}
-                  allow="clipboard-write; fullscreen; popups"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    height: ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    background: '#0B121E',
-                  }}
-                />
-              </div>
+              ) : (
+                <div className="card card-glow" style={{ padding: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                        {ptcSubMode === 'owm_iframe'
+                          ? 'Offerwall.me — Iframe PTC Ads (?tab=iframe)'
+                          : ptcSubMode === 'owm_window'
+                          ? 'Offerwall.me — Window PTC Ads (?tab=window)'
+                          : 'PubCrypto — PTC & Link Ads Wall'}
+                      </h3>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                        Opens directly on the selected PTC section. Every completed view credits automatically via <code className="font-mono">lootify/api/postback</code>.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => syncUserWithBackend(user, true)}
+                        className="btn btn-outline btn-sm"
+                      >
+                        Sync Balance
+                      </button>
+                      {ptcIframeUrl && (
+                        <a
+                          href={ptcIframeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-ghost btn-sm"
+                        >
+                          ↗ Open Fullscreen
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <iframe
+                    key={`ptc_${ptcSubMode}_${user.id}`}
+                    src={ptcIframeUrl}
+                    title="PTC Ads Wall"
+                    width="100%"
+                    height={ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                    frameBorder={0}
+                    allow="clipboard-write; fullscreen; popups"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      height: ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      background: '#0B121E',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           );
         })()}
 
-        {/* ── TAB 2: OFFERWALLS & QUEST MODES (Apps & Games ?tab=offers) ── */}
+        {/* ── TAB 2: OFFERWALLS & QUEST MODES (Single-Piece App & Game Offers + Partner Walls) ── */}
         {(activeTab === 'quests' || activeTab === 'offerwalls') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-              <div>
-                <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                  Partner Offerwalls &amp; Micro-Tasks
-                </h2>
-                <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
-                  All completions credit automatically via S2S Postback to Player ID{' '}
-                  <span className="font-mono" style={{ color: 'var(--green)' }}>
-                    {user.id}
-                  </span>
-                  .
-                </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    background: 'rgba(139,92,246,0.14)',
+                    border: '1px solid rgba(139,92,246,0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#A78BFA',
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="6" width="20" height="12" rx="4" />
+                    <path d="M6 12h4" />
+                    <path d="M8 10v4" />
+                    <circle cx="15" cy="11" r="1" fill="currentColor" />
+                    <circle cx="17" cy="13" r="1" fill="currentColor" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                    Apps, Games &amp; Partner Offerwalls
+                  </h2>
+                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
+                    Single-piece extracted App/Web offers &amp; partner walls for Player ID{' '}
+                    <span className="font-mono" style={{ color: 'var(--green)' }}>
+                      {user.id}
+                    </span>{' '}
+                    • Postback: <code className="font-mono">lootify/api/postback</code>
+                  </p>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => syncUserWithBackend(user, true)}
-                className="btn btn-outline btn-sm"
-              >
-                🔄 Refresh Earned Coins
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setOffersViewMode('cards')}
+                  className="btn btn-sm"
+                  style={{
+                    background: offersViewMode === 'cards' ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                    border: offersViewMode === 'cards' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                    color: offersViewMode === 'cards' ? 'var(--green)' : 'var(--txt2)',
+                  }}
+                >
+                  Single-Piece Offers ({owmFeed.offers.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOffersViewMode('walls')}
+                  className="btn btn-sm"
+                  style={{
+                    background: offersViewMode === 'walls' ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                    border: offersViewMode === 'walls' ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                    color: offersViewMode === 'walls' ? 'var(--green)' : 'var(--txt2)',
+                  }}
+                >
+                  Full Partner Offerwalls ({enabledOfferwalls.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchOfferwallMeFeed(user.id, true);
+                    syncUserWithBackend(user, true);
+                  }}
+                  className="btn btn-outline btn-sm"
+                >
+                  {owmFeedLoading ? 'Refreshing...' : 'Refresh & Sync'}
+                </button>
+              </div>
             </div>
 
-            {enabledOfferwalls.length === 0 ? (
+            {offersViewMode === 'cards' ? (
+              owmFeedLoading && owmFeed.offers.length === 0 ? (
+                <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                  Loading individual App &amp; Game offers from Offerwall.me API...
+                </div>
+              ) : owmFeed.offers.length === 0 ? (
+                <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
+                  No individual offers found right now. Switch to Full Partner Offerwalls above.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 16 }}>
+                  {owmFeed.offers.map((offer: any, idx: number) => {
+                    const rewardCoins = Number(offer.reward) || 0;
+                    const inrVal = ((rewardCoins * 90) / 100000).toFixed(2);
+                    const cleanDesc = String(offer.description || '')
+                      .replace(/<[^>]+>/g, ' ')
+                      .replace(/\s+/g, ' ')
+                      .trim();
+                    const imgSrc = offer.icon || offer.image || '';
+                    return (
+                      <div
+                        key={offer.id || idx}
+                        className="card"
+                        style={{
+                          padding: 20,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          gap: 14,
+                          border: '1px solid rgba(139,92,246,0.28)',
+                          background: 'var(--bg2)',
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                              {imgSrc ? (
+                                <img
+                                  src={imgSrc}
+                                  alt={offer.title || offer.name}
+                                  style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: 12,
+                                    objectFit: 'cover',
+                                    border: '1px solid var(--border)',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: 12,
+                                    background: 'rgba(139,92,246,0.14)',
+                                    border: '1px solid rgba(139,92,246,0.32)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#A78BFA',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="2" y="6" width="20" height="12" rx="4" />
+                                    <path d="M6 12h4" />
+                                    <path d="M8 10v4" />
+                                  </svg>
+                                </div>
+                              )}
+                              <div>
+                                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                                  {offer.title || offer.name}
+                                </h3>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                                  <span
+                                    className="font-mono"
+                                    style={{
+                                      fontSize: 10,
+                                      padding: '2px 7px',
+                                      borderRadius: 5,
+                                      background: 'rgba(139,92,246,0.15)',
+                                      color: '#A78BFA',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {String(offer.provider || 'OFFERWALL').toUpperCase()}
+                                  </span>
+                                  {Array.isArray(offer.devices) && offer.devices.length > 0 && (
+                                    <span
+                                      className="font-mono"
+                                      style={{
+                                        fontSize: 10,
+                                        padding: '2px 7px',
+                                        borderRadius: 5,
+                                        background: 'rgba(56,189,248,0.14)',
+                                        color: '#38BDF8',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      {offer.devices.join(' / ')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                textAlign: 'right',
+                                padding: '6px 10px',
+                                borderRadius: 8,
+                                background: 'rgba(0,232,154,0.1)',
+                                border: '1px solid rgba(0,232,154,0.3)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
+                                +{rewardCoins.toLocaleString('en-IN')}
+                              </div>
+                              <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
+                                COINS (₹{inrVal})
+                              </div>
+                            </div>
+                          </div>
+
+                          <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
+                            {cleanDesc
+                              ? cleanDesc.length > 150
+                                ? cleanDesc.slice(0, 150) + '...'
+                                : cleanDesc
+                              : 'Complete the offer requirements to earn instant Coins.'}
+                          </p>
+
+                          {Array.isArray(offer.steps) && offer.steps.length > 1 && (
+                            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {offer.steps.slice(0, 3).map((st: any, sIdx: number) => (
+                                <div
+                                  key={st.id || sIdx}
+                                  className="font-mono"
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    fontSize: 11,
+                                    padding: '4px 8px',
+                                    borderRadius: 6,
+                                    background: 'var(--bg3)',
+                                    color: 'var(--txt2)',
+                                  }}
+                                >
+                                  <span>{st.label}</span>
+                                  <span style={{ color: 'var(--green)', fontWeight: 700 }}>+{st.reward}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <a
+                          href={offer.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-primary btn-sm btn-full"
+                          style={{ textAlign: 'center', textDecoration: 'none' }}
+                        >
+                          Start Offer (+{rewardCoins.toLocaleString('en-IN')} Coins) ↗
+                        </a>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : enabledOfferwalls.length === 0 ? (
               <div
                 className="card card-glow"
                 style={{
@@ -6414,24 +7539,12 @@ export default function App() {
                   textAlign: 'center',
                 }}
               >
-                <div style={{ fontSize: 38, marginBottom: 14 }}>🎮</div>
                 <h3 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--txt)', marginBottom: 8 }}>
                   Partner Offerwalls Integrating Soon
                 </h3>
                 <p style={{ fontSize: 13, color: 'var(--txt2)', maxWidth: 500, margin: '0 auto 20px', lineHeight: 1.7 }}>
                   Our S2S Postback Engine is live and ready. As soon as partner offerwalls are added in the Admin Panel, they will appear here automatically.
                 </p>
-                {user.email.toLowerCase() === ADMIN_ALLOWED_EMAIL && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.hash = '#/admin';
-                    }}
-                    className="btn btn-primary btn-sm"
-                  >
-                    ⚙️ Open Admin Panel to Add Offerwall →
-                  </button>
-                )}
               </div>
             ) : (
               <>
@@ -6515,7 +7628,7 @@ export default function App() {
                             onClick={() => refreshPubCryptoSignedUrl(user.id, true)}
                             className="btn btn-outline btn-sm"
                           >
-                            🔄 Reload Session
+                            Reload Session
                           </button>
                         )}
                         {resolvedIframeUrl && (
@@ -6561,48 +7674,20 @@ export default function App() {
                             : undefined
                         }
                       />
-                    ) : selectedWall.provider_id === 'pubcrypto' ? (
-                      <div
-                        style={{
-                          padding: '60px 24px',
-                          textAlign: 'center',
-                          background: 'rgba(9,13,25,0.6)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 12,
-                        }}
-                      >
-                        <div className="live-dot" style={{ width: 14, height: 14, margin: '0 auto 16px' }} />
-                        <h4 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
-                          Connecting to PubCrypto Signed Embed...
-                        </h4>
-                        <p style={{ fontSize: 13, color: 'var(--txt2)', maxWidth: 440, margin: '0 auto 20px', lineHeight: 1.6 }}>
-                          Generating a fresh, secure session token for your Player ID. This usually takes just 1–2 seconds.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => refreshPubCryptoSignedUrl(user.id, true)}
-                          className="btn btn-primary btn-sm"
-                        >
-                          🔄 Retry Session Generation
-                        </button>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          padding: '48px 24px',
-                          textAlign: 'center',
-                          background: 'var(--bg2)',
-                          border: '1px dashed var(--border2)',
-                          borderRadius: 12,
-                        }}
-                      >
-                        <p style={{ fontSize: 13, color: 'var(--txt2)' }}>
-                          Please set the Iframe URL Template for <strong>{selectedWall.name}</strong> in the Admin Panel.
-                        </p>
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                 )}
+              </>
+            )}
+
+            {/* Live Completed Offerwall Tasks History */}
+            <div style={{ display: 'none' }}>
+              {(() => {
+                return null;
+              })()}
+            </div>
+            {(activeTab === 'quests' || activeTab === 'offerwalls') && (
+              <>
 
                 {/* Live Completed Offerwall Tasks History directly on the Quests page */}
                 <div className="card" style={{ padding: 24 }}>
@@ -7297,8 +8382,8 @@ export default function App() {
                 })}
               </div>
 
-              {/* Partner Shortlink Offerwalls Integrated directly inside Shortlinks Section (?tab=shortlinks) */}
-              <div className="card card-glow" style={{ padding: '20px 24px' }}>
+              {/* Single-Piece Extracted Offerwall.me Shortlinks Cards + Optional Wall */}
+              <div className="card card-glow" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div
                   style={{
                     display: 'flex',
@@ -7306,27 +8391,146 @@ export default function App() {
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     gap: 14,
-                    marginBottom: showPartnerShortlinksWall ? 14 : 0,
                   }}
                 >
                   <div>
-                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      Offerwall.me — Partner Shortlinks Feed (<code className="font-mono">?tab=shortlinks</code>)
+                    <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                      Offerwall.me — Single-Piece Extracted Shortlinks ({owmFeed.shortlinks.length})
                     </h3>
                     <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 2 }}>
-                      Directly separated Shortlinks feed from Offerwall.me. Every completed shortlink credits automatically via S2S Postback!
+                      Every shortlink below is extracted directly via API and credits your Player ID <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> via <code className="font-mono">lootify/api/postback</code>!
                     </p>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => fetchOfferwallMeFeed(user.id, true)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      {owmFeedLoading ? 'Refreshing...' : 'Refresh Partner Links'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowPartnerShortlinksWall((prev) => !prev)}
-                      className="btn btn-outline btn-sm"
+                      className="btn btn-ghost btn-sm"
                     >
-                      {showPartnerShortlinksWall ? 'Hide Partner Shortlinks' : 'Show Partner Shortlinks'}
+                      {showPartnerShortlinksWall ? 'Hide Iframe Wall' : 'Open Iframe Wall'}
                     </button>
                   </div>
                 </div>
+
+                {owmFeed.shortlinks.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: 14 }}>
+                    {owmFeed.shortlinks.map((osl: any, idx: number) => {
+                      const remViews = Number(osl.remaining_views) || 0;
+                      const maxViews = Math.max(1, Number(osl.daily_limit) || 1);
+                      const doneViews = Math.max(0, maxViews - remViews);
+                      const pct = Math.min(100, Math.round((doneViews / maxViews) * 100));
+                      const rewardCoins = Number(osl.reward) || 0;
+                      return (
+                        <div
+                          key={osl.id || idx}
+                          className="card"
+                          style={{
+                            padding: 16,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            background: 'var(--bg2)',
+                            border: remViews > 0 ? '1px solid rgba(0,232,154,0.28)' : '1px solid var(--border)',
+                            opacity: remViews > 0 ? 1 : 0.6,
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div
+                                  style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 9,
+                                    background: 'rgba(0,232,154,0.12)',
+                                    border: '1px solid rgba(0,232,154,0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'var(--green)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                  </svg>
+                                </div>
+                                <div>
+                                  <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                                    {osl.name}
+                                  </div>
+                                  <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)' }}>
+                                    {osl.shortlink || 'Offerwall.me Shortlink'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div
+                                style={{
+                                  textAlign: 'right',
+                                  padding: '4px 8px',
+                                  borderRadius: 7,
+                                  background: 'rgba(0,232,154,0.1)',
+                                  border: '1px solid rgba(0,232,154,0.28)',
+                                }}
+                              >
+                                <div className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
+                                  +{rewardCoins}
+                                </div>
+                                <div className="font-mono" style={{ fontSize: 9, color: 'var(--txt2)' }}>
+                                  COINS
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ marginTop: 10 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 4 }}>
+                                <span className="font-mono" style={{ color: 'var(--txt2)' }}>Remaining Today</span>
+                                <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 700 }}>
+                                  {remViews} / {maxViews} Left
+                                </span>
+                              </div>
+                              <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'var(--bg3)', overflow: 'hidden' }}>
+                                <div
+                                  style={{
+                                    width: `${pct}%`,
+                                    height: '100%',
+                                    background: 'linear-gradient(90deg, var(--green), #059669)',
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {remViews > 0 ? (
+                            <a
+                              href={osl.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-primary btn-sm btn-full"
+                              style={{ textAlign: 'center', textDecoration: 'none' }}
+                            >
+                              Visit Shortlink (+{rewardCoins} Coins) ↗
+                            </a>
+                          ) : (
+                            <button type="button" disabled className="btn btn-outline btn-sm btn-full" style={{ opacity: 0.6 }}>
+                              Completed for Today
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {showPartnerShortlinksWall && (
                   <iframe
                     key={`shortlinks_owm_${user.id}`}
