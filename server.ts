@@ -558,6 +558,16 @@ async function startServer() {
     });
   });
 
+  app.get('/6ae3408a4fd57c8d4ef8246f.html', (_req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    res.send('6ae3408a4fd57c8d4ef8246f');
+  });
+
+  app.get('/verify_9b9b6c4618b92c39094bf2b79f6424c1c91e602f.txt', (_req, res) => {
+    res.setHeader('Content-Type', 'text/plain');
+    res.send('9b9b6c4618b92c39094bf2b79f6424c1c91e602f');
+  });
+
   app.post(['/api/user/sync', '/api/auth/google', '/api/auth/register', '/api/auth/login'], async (req, res) => {
     const db = loadDB();
     const body = req.body || {};
