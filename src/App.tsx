@@ -1187,9 +1187,9 @@ export default function App() {
     const doRefresh = () => {
       const activeUid = user?.id || loadCurrentUser()?.id;
       if (!activeUid) return;
-      if (activeTab === 'quests' && selectedWallId === 'offerwallme') {
+      if ((activeTab === 'quests' || activeTab === 'offerwalls' || activeTab === 'ptc') && selectedWallId === 'offerwallme') {
         refreshOfferwallMeSignedUrl(activeUid, false);
-      } else if (activeTab === 'quests' && selectedWallId === 'pubcrypto') {
+      } else if ((activeTab === 'quests' || activeTab === 'offerwalls' || activeTab === 'ptc') && selectedWallId === 'pubcrypto') {
         refreshPubCryptoSignedUrl(activeUid, false);
       }
     };
@@ -4896,52 +4896,21 @@ export default function App() {
             </span>
           </a>
 
-          <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {(() => {
-              const remSlViews = shortlinks
-                .filter((s) => s.enabled)
-                .reduce(
-                  (acc, s) =>
-                    acc + Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0)),
-                  0
-                );
-              return (
-                [
-                  { id: 'overview', label: 'Overview' },
-                  { id: 'quests', label: 'Offerwalls & Quests' },
-                  {
-                    id: 'shortlinks',
-                    label: remSlViews > 0 ? `🔗 Shortlinks (${remSlViews})` : '🔗 Shortlinks',
-                  },
-                  { id: 'faucet', label: '🚰 Free Faucet' },
-                  { id: 'referrals', label: 'Refer & Earn' },
-                  { id: 'wallet', label: 'Cashout' },
-                ] as { id: DashboardTab; label: string }[]
-              ).map((tab) => {
-                const active = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => switchTab(tab.id)}
-                    className="font-display"
-                    style={{
-                      padding: '8px 14px',
-                      borderRadius: 8,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      border: active ? '1px solid rgba(0,232,154,0.35)' : '1px solid transparent',
-                      background: active ? 'rgba(0,232,154,0.1)' : 'transparent',
-                      color: active ? 'var(--green)' : 'var(--txt2)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              });
-            })()}
+          <div className="hide-mob" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span
+              className="font-mono"
+              style={{
+                fontSize: 11,
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: 'rgba(0,232,154,0.1)',
+                border: '1px solid rgba(0,232,154,0.28)',
+                color: 'var(--green)',
+                fontWeight: 600,
+              }}
+            >
+              ⚡ 100,000 Coins = $1.00 USD / ₹90 INR
+            </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -5212,27 +5181,67 @@ export default function App() {
           </div>
         )}
 
-        {/* ── TAB 1: OVERVIEW (REARRANGED FOR CLEAN HIERARCHY) ── */}
+        {/* ── TAB 1: OVERVIEW (PURE EARNING STATISTICS & ANALYTICS — NO DIRECT AD ACCESS) ── */}
         {activeTab === 'overview' && (() => {
-          const enabledSl = shortlinks.filter((s) => s.enabled);
-          const slViewsLeft = enabledSl.reduce(
-            (acc, s) => acc + Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0)),
-            0
+          const todayPrefix = new Date().toISOString().slice(0, 10);
+          const allHeld = user.heldRewards || [];
+          const allFaucet = user.faucetHistory || [];
+
+          const todayTasks = allHeld.filter(
+            (h) => String(h.createdAt || '').startsWith(todayPrefix) && Number(h.coins) > 0
           );
-          const slCoinsLeft = Number(
-            enabledSl
-              .reduce((acc, s) => {
-                const rem = Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0));
-                return acc + rem * (Number(s.reward_coins) || 0);
-              }, 0)
-              .toFixed(0)
+          const todayFaucet = allFaucet.filter((f) => String(f.createdAt || '').startsWith(todayPrefix));
+          const todayLeadsCount = todayTasks.length + todayFaucet.length;
+          const todayCoinsEarned = Number(
+            (
+              todayTasks.reduce((acc, h) => acc + (Number(h.coins) || 0), 0) +
+              todayFaucet.reduce((acc, f) => acc + (Number(f.coins) || 0), 0)
+            ).toFixed(2)
           );
+
+          const totalLeadsCount = Math.max(
+            Number(user.questsCompleted) || 0,
+            allHeld.filter((h) => Number(h.coins) > 0).length + allFaucet.length
+          );
+          const pendingLeadsCount = allHeld.filter((h) => h.status === 'pending_hold').length;
+
+          // Category Breakdown Statistics
+          const shortlinkEarned = Number(
+            allHeld
+              .filter((h) => String(h.title || '').toUpperCase().includes('SHORTLINK') && Number(h.coins) > 0)
+              .reduce((acc, h) => acc + (Number(h.coins) || 0), 0)
+              .toFixed(2)
+          );
+          const ptcEarned = Number(
+            allHeld
+              .filter((h) => String(h.title || '').toUpperCase().includes('PTC') && Number(h.coins) > 0)
+              .reduce((acc, h) => acc + (Number(h.coins) || 0), 0)
+              .toFixed(2)
+          );
+          const faucetEarned = Number(
+            allFaucet.reduce((acc, f) => acc + (Number(f.coins) || 0), 0).toFixed(2)
+          );
+          const offerwallEarned = Number(
+            Math.max(
+              0,
+              allHeld
+                .filter(
+                  (h) =>
+                    !String(h.title || '').toUpperCase().includes('SHORTLINK') &&
+                    !String(h.title || '').toUpperCase().includes('PTC') &&
+                    Number(h.coins) > 0
+                )
+                .reduce((acc, h) => acc + (Number(h.coins) || 0), 0)
+            ).toFixed(2)
+          );
+          const sumCategorized = Math.max(1, offerwallEarned + shortlinkEarned + ptcEarned + faucetEarned);
+
           const faucetPayProgressPct = Math.min(100, Math.round((user.availableCoins / 100) * 100));
           const upiMinProgressPct = Math.min(100, Math.round((user.availableCoins / 1100) * 100));
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-              {/* TIER 1: PRIMARY 3-CARD EARNING HUB (ABOVE THE FOLD) */}
+              {/* TIER 1: LIVE EARNING & LEADS STATISTICS (OFFERZONO / ANALYTICS STYLE) */}
               <div>
                 <div
                   style={{
@@ -5245,8 +5254,8 @@ export default function App() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                      ⚡ Choose Your Earning Mode
+                    <span className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                      📊 Live Earning Statistics
                     </span>
                     <span
                       className="font-mono"
@@ -5259,254 +5268,214 @@ export default function App() {
                         fontWeight: 700,
                       }}
                     >
-                      100,000 COINS = $1.00 USD / ₹90 INR
+                      REAL-TIME ANALYTICS
                     </span>
                   </div>
                   <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
-                    All modes credit directly to Player ID <strong style={{ color: 'var(--green)' }}>{user.id}</strong>
+                    Use the <strong style={{ color: 'var(--green)' }}>🎮 Earn</strong> button in the bottom bar to open earning sections
                   </span>
                 </div>
 
+                {/* 3 Primary Lead & Activity Stat Cards */}
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                    gap: 16,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                    gap: 14,
                   }}
                 >
-                  {/* Card 1: Live Offerwalls & Quests */}
+                  {/* Card 1: TODAY LEADS */}
                   <div
-                    className="card qcard"
+                    className="card"
                     style={{
-                      padding: 22,
+                      padding: '20px 22px',
                       display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: 14,
-                      border: '1px solid rgba(0,232,154,0.32)',
+                      alignItems: 'center',
+                      gap: 16,
+                      border: '1px solid rgba(0,232,154,0.3)',
                     }}
-                    onClick={() => switchTab('quests')}
                   >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div
-                            style={{
-                              width: 42,
-                              height: 42,
-                              background: 'linear-gradient(135deg,var(--green),#065F46)',
-                              borderRadius: 11,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 20,
-                            }}
-                          >
-                            🎮
-                          </div>
-                          <div>
-                            <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
-                              Offerwalls &amp; Quests
-                            </h3>
-                            <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--green)' }}>
-                              {enabledOfferwalls.length} Verified Networks Live
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          className="font-mono"
-                          style={{
-                            fontSize: 10,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: 'rgba(0,232,154,0.14)',
-                            color: 'var(--green)',
-                            fontWeight: 700,
-                          }}
-                        >
-                          HIGH PAYING
-                        </span>
-                      </div>
-                      <p style={{ fontSize: 12.5, color: 'var(--txt2)', lineHeight: 1.6 }}>
-                        Complete PTC ads, surveys, app installs, and micro-tasks on Offerwall.me &amp; PubCrypto with automatic S2S Postback credit.
-                      </p>
+                    <div
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 12,
+                        background: 'rgba(0,232,154,0.12)',
+                        border: '1px solid rgba(0,232,154,0.28)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        flexShrink: 0,
+                      }}
+                    >
+                      📈
                     </div>
-                    <button type="button" className="btn btn-primary btn-sm btn-full">
-                      🚀 Launch Offerwalls →
-                    </button>
+                    <div>
+                      <div className="font-mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
+                        TODAY LEADS
+                      </div>
+                      <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--txt)', lineHeight: 1.2, marginTop: 2 }}>
+                        {todayLeadsCount}
+                      </div>
+                      <div className="font-mono" style={{ fontSize: 11.5, color: 'var(--green)', marginTop: 3 }}>
+                        +{todayCoinsEarned.toLocaleString('en-IN')} Coins today
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Card 2: Paid Shortlinks Wall */}
+                  {/* Card 2: TOTAL LEADS */}
                   <div
-                    className="card qcard"
+                    className="card"
                     style={{
-                      padding: 22,
+                      padding: '20px 22px',
                       display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: 14,
+                      alignItems: 'center',
+                      gap: 16,
+                      border: '1px solid rgba(155,110,255,0.28)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 12,
+                        background: 'rgba(155,110,255,0.14)',
+                        border: '1px solid rgba(155,110,255,0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        flexShrink: 0,
+                      }}
+                    >
+                      📚
+                    </div>
+                    <div>
+                      <div className="font-mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
+                        TOTAL LEADS
+                      </div>
+                      <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--txt)', lineHeight: 1.2, marginTop: 2 }}>
+                        {totalLeadsCount}
+                      </div>
+                      <div className="font-mono" style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 3 }}>
+                        since {user.joinedAt}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: PENDING LEADS */}
+                  <div
+                    className="card"
+                    style={{
+                      padding: '20px 22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
                       border: '1px solid rgba(255,180,0,0.28)',
                     }}
-                    onClick={() => switchTab('shortlinks')}
                   >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div
-                            style={{
-                              width: 42,
-                              height: 42,
-                              background: 'rgba(255,180,0,0.15)',
-                              border: '1px solid rgba(255,180,0,0.35)',
-                              borderRadius: 11,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 20,
-                            }}
-                          >
-                            🔗
-                          </div>
-                          <div>
-                            <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
-                              Paid Shortlinks Wall
-                            </h3>
-                            <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--gold)' }}>
-                              {slViewsLeft} Views Left (+{slCoinsLeft} Coins)
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          className="font-mono"
-                          style={{
-                            fontSize: 10,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: 'rgba(255,180,0,0.14)',
-                            color: 'var(--gold)',
-                            fontWeight: 700,
-                          }}
-                        >
-                          +3 ROLLS / LINK
-                        </span>
-                      </div>
-                      <p style={{ fontSize: 12.5, color: 'var(--txt2)', lineHeight: 1.6 }}>
-                        Visit daily shortlinks to earn up to <strong style={{ color: 'var(--green)' }}>+150 Coins per link</strong> directly into your withdrawable wallet + 3 Faucet Rolls!
-                      </p>
+                    <div
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 12,
+                        background: 'rgba(255,180,0,0.12)',
+                        border: '1px solid rgba(255,180,0,0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        flexShrink: 0,
+                      }}
+                    >
+                      ⏳
                     </div>
-                    <button type="button" className="btn btn-primary btn-sm btn-full">
-                      🔗 Open Shortlinks ({slViewsLeft} Available) →
-                    </button>
-                  </div>
-
-                  {/* Card 3: Hourly Free Faucet */}
-                  <div
-                    className="card qcard"
-                    style={{
-                      padding: 22,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: 14,
-                    }}
-                    onClick={() => switchTab('faucet')}
-                  >
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div
-                            style={{
-                              width: 42,
-                              height: 42,
-                              background: 'rgba(155,110,255,0.16)',
-                              border: '1px solid rgba(155,110,255,0.35)',
-                              borderRadius: 11,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 20,
-                            }}
-                          >
-                            🚰
-                          </div>
-                          <div>
-                            <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
-                              Hourly Free Faucet
-                            </h3>
-                            <div className="font-mono" style={{ fontSize: 10.5, color: faucetCooldownSecs > 0 ? 'var(--gold)' : 'var(--green)' }}>
-                              {faucetCooldownSecs > 0
-                                ? `Cooldown: ${Math.floor(faucetCooldownSecs / 60)}m ${faucetCooldownSecs % 60}s`
-                                : '✅ Ready to Roll Now'}
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          className="font-mono"
-                          style={{
-                            fontSize: 10,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: 'rgba(155,110,255,0.14)',
-                            color: 'var(--violet)',
-                            fontWeight: 700,
-                          }}
-                        >
-                          UP TO 50 COINS
-                        </span>
+                      <div className="font-mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
+                        PENDING LEADS
                       </div>
-                      <p style={{ fontSize: 12.5, color: 'var(--txt2)', lineHeight: 1.6 }}>
-                        Roll lucky numbers 0000–9999 every 60 minutes to win up to <strong style={{ color: 'var(--gold)' }}>50 Coins Jackpot</strong> with instant wallet credit.
-                      </p>
+                      <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--gold)', lineHeight: 1.2, marginTop: 2 }}>
+                        {pendingLeadsCount}
+                      </div>
+                      <div className="font-mono" style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 3 }}>
+                        {pendingLeadsCount > 0 ? `${user.pendingCoins} Coins in verification` : 'no open holds'}
+                      </div>
                     </div>
-                    <button type="button" className="btn btn-primary btn-sm btn-full">
-                      🎲 Claim Free Faucet Roll →
-                    </button>
                   </div>
                 </div>
 
-                {/* Compact Refer & Earn Quick-Share Bar */}
+                {/* Earning Source Breakdown Analytics Card */}
                 <div
                   className="card"
                   style={{
                     marginTop: 14,
-                    padding: '14px 18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 12,
+                    padding: '18px 22px',
                     background: 'var(--bg2)',
                     border: '1px solid var(--border2)',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span
-                      className="font-mono"
-                      style={{
-                        fontSize: 11,
-                        padding: '4px 8px',
-                        borderRadius: 6,
-                        background: 'rgba(155,110,255,0.14)',
-                        color: 'var(--violet)',
-                        fontWeight: 700,
-                      }}
-                    >
-                      👥 10% LIFETIME REFERRAL
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                    <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                      📈 Earnings Breakdown by Source
                     </span>
-                    <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 600 }}>
-                      Invite friends &amp; earn 10% commission on all their tasks forever:
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                      100,000 Coins = $1.00 USD / ₹90 INR
                     </span>
-                    <code className="font-mono" style={{ fontSize: 11.5, color: 'var(--green)' }}>
-                      {referralLink}
-                    </code>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <button type="button" onClick={copyReferral} className="btn btn-primary btn-sm" style={{ padding: '7px 12px', fontSize: 11.5 }}>
-                      {copiedRef ? '✅ Copied!' : '📋 Copy Referral Link'}
-                    </button>
-                    <button type="button" onClick={() => switchTab('referrals')} className="btn btn-ghost btn-sm" style={{ padding: '7px 12px', fontSize: 11.5 }}>
-                      Referral Details ({user.referralsCount}) →
-                    </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14 }}>
+                    {[
+                      {
+                        label: 'Offerwalls & Surveys',
+                        coins: offerwallEarned,
+                        pct: Math.round((offerwallEarned / sumCategorized) * 100),
+                        color: 'var(--green)',
+                      },
+                      {
+                        label: 'Paid Shortlinks',
+                        coins: shortlinkEarned,
+                        pct: Math.round((shortlinkEarned / sumCategorized) * 100),
+                        color: 'var(--gold)',
+                      },
+                      {
+                        label: 'PTC Ads & Tasks',
+                        coins: ptcEarned,
+                        pct: Math.round((ptcEarned / sumCategorized) * 100),
+                        color: '#38BDF8',
+                      },
+                      {
+                        label: 'Hourly Free Faucet',
+                        coins: faucetEarned,
+                        pct: Math.round((faucetEarned / sumCategorized) * 100),
+                        color: 'var(--violet)',
+                      },
+                    ].map((src) => (
+                      <div
+                        key={src.label}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
+                          <span>{src.label}</span>
+                          <span className="font-mono" style={{ color: src.color, fontWeight: 700 }}>
+                            {src.coins.toLocaleString('en-IN')} C
+                          </span>
+                        </div>
+                        <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'var(--bg2)', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${Math.max(4, src.pct)}%`,
+                              height: '100%',
+                              background: src.color,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -6052,8 +6021,82 @@ export default function App() {
           </div>
         )}
 
+        {/* ── TAB: PTC ADS (Diversified Offerwall.me & PubCrypto PTC + Partner PTC) ── */}
+        {activeTab === 'ptc' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                  📺 PTC Ads (Pay-To-Click)
+                </h2>
+                <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
+                  Click sponsored websites from Offerwall.me, PubCrypto &amp; Ad Partners for instant Coin rewards to Player ID{' '}
+                  <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {enabledOfferwalls.map((wall) => (
+                  <button
+                    key={`ptc_wall_${wall.provider_id}`}
+                    type="button"
+                    onClick={() => setSelectedWallId(wall.provider_id)}
+                    className="btn btn-sm"
+                    style={{
+                      background: selectedWall?.provider_id === wall.provider_id ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                      border: selectedWall?.provider_id === wall.provider_id ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                      color: selectedWall?.provider_id === wall.provider_id ? 'var(--green)' : 'var(--txt2)',
+                    }}
+                  >
+                    📺 {wall.name} PTC Wall
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {selectedWall && resolvedIframeUrl && (
+              <div className="card card-glow" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                      {selectedWall.name} — Live PTC &amp; Ad Feed
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                      Select the <strong>PTC / Ads</strong> tab inside the {selectedWall.name} wall below to view and claim all available PTC ads.
+                    </p>
+                  </div>
+                  <a
+                    href={resolvedIframeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-ghost btn-sm"
+                  >
+                    ↗ Open Fullscreen
+                  </a>
+                </div>
+                <iframe
+                  key={`ptc_${selectedWall.provider_id}_${user.id}`}
+                  src={resolvedIframeUrl}
+                  title={`${selectedWall.name} PTC`}
+                  width="100%"
+                  height={selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                  frameBorder={0}
+                  allow="clipboard-write; fullscreen; popups"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: selectedWall.provider_id === 'pubcrypto' ? pubCryptoIframeHeight : 680,
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    background: '#0B121E',
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── TAB 2: OFFERWALLS & QUEST MODES (100% Dynamic) ── */}
-        {activeTab === 'quests' && (
+        {(activeTab === 'quests' || activeTab === 'offerwalls') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div>
