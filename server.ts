@@ -115,6 +115,27 @@ async function fetchOfferwallMeFeedItems(
     feed = await runFetchWithIp('152.58.192.42');
   }
 
+  let statusHistory: any[] = [];
+  try {
+    const histResp = await fetch(
+      `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
+        uid
+      )}`,
+      {
+        headers: {
+          'x-offerwall-user-expires': expires,
+          'x-offerwall-user-signature': signature,
+        },
+      }
+    );
+    if (histResp.ok) {
+      const histJson: any = await histResp.json();
+      if (histJson && Array.isArray(histJson.history)) {
+        statusHistory = histJson.history;
+      }
+    }
+  } catch {}
+
   const payload = {
     ok: true,
     userId: uid,
@@ -124,6 +145,7 @@ async function fetchOfferwallMeFeedItems(
     tasks: feed.tasks,
     offers: feed.offers,
     surveys: feed.surveys,
+    history: statusHistory,
     fetchedAt: new Date().toISOString(),
   };
   _owmFeedCache.set(cacheKey, { ts: Date.now(), payload });

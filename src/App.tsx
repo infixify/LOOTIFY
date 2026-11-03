@@ -845,21 +845,25 @@ export default function App() {
   const [youtubeViewMode, setYoutubeViewMode] = useState<'cards' | 'wall'>('cards');
   const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(false);
 
-  // Offerwall.me Single-Piece Feed State (PTC, Shortlinks, Tasks, Offers, Surveys)
+  // Offerwall.me Single-Piece Feed State (PTC, Shortlinks, Tasks, Offers, Surveys + Live History)
   const [owmFeed, setOwmFeed] = useState<{
     ptc: any[];
     shortlinks: any[];
     tasks: any[];
     offers: any[];
     surveys: any[];
+    history: any[];
   }>({
     ptc: [],
     shortlinks: [],
     tasks: [],
     offers: [],
     surveys: [],
+    history: [],
   });
   const [owmFeedLoading, setOwmFeedLoading] = useState<boolean>(false);
+  const [owmLastSyncedAt, setOwmLastSyncedAt] = useState<string>('');
+  const [owmClickedIds, setOwmClickedIds] = useState<Record<string, number>>({});
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [taskProofInputs, setTaskProofInputs] = useState<Record<string, string>>({});
   const [taskSubmittingId, setTaskSubmittingId] = useState<string | null>(null);
@@ -868,6 +872,39 @@ export default function App() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  const markOwmItemClicked = useCallback((key: string) => {
+    setOwmClickedIds((prev) => ({ ...prev, [key]: Date.now() }));
+  }, []);
+
+  const getOwmCardLiveStatus = useCallback(
+    (cardKey: string, titleCandidate: string): { label: string; color: string; bg: string } | null => {
+      const cleanTitle = String(titleCandidate || '').trim().toLowerCase();
+      if (cleanTitle && Array.isArray(owmFeed.history)) {
+        const matched = owmFeed.history.find((h: any) => {
+          const hTitle = String(h?.title || '').trim().toLowerCase();
+          return hTitle && (hTitle === cleanTitle || hTitle.includes(cleanTitle) || cleanTitle.includes(hTitle));
+        });
+        if (matched) {
+          const st = String(matched.status || '').trim().toLowerCase();
+          if (st === 'approved' || st === 'completed') {
+            return { label: 'APPROVED & CREDITED', color: 'var(--green)', bg: 'rgba(0,232,154,0.15)' };
+          }
+          if (st === 'pending') {
+            return { label: 'PENDING REVIEW', color: '#F59E0B', bg: 'rgba(245,158,11,0.16)' };
+          }
+          if (st === 'rejected' || st.includes('reject')) {
+            return { label: 'REJECTED', color: 'var(--red)', bg: 'rgba(255,85,102,0.15)' };
+          }
+        }
+      }
+      if (owmClickedIds[cardKey]) {
+        return { label: 'IN PROGRESS • AUTO-SYNCING', color: '#38BDF8', bg: 'rgba(56,189,248,0.15)' };
+      }
+      return null;
+    },
+    [owmFeed.history, owmClickedIds]
+  );
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
@@ -1181,7 +1218,9 @@ export default function App() {
           tasks: Array.isArray(data.tasks) ? data.tasks : [],
           offers: Array.isArray(data.offers) ? data.offers : [],
           surveys: Array.isArray(data.surveys) ? data.surveys : [],
+          history: Array.isArray(data.history) ? data.history : [],
         });
+        setOwmLastSyncedAt(new Date().toLocaleTimeString('en-IN', { hour12: false }));
       }
     } catch {} finally {
       setOwmFeedLoading(false);
@@ -1233,14 +1272,17 @@ export default function App() {
           text: data?.error || data?.message || 'Task submission failed. Please verify your proof and try again.',
         });
       } else {
+        markOwmItemClicked(`task_${taskId}`);
         setTaskSubmitNotice({
           taskId,
           type: 'success',
           text:
             data?.message ||
-            'Task proof submitted! Once approved by the advertiser, Coins will credit automatically via lootify/api/postback.',
+            'Task proof submitted! Status updated to PENDING REVIEW. Coins will credit automatically via lootify/api/postback upon approval.',
         });
         setTaskProofInputs((prev) => ({ ...prev, [taskId]: '' }));
+        fetchOfferwallMeFeed(activeUid, true);
+        if (user) syncUserWithBackend(user, false, true);
       }
     } catch {
       setTaskSubmitNotice({
@@ -1373,28 +1415,29 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
 
-  // Automatic Offerwall & Wallet sync on event-driven triggers (window focus / visibilitychange & instant data arrival) without background polling
+  // Automatic Offerwall, Feed & Wallet sync on event-driven triggers (window focus / visibilitychange when returning from ad/shortlink/task tab)
   useEffect(() => {
-    const syncLatestBalance = () => {
+    const syncLatestBalanceAndFeed = () => {
       const current = loadCurrentUser();
       if (current) {
         syncUserWithBackend(current, false);
+        fetchOfferwallMeFeed(current.id, true);
+        fetchShortlinksFromBackend(current.id);
       }
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncLatestBalance();
+        syncLatestBalanceAndFeed();
       }
     };
-    window.addEventListener('focus', syncLatestBalance);
+    window.addEventListener('focus', syncLatestBalanceAndFeed);
     document.addEventListener('visibilitychange', onVisibility);
-    // Instant sync trigger on mount / tab change
-    syncLatestBalance();
+    syncLatestBalanceAndFeed();
     return () => {
-      window.removeEventListener('focus', syncLatestBalance);
+      window.removeEventListener('focus', syncLatestBalanceAndFeed);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [syncUserWithBackend]);
+  }, [fetchOfferwallMeFeed, fetchShortlinksFromBackend, syncUserWithBackend]);
 
   useEffect(() => {
     if (isAdminRoute && adminLoggedIn) {
@@ -6359,6 +6402,25 @@ export default function App() {
                                       >
                                         REVIEW: ~{approvalDays}d
                                       </span>
+                                      {(() => {
+                                        const st = getOwmCardLiveStatus(`task_${tid}`, task.title);
+                                        if (!st) return null;
+                                        return (
+                                          <span
+                                            className="font-mono"
+                                            style={{
+                                              fontSize: 10,
+                                              padding: '2px 7px',
+                                              borderRadius: 5,
+                                              background: st.bg,
+                                              color: st.color,
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            {st.label}
+                                          </span>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                 </div>
@@ -7177,6 +7239,25 @@ export default function App() {
                                       >
                                         {durationSec}s TIMER
                                       </span>
+                                      {(() => {
+                                        const st = getOwmCardLiveStatus(`ptc_${ad.title}_${idx}`, ad.title);
+                                        if (!st) return null;
+                                        return (
+                                          <span
+                                            className="font-mono"
+                                            style={{
+                                              fontSize: 10,
+                                              padding: '2px 7px',
+                                              borderRadius: 5,
+                                              background: st.bg,
+                                              color: st.color,
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            {st.label}
+                                          </span>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                 </div>
@@ -7211,10 +7292,13 @@ export default function App() {
                               href={ad.url}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={() => markOwmItemClicked(`ptc_${ad.title}_${idx}`)}
                               className="btn btn-primary btn-sm btn-full"
                               style={{ textAlign: 'center', textDecoration: 'none' }}
                             >
-                              Watch Ad ({durationSec}s) &amp; Earn +{rewardCoins} Coins ↗
+                              {owmClickedIds[`ptc_${ad.title}_${idx}`]
+                                ? `Re-open Ad (${durationSec}s) • Auto-Syncing ↗`
+                                : `Watch Ad (${durationSec}s) & Earn +${rewardCoins} Coins ↗`}
                             </a>
                           </div>
                         );
@@ -8515,10 +8599,13 @@ export default function App() {
                               href={osl.url}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={() => markOwmItemClicked(`sl_${osl.id || idx}`)}
                               className="btn btn-primary btn-sm btn-full"
                               style={{ textAlign: 'center', textDecoration: 'none' }}
                             >
-                              Visit Shortlink (+{rewardCoins} Coins) ↗
+                              {owmClickedIds[`sl_${osl.id || idx}`]
+                                ? `Visiting (${remViews} Left) • Auto-Syncing ↗`
+                                : `Visit Shortlink (+${rewardCoins} Coins) ↗`}
                             </a>
                           ) : (
                             <button type="button" disabled className="btn btn-outline btn-sm btn-full" style={{ opacity: 0.6 }}>

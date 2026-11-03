@@ -2348,6 +2348,27 @@ export default {
           feed = await fetchFeeds("152.58.192.42");
         }
 
+        let statusHistory = [];
+        try {
+          const histResp = await fetch(
+            `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
+              reqUserId
+            )}`,
+            {
+              headers: {
+                "x-offerwall-user-expires": expires,
+                "x-offerwall-user-signature": signature,
+              },
+            }
+          );
+          if (histResp.ok) {
+            const histJson = await histResp.json();
+            if (histJson && Array.isArray(histJson.history)) {
+              statusHistory = histJson.history;
+            }
+          }
+        } catch {}
+
         return Response.json(
           {
             ok: true,
@@ -2358,6 +2379,7 @@ export default {
             tasks: feed.tasks,
             offers: feed.offers,
             surveys: feed.surveys,
+            history: statusHistory,
             fetchedAt: new Date().toISOString(),
           },
           { status: 200, headers: corsHeaders }
