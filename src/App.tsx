@@ -664,8 +664,14 @@ function getTabFromHash(): DashboardTab {
   if (hash === 'shortlinks' || hash === 'shortlink' || rawHash.includes('sl_verify=')) {
     return 'shortlinks';
   }
-  if (hash === 'quests' || hash === 'offerwalls') {
+  if (hash === 'offerwalls') {
+    return 'offerwalls';
+  }
+  if (hash === 'quests') {
     return 'quests';
+  }
+  if (hash === 'ptc') {
+    return 'ptc';
   }
   if (hash === 'tasks') {
     return 'tasks';
@@ -5025,7 +5031,8 @@ export default function App() {
             {(
               [
                 { id: 'overview', label: '⚡ Overview' },
-                { id: 'quests', label: '🎮 Offerwalls & Quests' },
+                { id: 'offerwalls', label: '🎮 Offerwalls' },
+                { id: 'ptc', label: '📺 PTC Ads' },
                 { id: 'tasks', label: '📋 Tasks & Micro-Jobs' },
                 { id: 'shortlinks', label: '🔗 Paid Shortlinks Wall' },
                 { id: 'faucet', label: '🚰 Free Faucet (Hourly)' },
@@ -5109,7 +5116,8 @@ export default function App() {
                 {(
                   [
                     { id: 'overview', label: '⚡ Overview' },
-                    { id: 'quests', label: `🎮 Offerwalls (${enabledOfferwalls.length})` },
+                    { id: 'offerwalls', label: '🎮 Offerwalls' },
+                    { id: 'ptc', label: '📺 PTC Ads' },
                     { id: 'tasks', label: '📋 Tasks' },
                     {
                       id: 'shortlinks',
