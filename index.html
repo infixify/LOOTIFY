@@ -603,74 +603,198 @@ body.on-app-route #root {
 </section>
 
 <!-- ════════════════════════════════════════
-  6 QUEST MODES BENTO GRID
+  EARNING METHODS GRID (INSPIRED BY EARNFREECOIN & MARSFAUCET)
 ════════════════════════════════════════ -->
 <section id="quest-modes" class="section" style="background:var(--bg2);">
   <div class="wrap">
     <div style="text-align:center;margin-bottom:48px;">
-      <h2 class="font-display" style="font-size:clamp(26px,4vw,44px);font-weight:700;color:var(--txt);">6 Ways to Earn Loot</h2>
-      <p style="font-size:15px;color:var(--txt2);margin-top:10px;">Pick your zone — every grind is rewarded</p>
+      <div style="display:inline-flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:30px;padding:8px 18px;margin-bottom:16px;">
+        <span class="font-mono" style="font-size:11.5px;color:var(--gold);font-weight:700;">🔥 Streak 0d GM</span>
+        <div style="width:1px;height:14px;background:var(--border);"></div>
+        <span class="font-mono" style="font-size:11.5px;color:var(--green);font-weight:700;">$EFREE Pool: 8.2%</span>
+      </div>
+      <h2 class="font-display" style="font-size:clamp(26px,4vw,44px);font-weight:700;color:var(--txt);">Web3 Earning &amp; Faucet Hub</h2>
+      <p style="font-size:15px;color:var(--txt2);margin-top:10px;">Select from 12+ verified earning streams with instant S2S credit</p>
     </div>
 
-    <div class="bento">
+    <!-- Asset Cards & Stats Strip -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:32px;">
+      <div class="card" style="padding:20px;display:flex;align-items:center;justify-content:space-between;background:var(--bg3);">
+        <div>
+          <div style="font-size:11px;color:var(--txt2);font-weight:600;">EARNING BALANCE</div>
+          <div class="font-mono" style="font-size:22px;font-weight:700;color:var(--green);margin-top:4px;">0.00 Coins</div>
+          <div style="font-size:11px;color:var(--txt2);margin-top:2px;">≈ $0.0000 · 100k = $1.00</div>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="openAppRoute('wallet')">Withdraw</button>
+      </div>
 
-      <!-- 1: Gaming Offerwalls (span 2) -->
-      <div class="card qcard span2" style="padding:28px;" onclick="launchQuestMode('offerwalls')">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
-          <div style="display:flex;align-items:center;gap:14px;">
-            <div style="width:50px;height:50px;background:linear-gradient(135deg,var(--green),#065F46);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🎮</div>
+      <div class="card" style="padding:20px;display:flex;align-items:center;justify-content:space-between;background:var(--bg3);">
+        <div>
+          <div style="font-size:11px;color:var(--txt2);font-weight:600;">ADVERTISING WALLET</div>
+          <div class="font-mono" style="font-size:22px;font-weight:700;color:var(--gold);margin-top:4px;">0.00 Coins</div>
+          <div style="font-size:11px;color:var(--txt2);margin-top:2px;">For creating campaigns</div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="openAppRoute('wallet')">Advertise</button>
+      </div>
+    </div>
+
+    <!-- 12 Methods Grid -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+
+      <!-- PTC Ads -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('offerwalls')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(0,232,154,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">⚡</div>
+          <div>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">PTC Ads</h3>
+            <p style="font-size:11px;color:var(--txt2);">Pay-to-click ads</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full">Earn Now →</button>
+      </div>
+
+      <!-- Youtube Earning -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('tasks')">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:40px;height:40px;background:rgba(255,85,102,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">▶️</div>
             <div>
-              <h3 class="font-display" style="font-size:17px;font-weight:700;color:var(--txt);">Gaming &amp; CPI Offerwalls</h3>
-              <p style="font-size:12px;color:var(--txt2);">Multiple Premium Offerwall Partners</p>
+              <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Youtube Earning</h3>
+              <p style="font-size:11px;color:var(--txt2);">Watch &amp; earn</p>
             </div>
           </div>
+          <span class="badge badge-green" style="font-size:9.5px;">NEW</span>
         </div>
-        <p style="font-size:14px;color:var(--txt2);line-height:1.7;margin-bottom:18px;">Download mobile/PC games, reach in-game milestones, or complete high-paying surveys across multiple premium offerwall partners.</p>
-        <button type="button" class="btn btn-primary" onclick="event.stopPropagation();launchQuestMode('offerwalls')">🚀 Launch Mode</button>
+        <button type="button" class="btn btn-outline btn-sm btn-full" style="color:var(--green);border-color:var(--green);">Earn Now →</button>
       </div>
 
-      <!-- 2: Shortlinks -->
-      <div class="card qcard" style="padding:24px;" onclick="launchQuestMode('shortlinks')">
-        <div style="font-size:26px;margin-bottom:12px;">🔗</div>
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-          <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Paid Shortlinks Arena</h3>
-        </div>
-        <p style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:14px;">15–25 Coins per link. Up to 40 daily shortlinks. S2S instant postbacks. Auto 24h reset.</p>
-        <div style="background:rgba(255,180,0,0.05);border:1px solid rgba(255,180,0,0.15);border-radius:8px;padding:9px 12px;margin-bottom:14px;font-size:12px;color:var(--gold);" class="font-mono">⏱ 24h Cooldown Auto-Reset</div>
-        <button type="button" class="btn btn-outline btn-full" onclick="event.stopPropagation();launchQuestMode('shortlinks')">Launch Mode</button>
-      </div>
-
-      <!-- 3: Micro-Tasks -->
-      <div class="card qcard" style="padding:24px;" onclick="launchQuestMode('tasks')">
-        <div style="font-size:26px;margin-bottom:12px;">📋</div>
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-          <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Micro-Tasks &amp; Social</h3>
-        </div>
-        <p style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:14px;">Subscribe YouTube, join Telegram squads, review apps. Screenshot proof upload for instant credit.</p>
-        <button type="button" class="btn btn-outline btn-full" style="color:var(--violet);border-color:var(--violet);" onmouseover="this.style.background='var(--violet-dim)'" onmouseout="this.style.background='transparent'" onclick="event.stopPropagation();launchQuestMode('tasks')">Launch Mode</button>
-      </div>
-
-      <!-- 4: Quiz + Spin -->
-      <div class="card qcard" style="padding:24px;" onclick="launchQuestMode('tasks')">
-        <div style="font-size:26px;margin-bottom:12px;">🎰</div>
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-          <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Quiz, Spin &amp; 7-Day Streak</h3>
-        </div>
-        <p style="font-size:13px;color:var(--txt2);line-height:1.7;margin-bottom:14px;">Daily trivia, lucky wheel, and 7-day streak bonus loot chests. New questions every day.</p>
-        <button type="button" class="btn btn-primary btn-full" onclick="event.stopPropagation();launchQuestMode('tasks')">Launch Mode</button>
-      </div>
-
-      <!-- 5: Refer (span 2) -->
-      <div class="card qcard span2" style="padding:28px;background:linear-gradient(135deg,rgba(155,110,255,0.06),rgba(0,232,154,0.04));border-color:rgba(155,110,255,0.3);" onclick="launchQuestMode('referrals')">
-        <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
-          <div style="width:50px;height:50px;background:linear-gradient(135deg,var(--violet),#6D28D9);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">👥</div>
+      <!-- Faucet -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('faucet')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(56,189,248,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🚰</div>
           <div>
-            <h3 class="font-display" style="font-size:17px;font-weight:700;color:var(--txt);">Refer &amp; Earn</h3>
-            <p style="font-size:12px;color:var(--txt2);">Apne dost ko invite karo, unki kamaai ka hissa pao</p>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Faucet</h3>
+            <p style="font-size:11px;color:var(--txt2);">Free crypto claims</p>
           </div>
         </div>
-        <p style="font-size:14px;color:var(--txt2);line-height:1.75;margin-bottom:20px;">Apna referral link share karo. Jab bhi tumhara referred dost earn kare, tumhe <span style="color:var(--green);font-weight:600;">lifetime commission</span> milti hai — koi cap nahi, hamesha ke liye.</p>
-        <button type="button" class="btn" style="background:linear-gradient(135deg,var(--violet),#6D28D9);color:#fff;padding:10px 22px;font-size:13px;border-radius:10px;font-family:'Chakra Petch',sans-serif;font-weight:600;border:none;cursor:pointer;transition:all .2s;" onmouseover="this.style.boxShadow='0 0 24px rgba(155,110,255,0.4)'" onmouseout="this.style.boxShadow='none'" onclick="event.stopPropagation();launchQuestMode('referrals')">🔗 Referral Link Lo</button>
+        <button type="button" class="btn btn-outline btn-sm btn-full" style="color:#38BDF8;border-color:#38BDF8;">Earn Now →</button>
+      </div>
+
+      <!-- Tasks -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('tasks')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(255,180,0,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">📋</div>
+          <div>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Tasks</h3>
+            <p style="font-size:11px;color:var(--txt2);">Micro-tasks</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full" style="color:var(--gold);border-color:var(--gold);">Earn Now →</button>
+      </div>
+
+      <!-- Offerwalls -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('offerwalls')">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:40px;height:40px;background:rgba(155,110,255,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
+            <div>
+              <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Offerwalls</h3>
+              <p style="font-size:11px;color:var(--txt2);">Apps &amp; games</p>
+            </div>
+          </div>
+          <span class="badge badge-violet" style="font-size:9.5px;">HOT</span>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full" style="color:var(--violet);border-color:var(--violet);">Earn Now →</button>
+      </div>
+
+      <!-- Surveys -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('offerwalls')">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:40px;height:40px;background:rgba(0,232,154,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🕒</div>
+            <div>
+              <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Surveys</h3>
+              <p style="font-size:11px;color:var(--txt2);">Paid surveys</p>
+            </div>
+          </div>
+          <span class="badge badge-green" style="font-size:9.5px;">NEW</span>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full">Earn Now →</button>
+      </div>
+
+      <!-- Wheel -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('tasks')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(255,180,0,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🎡</div>
+          <div>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Wheel</h3>
+            <p style="font-size:11px;color:var(--txt2);">Spin &amp; win</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full" style="color:var(--gold);border-color:var(--gold);">Play Spin →</button>
+      </div>
+
+      <!-- Gift Box -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('tasks')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(0,232,154,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🎁</div>
+          <div>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Gift Box</h3>
+            <p style="font-size:11px;color:var(--txt2);">Daily bonus loot</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full">Claim Box →</button>
+      </div>
+
+      <!-- Promo Codes -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('tasks')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(155,110,255,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🎟️</div>
+          <div>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Promo Codes</h3>
+            <p style="font-size:11px;color:var(--txt2);">Voucher redemptions</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full" style="color:var(--violet);border-color:var(--violet);">Redeem →</button>
+      </div>
+
+      <!-- Achievements -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('tasks')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(255,180,0,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🏆</div>
+          <div>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Achievements</h3>
+            <p style="font-size:11px;color:var(--txt2);">Milestone rewards</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full" style="color:var(--gold);border-color:var(--gold);">View Badges →</button>
+      </div>
+
+      <!-- Level Up -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('tasks')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:rgba(0,232,154,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">⚡</div>
+          <div>
+            <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Level Up</h3>
+            <p style="font-size:11px;color:var(--txt2);">XP &amp; rank multipliers</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm btn-full">Check Rank →</button>
+      </div>
+
+      <!-- Shortlinks -->
+      <div class="card qcard" style="padding:20px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;" onclick="launchQuestMode('shortlinks')">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:40px;height:40px;background:rgba(56,189,248,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🔗</div>
+            <div>
+              <h3 class="font-display" style="font-size:15px;font-weight:700;color:var(--txt);">Shortlinks</h3>
+              <p style="font-size:11px;color:var(--txt2);">Paid shortlink wall</p>
+            </div>
+          </div>
+          <span class="badge badge-green" style="font-size:9.5px;">LIVE</span>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm btn-full" style="background:var(--green);color:#03100A;">Open Shortlinks →</button>
       </div>
 
     </div>
