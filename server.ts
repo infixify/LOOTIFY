@@ -558,9 +558,9 @@ async function startServer() {
     });
   });
 
-  app.get('/6ae3408a4fd57c8d4ef8246f.html', (_req, res) => {
+  app.get('/6ae944d6b90ff696f376d5b2.html', (_req, res) => {
     res.setHeader('Content-Type', 'text/html');
-    res.send('6ae3408a4fd57c8d4ef8246f');
+    res.send('6ae944d6b90ff696f376d5b2');
   });
 
   app.get('/verify_9b9b6c4618b92c39094bf2b79f6424c1c91e602f.txt', (_req, res) => {
