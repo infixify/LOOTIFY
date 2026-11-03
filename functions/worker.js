@@ -2250,127 +2250,149 @@ export default {
       }
 
       if (url.pathname === "/api/offerwallme/items" && request.method === "GET") {
+        if (!globalThis.__OWM_FEED_CACHE__) {
+          globalThis.__OWM_FEED_CACHE__ = new Map();
+        }
         const reqUserId = (
           url.searchParams.get("user_id") ||
           url.searchParams.get("userId") ||
           request.headers.get("x-user-id") ||
           "plr_c2fydghha3"
         ).trim();
-        const cfg = await env.DB.prepare(
-          "SELECT app_id, secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
-        ).first();
-        const pub = (cfg && cfg.app_id) || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd";
-        const secret = getOfferwallMeSecret(env, cfg && cfg.secret_key);
-        const token =
-          (env && env.OFFERWALLME_API_TOKEN && String(env.OFFERWALLME_API_TOKEN).trim()) ||
-          "35qVPqjgP6oB8wwiTFFUplZFqj455jgysnI3SuQH";
-
-        const rawIp = String(
-          request.headers.get("cf-connecting-ip") ||
-            request.headers.get("x-forwarded-for") ||
-            ""
-        )
-          .split(",")[0]
-          .trim();
         const country = String(
           url.searchParams.get("country") || request.headers.get("cf-ipcountry") || "IN"
         )
           .trim()
           .toUpperCase();
+        const forceFresh = url.searchParams.get("force") === "1";
+        const cacheKey = `${reqUserId}_${country}`;
+        const cached = globalThis.__OWM_FEED_CACHE__.get(cacheKey);
 
-        const expires = String(Math.floor(Date.now() / 1000) + 3600);
-        const message = `offerwall-user-v1\n${pub}\n${reqUserId}\n${expires}`;
-        const enc = new TextEncoder();
-        const cryptoKey = await crypto.subtle.importKey(
-          "raw",
-          enc.encode(secret),
-          { name: "HMAC", hash: "SHA-256" },
-          false,
-          ["sign"]
-        );
-        const sigBuf = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
-        const signature = Array.from(new Uint8Array(sigBuf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
+        const performWorkerLiveFetch = async () => {
+          const cfg = await env.DB.prepare(
+            "SELECT app_id, secret_key FROM offerwall_configs WHERE provider_id = 'offerwallme'"
+          ).first();
+          const pub = (cfg && cfg.app_id) || "PQhx5BxXulHlM6PxZx81pZgIs2nyRd";
+          const secret = getOfferwallMeSecret(env, cfg && cfg.secret_key);
+          const token =
+            (env && env.OFFERWALLME_API_TOKEN && String(env.OFFERWALLME_API_TOKEN).trim()) ||
+            "35qVPqjgP6oB8wwiTFFUplZFqj455jgysnI3SuQH";
 
-        const fetchFeeds = async (ipToUse) => {
-          const qs = new URLSearchParams({
-            api: pub,
-            id: reqUserId,
-            ip: ipToUse,
-            token,
-            country,
-            identityExpires: expires,
-            identitySignature: signature,
-          }).toString();
+          const rawIp = String(
+            request.headers.get("cf-connecting-ip") ||
+              request.headers.get("x-forwarded-for") ||
+              ""
+          )
+            .split(",")[0]
+            .trim();
 
-          const endpoints = [
-            { key: "ptc", url: `https://offerwall.me/api.php?${qs}` },
-            { key: "shortlinks", url: `https://offerwall.me/slapi.php?${qs}` },
-            { key: "tasks", url: `https://offerwall.me/taskapi.php?${qs}` },
-            { key: "offers", url: `https://offerwall.me/offerapi.php?${qs}` },
-            { key: "surveys", url: `https://offerwall.me/surveyapi.php?${qs}` },
-          ];
+          const expires = String(Math.floor(Date.now() / 1000) + 3600);
+          const message = `offerwall-user-v1\n${pub}\n${reqUserId}\n${expires}`;
+          const enc = new TextEncoder();
+          const cryptoKey = await crypto.subtle.importKey(
+            "raw",
+            enc.encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+          );
+          const sigBuf = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
+          const signature = Array.from(new Uint8Array(sigBuf))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
 
-          const results = { ptc: [], shortlinks: [], tasks: [], offers: [], surveys: [] };
-          await Promise.all(
-            endpoints.map(async (ep) => {
-              try {
-                const resp = await fetch(ep.url, {
-                  headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-                });
-                if (resp.ok) {
-                  const json = await resp.json();
-                  if (json && Array.isArray(json.data)) {
-                    results[ep.key] = json.data;
+          const fetchFeeds = async (ipToUse) => {
+            const qs = new URLSearchParams({
+              api: pub,
+              id: reqUserId,
+              ip: ipToUse,
+              token,
+              country,
+              identityExpires: expires,
+              identitySignature: signature,
+              _t: String(Date.now()),
+            }).toString();
+
+            const endpoints = [
+              { key: "ptc", url: `https://offerwall.me/api.php?${qs}` },
+              { key: "shortlinks", url: `https://offerwall.me/slapi.php?${qs}` },
+              { key: "tasks", url: `https://offerwall.me/taskapi.php?${qs}` },
+              { key: "offers", url: `https://offerwall.me/offerapi.php?${qs}` },
+              { key: "surveys", url: `https://offerwall.me/surveyapi.php?${qs}` },
+            ];
+
+            const results = { ptc: [], shortlinks: [], tasks: [], offers: [], surveys: [] };
+            await Promise.all(
+              endpoints.map(async (ep) => {
+                try {
+                  const resp = await fetch(ep.url, {
+                    cf: { cacheTtl: 0, cacheEverything: false },
+                    headers: {
+                      Accept: "application/json",
+                      Authorization: `Bearer ${token}`,
+                      "Cache-Control": "no-cache, no-store, must-revalidate",
+                    },
+                  });
+                  if (resp.ok) {
+                    const json = await resp.json();
+                    if (json && Array.isArray(json.data)) {
+                      results[ep.key] = json.data;
+                    }
                   }
+                } catch {}
+              })
+            );
+            return results;
+          };
+
+          const primaryIp =
+            !rawIp || rawIp === "127.0.0.1" || rawIp === "::1" || rawIp.startsWith("2600:1900:")
+              ? "152.58.192.42"
+              : rawIp;
+
+          const historyPromise = (async () => {
+            try {
+              const histResp = await fetch(
+                `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
+                  reqUserId
+                )}&_t=${Date.now()}`,
+                {
+                  cf: { cacheTtl: 0, cacheEverything: false },
+                  headers: {
+                    "x-offerwall-user-expires": expires,
+                    "x-offerwall-user-signature": signature,
+                  },
                 }
-              } catch {}
-            })
-          );
-          return results;
-        };
+              );
+              if (histResp.ok) {
+                const histJson = await histResp.json();
+                if (histJson && Array.isArray(histJson.history)) {
+                  return histJson.history;
+                }
+              }
+            } catch {}
+            return [];
+          })();
 
-        const primaryIp =
-          !rawIp || rawIp === "127.0.0.1" || rawIp === "::1" || rawIp.startsWith("2600:1900:")
-            ? "152.58.192.42"
-            : rawIp;
-        let feed = await fetchFeeds(primaryIp);
-        if (
-          feed.ptc.length +
-            feed.shortlinks.length +
-            feed.tasks.length +
-            feed.offers.length +
-            feed.surveys.length ===
-            0 &&
-          primaryIp !== "152.58.192.42"
-        ) {
-          feed = await fetchFeeds("152.58.192.42");
-        }
+          const [initialFeed, statusHistory] = await Promise.all([
+            fetchFeeds(primaryIp),
+            historyPromise,
+          ]);
 
-        let statusHistory = [];
-        try {
-          const histResp = await fetch(
-            `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
-              reqUserId
-            )}`,
-            {
-              headers: {
-                "x-offerwall-user-expires": expires,
-                "x-offerwall-user-signature": signature,
-              },
-            }
-          );
-          if (histResp.ok) {
-            const histJson = await histResp.json();
-            if (histJson && Array.isArray(histJson.history)) {
-              statusHistory = histJson.history;
-            }
+          let feed = initialFeed;
+          if (
+            feed.ptc.length +
+              feed.shortlinks.length +
+              feed.tasks.length +
+              feed.offers.length +
+              feed.surveys.length ===
+              0 &&
+            primaryIp !== "152.58.192.42"
+          ) {
+            feed = await fetchFeeds("152.58.192.42");
           }
-        } catch {}
 
-        return Response.json(
-          {
+          const payload = {
             ok: true,
             userId: reqUserId,
             country,
@@ -2381,9 +2403,38 @@ export default {
             surveys: feed.surveys,
             history: statusHistory,
             fetchedAt: new Date().toISOString(),
+          };
+          globalThis.__OWM_FEED_CACHE__.set(cacheKey, { ts: Date.now(), payload, refreshing: false });
+          return payload;
+        };
+
+        if (cached && cached.payload && !forceFresh) {
+          if (Date.now() - cached.ts > 8000 && !cached.refreshing) {
+            cached.refreshing = true;
+            const bgPromise = performWorkerLiveFetch().catch(() => {
+              if (cached) cached.refreshing = false;
+            });
+            if (typeof ctx !== "undefined" && ctx && typeof ctx.waitUntil === "function") {
+              ctx.waitUntil(bgPromise);
+            }
+          }
+          return Response.json(cached.payload, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Cache-Control": "no-store, no-cache, must-revalidate",
+            },
+          });
+        }
+
+        const freshPayload = await performWorkerLiveFetch();
+        return Response.json(freshPayload, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Cache-Control": "no-store, no-cache, must-revalidate",
           },
-          { status: 200, headers: corsHeaders }
-        );
+        });
       }
 
       if (url.pathname === "/api/offerwallme/task-submit" && request.method === "POST") {

@@ -19,14 +19,15 @@ function getOfferwallMeBearerToken(): string {
   return '35qVPqjgP6oB8wwiTFFUplZFqj455jgysnI3SuQH';
 }
 
-const _owmFeedCache = new Map<string, { ts: number; payload: any }>();
+const _owmFeedCache = new Map<string, { ts: number; payload: any; refreshing?: boolean }>();
 
 async function fetchOfferwallMeFeedItems(
   pubKey: string,
   secretKey: string,
   userId: string,
   clientIp: string,
-  countryCode: string
+  countryCode: string,
+  forceAwaitFresh = false
 ): Promise<any> {
   const pub = String(pubKey || 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd').trim();
   const uid = String(userId || 'plr_c2fydghha3').trim();
@@ -34,122 +35,155 @@ async function fetchOfferwallMeFeedItems(
   const country = String(countryCode || 'IN').trim().toUpperCase();
   const cacheKey = `${uid}_${country}`;
   const cached = _owmFeedCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < 30000) {
+
+  const performLiveFetch = async () => {
+    const expires = String(Math.floor(Date.now() / 1000) + 3600);
+    const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
+    const signature = crypto.createHmac('sha256', secretKey).update(message, 'utf8').digest('hex');
+
+    const runFetchWithIp = async (ipToUse: string) => {
+      const qs = new URLSearchParams({
+        api: pub,
+        id: uid,
+        ip: ipToUse,
+        token,
+        country,
+        identityExpires: expires,
+        identitySignature: signature,
+        _t: String(Date.now()),
+      }).toString();
+
+      const endpoints = [
+        { key: 'ptc', url: `https://offerwall.me/api.php?${qs}` },
+        { key: 'shortlinks', url: `https://offerwall.me/slapi.php?${qs}` },
+        { key: 'tasks', url: `https://offerwall.me/taskapi.php?${qs}` },
+        { key: 'offers', url: `https://offerwall.me/offerapi.php?${qs}` },
+        { key: 'surveys', url: `https://offerwall.me/surveyapi.php?${qs}` },
+      ];
+
+      const results: Record<string, any[]> = {
+        ptc: [],
+        shortlinks: [],
+        tasks: [],
+        offers: [],
+        surveys: [],
+      };
+
+      await Promise.all(
+        endpoints.map(async (ep) => {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4500);
+            const resp = await fetch(ep.url, {
+              cache: 'no-store',
+              signal: controller.signal,
+              headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${token}`,
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+              },
+            });
+            clearTimeout(timer);
+            if (resp.ok) {
+              const json: any = await resp.json();
+              if (json && Array.isArray(json.data)) {
+                results[ep.key] = json.data;
+              }
+            }
+          } catch {}
+        })
+      );
+      return results;
+    };
+
+    const cleanIp = String(clientIp || '').trim();
+    const isLocalOrCloudIp =
+      !cleanIp ||
+      cleanIp === '127.0.0.1' ||
+      cleanIp === '::1' ||
+      cleanIp.startsWith('10.') ||
+      cleanIp.startsWith('192.168.') ||
+      cleanIp.startsWith('172.') ||
+      cleanIp.startsWith('2600:1900:') ||
+      cleanIp.startsWith('34.') ||
+      cleanIp.startsWith('35.');
+
+    const primaryIp = isLocalOrCloudIp ? '152.58.192.42' : cleanIp;
+
+    const historyPromise = (async () => {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        const histResp = await fetch(
+          `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
+            uid
+          )}&_t=${Date.now()}`,
+          {
+            cache: 'no-store',
+            signal: controller.signal,
+            headers: {
+              'x-offerwall-user-expires': expires,
+              'x-offerwall-user-signature': signature,
+            },
+          }
+        );
+        clearTimeout(timer);
+        if (histResp.ok) {
+          const histJson: any = await histResp.json();
+          if (histJson && Array.isArray(histJson.history)) {
+            return histJson.history;
+          }
+        }
+      } catch {}
+      return [];
+    })();
+
+    const [initialFeed, statusHistory] = await Promise.all([
+      runFetchWithIp(primaryIp),
+      historyPromise,
+    ]);
+
+    let feed = initialFeed;
+    const totalCount =
+      feed.ptc.length +
+      feed.shortlinks.length +
+      feed.tasks.length +
+      feed.offers.length +
+      feed.surveys.length;
+
+    if (totalCount === 0 && primaryIp !== '152.58.192.42') {
+      feed = await runFetchWithIp('152.58.192.42');
+    }
+
+    const payload = {
+      ok: true,
+      userId: uid,
+      country,
+      ptc: feed.ptc,
+      shortlinks: feed.shortlinks,
+      tasks: feed.tasks,
+      offers: feed.offers,
+      surveys: feed.surveys,
+      history: statusHistory,
+      fetchedAt: new Date().toISOString(),
+    };
+    _owmFeedCache.set(cacheKey, { ts: Date.now(), payload, refreshing: false });
+    return payload;
+  };
+
+  // Stale-While-Revalidate: if we have cached items and caller didn't force a blocking refresh,
+  // return cached items in <1ms and revalidate in the background if older than 8s!
+  if (cached && cached.payload && !forceAwaitFresh) {
+    if (Date.now() - cached.ts > 8000 && !cached.refreshing) {
+      cached.refreshing = true;
+      performLiveFetch().catch(() => {
+        if (cached) cached.refreshing = false;
+      });
+    }
     return cached.payload;
   }
 
-  const expires = String(Math.floor(Date.now() / 1000) + 3600);
-  const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
-  const signature = crypto.createHmac('sha256', secretKey).update(message, 'utf8').digest('hex');
-
-  const runFetchWithIp = async (ipToUse: string) => {
-    const qs = new URLSearchParams({
-      api: pub,
-      id: uid,
-      ip: ipToUse,
-      token,
-      country,
-      identityExpires: expires,
-      identitySignature: signature,
-    }).toString();
-
-    const endpoints = [
-      { key: 'ptc', url: `https://offerwall.me/api.php?${qs}` },
-      { key: 'shortlinks', url: `https://offerwall.me/slapi.php?${qs}` },
-      { key: 'tasks', url: `https://offerwall.me/taskapi.php?${qs}` },
-      { key: 'offers', url: `https://offerwall.me/offerapi.php?${qs}` },
-      { key: 'surveys', url: `https://offerwall.me/surveyapi.php?${qs}` },
-    ];
-
-    const results: Record<string, any[]> = {
-      ptc: [],
-      shortlinks: [],
-      tasks: [],
-      offers: [],
-      surveys: [],
-    };
-
-    await Promise.all(
-      endpoints.map(async (ep) => {
-        try {
-          const resp = await fetch(ep.url, {
-            headers: {
-              Accept: 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          });
-          if (resp.ok) {
-            const json: any = await resp.json();
-            if (json && Array.isArray(json.data)) {
-              results[ep.key] = json.data;
-            }
-          }
-        } catch {}
-      })
-    );
-    return results;
-  };
-
-  const cleanIp = String(clientIp || '').trim();
-  const isLocalOrCloudIp =
-    !cleanIp ||
-    cleanIp === '127.0.0.1' ||
-    cleanIp === '::1' ||
-    cleanIp.startsWith('10.') ||
-    cleanIp.startsWith('192.168.') ||
-    cleanIp.startsWith('172.') ||
-    cleanIp.startsWith('2600:1900:') ||
-    cleanIp.startsWith('34.') ||
-    cleanIp.startsWith('35.');
-
-  const primaryIp = isLocalOrCloudIp ? '152.58.192.42' : cleanIp;
-  let feed = await runFetchWithIp(primaryIp);
-  const totalCount =
-    feed.ptc.length +
-    feed.shortlinks.length +
-    feed.tasks.length +
-    feed.offers.length +
-    feed.surveys.length;
-
-  if (totalCount === 0 && primaryIp !== '152.58.192.42') {
-    feed = await runFetchWithIp('152.58.192.42');
-  }
-
-  let statusHistory: any[] = [];
-  try {
-    const histResp = await fetch(
-      `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
-        uid
-      )}`,
-      {
-        headers: {
-          'x-offerwall-user-expires': expires,
-          'x-offerwall-user-signature': signature,
-        },
-      }
-    );
-    if (histResp.ok) {
-      const histJson: any = await histResp.json();
-      if (histJson && Array.isArray(histJson.history)) {
-        statusHistory = histJson.history;
-      }
-    }
-  } catch {}
-
-  const payload = {
-    ok: true,
-    userId: uid,
-    country,
-    ptc: feed.ptc,
-    shortlinks: feed.shortlinks,
-    tasks: feed.tasks,
-    offers: feed.offers,
-    surveys: feed.surveys,
-    history: statusHistory,
-    fetchedAt: new Date().toISOString(),
-  };
-  _owmFeedCache.set(cacheKey, { ts: Date.now(), payload });
-  return payload;
+  return performLiveFetch();
 }
 
 // Server-side-only FaucetPay Owner API Key (XOR-masked, never exposed to client code)
@@ -924,11 +958,16 @@ async function startServer() {
         .trim()
         .toUpperCase();
 
-      if (req.query.refresh === '1') {
-        _owmFeedCache.delete(`${reqUserId}_${country}`);
-      }
-
-      const payload = await fetchOfferwallMeFeedItems(pubKey, secret, reqUserId, rawFwd, country);
+      const forceFresh = req.query.force === '1';
+      const payload = await fetchOfferwallMeFeedItems(
+        pubKey,
+        secret,
+        reqUserId,
+        rawFwd,
+        country,
+        forceFresh
+      );
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.json(payload);
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err?.message || 'Failed to fetch Offerwall.me items' });
@@ -2111,6 +2150,15 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Lootify server running on http://localhost:${PORT}`);
+    // Pre-warm Offerwall.me single-piece feed cache on startup so first page load is 0ms instant
+    fetchOfferwallMeFeedItems(
+      'PQhx5BxXulHlM6PxZx81pZgIs2nyRd',
+      getOfferwallMeSecret(),
+      'plr_c2fydghha3',
+      '152.58.192.42',
+      'IN',
+      true
+    ).catch(() => {});
   });
 }
 

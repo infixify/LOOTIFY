@@ -520,6 +520,55 @@ function saveCachedShortlinks(links: ShortlinkConfig[]) {
   } catch {}
 }
 
+const STORAGE_OWM_FEED_CACHE_KEY = 'lootify_owm_feed_cache_v2';
+
+function loadCachedOwmFeed(): {
+  ptc: any[];
+  shortlinks: any[];
+  tasks: any[];
+  offers: any[];
+  surveys: any[];
+  history: any[];
+} {
+  try {
+    const raw = localStorage.getItem(STORAGE_OWM_FEED_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          ptc: Array.isArray(parsed.ptc) ? parsed.ptc : [],
+          shortlinks: Array.isArray(parsed.shortlinks) ? parsed.shortlinks : [],
+          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+          offers: Array.isArray(parsed.offers) ? parsed.offers : [],
+          surveys: Array.isArray(parsed.surveys) ? parsed.surveys : [],
+          history: Array.isArray(parsed.history) ? parsed.history : [],
+        };
+      }
+    }
+  } catch {}
+  return {
+    ptc: [],
+    shortlinks: [],
+    tasks: [],
+    offers: [],
+    surveys: [],
+    history: [],
+  };
+}
+
+function saveCachedOwmFeed(feed: {
+  ptc: any[];
+  shortlinks: any[];
+  tasks: any[];
+  offers: any[];
+  surveys: any[];
+  history: any[];
+}) {
+  try {
+    localStorage.setItem(STORAGE_OWM_FEED_CACHE_KEY, JSON.stringify(feed));
+  } catch {}
+}
+
 function generateUniquePlayerId(emailRaw: string): string {
   const email = String(emailRaw || '').trim().toLowerCase();
   if (email === 'sarthaksinghyadav1@gmail.com') {
@@ -845,7 +894,7 @@ export default function App() {
   const [youtubeViewMode, setYoutubeViewMode] = useState<'cards' | 'wall'>('cards');
   const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(false);
 
-  // Offerwall.me Single-Piece Feed State (PTC, Shortlinks, Tasks, Offers, Surveys + Live History)
+  // Offerwall.me Single-Piece Feed State (Hydrated in 0ms from localStorage + Live SWR Sync)
   const [owmFeed, setOwmFeed] = useState<{
     ptc: any[];
     shortlinks: any[];
@@ -853,14 +902,7 @@ export default function App() {
     offers: any[];
     surveys: any[];
     history: any[];
-  }>({
-    ptc: [],
-    shortlinks: [],
-    tasks: [],
-    offers: [],
-    surveys: [],
-    history: [],
-  });
+  }>(() => loadCachedOwmFeed());
   const [owmFeedLoading, setOwmFeedLoading] = useState<boolean>(false);
   const [owmLastSyncedAt, setOwmLastSyncedAt] = useState<string>('');
   const [owmClickedIds, setOwmClickedIds] = useState<Record<string, number>>({});
@@ -909,6 +951,7 @@ export default function App() {
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
   const pubCryptoRefreshInFlightRef = useRef<boolean>(false);
+  const lastTabSwitchAtRef = useRef<number>(Date.now());
 
   const syncUserWithBackend = useCallback(
     async (currentUser: PlayerUser | null, showFeedback = false, bypassThrottle = false) => {
@@ -1190,7 +1233,7 @@ export default function App() {
     const activeUid = uid || loadCurrentUser()?.id || 'plr_c2fydghha3';
     setOwmFeedLoading(true);
     const base = getApiBaseUrl();
-    const qs = `?user_id=${encodeURIComponent(activeUid)}${forceRefresh ? '&refresh=1' : ''}`;
+    const qs = `?user_id=${encodeURIComponent(activeUid)}${forceRefresh ? '&force=1' : ''}`;
     try {
       let data: any = null;
       try {
@@ -1212,13 +1255,33 @@ export default function App() {
       }
 
       if (data && data.ok) {
-        setOwmFeed({
+        const nextFeed = {
           ptc: Array.isArray(data.ptc) ? data.ptc : [],
           shortlinks: Array.isArray(data.shortlinks) ? data.shortlinks : [],
           tasks: Array.isArray(data.tasks) ? data.tasks : [],
           offers: Array.isArray(data.offers) ? data.offers : [],
           surveys: Array.isArray(data.surveys) ? data.surveys : [],
           history: Array.isArray(data.history) ? data.history : [],
+        };
+        saveCachedOwmFeed(nextFeed);
+        setOwmFeed((prev) => {
+          const wasEmpty =
+            prev.ptc.length +
+              prev.shortlinks.length +
+              prev.tasks.length +
+              prev.offers.length +
+              prev.surveys.length ===
+            0;
+          if (wasEmpty || Date.now() - lastTabSwitchAtRef.current < 4500) {
+            window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+            requestAnimationFrame(() => {
+              window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+            });
+            setTimeout(() => {
+              window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+            }, 50);
+          }
+          return nextFeed;
         });
         setOwmLastSyncedAt(new Date().toLocaleTimeString('en-IN', { hour12: false }));
       }
@@ -1392,7 +1455,9 @@ export default function App() {
   }, [fetchOfferwallMeFeed, fetchOfferwallsFromBackend, fetchShortlinksFromBackend, syncUserWithBackend]);
 
   useEffect(() => {
-    const doRefresh = () => {
+    lastTabSwitchAtRef.current = Date.now();
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    const doRefresh = (forceFresh = false) => {
       const activeUid = user?.id || loadCurrentUser()?.id;
       if (!activeUid) return;
       const isWallSection =
@@ -1406,12 +1471,16 @@ export default function App() {
       if (isWallSection) {
         refreshOfferwallMeSignedUrl(activeUid, false);
         refreshPubCryptoSignedUrl(activeUid, false);
-        fetchOfferwallMeFeed(activeUid, false);
+        fetchOfferwallMeFeed(activeUid, forceFresh);
       }
     };
 
-    doRefresh();
-    const intervalId = window.setInterval(doRefresh, 15 * 60 * 1000);
+    doRefresh(false);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        doRefresh(true);
+      }
+    }, 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
 
@@ -1704,6 +1773,7 @@ export default function App() {
   };
 
   const switchTab = (tab: DashboardTab) => {
+    lastTabSwitchAtRef.current = Date.now();
     setActiveTab(tab);
     setIsAdminRoute(false);
     setMobileNavOpen(false);
@@ -1713,11 +1783,15 @@ export default function App() {
     if (window.location.hash !== hashTarget) {
       window.location.hash = hashTarget;
     }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    });
     const latestUser = loadCurrentUser() || user;
     if (latestUser) {
       syncUserWithBackend(latestUser, false, true);
+      fetchOfferwallMeFeed(latestUser.id, false);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const verifyAndLoginAdmin = (emailCandidate: string) => {
@@ -5079,7 +5153,11 @@ export default function App() {
             : '');
 
   return (
-    <div className="lootify-v2 grid-bg" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      className="lootify-v2 grid-bg"
+      data-theme={theme}
+      style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowAnchor: 'none' }}
+    >
       {/* ── TOP NAVBAR ── */}
       <nav id="navbar">
         <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
@@ -5266,7 +5344,10 @@ export default function App() {
       </nav>
 
       {/* ── MAIN CONTENT ── */}
-      <main className="wrap" style={{ flex: 1, width: '100%', padding: '24px 20px 64px' }}>
+      <main
+        className="wrap"
+        style={{ flex: 1, width: '100%', padding: '24px 20px 64px', overflowAnchor: 'none' }}
+      >
         {/* Compact Unified Player Command Header */}
         <div
           className="card"
@@ -6716,81 +6797,97 @@ export default function App() {
                 </div>
               </div>
 
-              {youtubeViewMode === 'cards' && videoPtcItems.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
-                  {videoPtcItems.map((vid: any, idx: number) => {
-                    const rewardCoins = Number(vid.reward) || 0;
-                    return (
-                      <div key={idx} className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14 }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                            <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                              {vid.title}
-                            </h3>
-                            <span className="font-mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>
-                              +{rewardCoins} Coins
-                            </span>
+              {youtubeViewMode === 'cards' ? (
+                videoPtcItems.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
+                    {videoPtcItems.map((vid: any, idx: number) => {
+                      const rewardCoins = Number(vid.reward) || 0;
+                      return (
+                        <div key={idx} className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14 }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                              <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                                {vid.title}
+                              </h3>
+                              <span className="font-mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>
+                                +{rewardCoins} Coins
+                              </span>
+                            </div>
+                            <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 6 }}>
+                              {vid.description || `Watch video for ${vid.duration || 15}s to earn +${rewardCoins} Coins.`}
+                            </p>
                           </div>
-                          <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 6 }}>
-                            {vid.description || `Watch video for ${vid.duration || 15}s to earn +${rewardCoins} Coins.`}
-                          </p>
+                          <a
+                            href={vid.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-primary btn-sm btn-full"
+                            style={{ textAlign: 'center', textDecoration: 'none' }}
+                          >
+                            Watch Video ({vid.duration || 15}s) &amp; Earn ↗
+                          </a>
                         </div>
-                        <a
-                          href={vid.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-primary btn-sm btn-full"
-                          style={{ textAlign: 'center', textDecoration: 'none' }}
-                        >
-                          Watch Video ({vid.duration || 15}s) &amp; Earn ↗
-                        </a>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              <div className="card card-glow" style={{ padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                  <div>
-                    <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      Offerwall.me — Video Campaigns Feed (<code className="font-mono">?tab=video</code>)
-                    </h3>
-                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
-                      {videoPtcItems.length === 0
-                        ? 'Live video campaigns load directly inside the Video feed below as soon as advertisers publish new clips.'
-                        : 'You can also watch directly inside the Offerwall.me Video player below.'}
-                    </p>
+                      );
+                    })}
                   </div>
-                  {videoIframeUrl && (
-                    <a
-                      href={videoIframeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-ghost btn-sm"
+                ) : (
+                  <div className="card" style={{ padding: 32, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                      No Single-Piece Video Campaigns Active Right Now
+                    </div>
+                    <p style={{ fontSize: 13, color: 'var(--txt2)', maxWidth: 480 }}>
+                      New video clips appear here automatically as soon as advertisers publish them, or you can open the Offerwall.me Video Wall directly.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setYoutubeViewMode('wall')}
+                      className="btn btn-primary btn-sm"
                     >
-                      ↗ Open Fullscreen
-                    </a>
-                  )}
+                      Open Offerwall.me Video Wall
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="card card-glow" style={{ padding: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
+                        Offerwall.me — Video Campaigns Feed (<code className="font-mono">?tab=video</code>)
+                      </h3>
+                      <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                        Watch directly inside the Offerwall.me Video player below.
+                      </p>
+                    </div>
+                    {videoIframeUrl && (
+                      <a
+                        href={videoIframeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-ghost btn-sm"
+                      >
+                        ↗ Open Fullscreen
+                      </a>
+                    )}
+                  </div>
+                  <iframe
+                    key={`youtube_video_${user.id}`}
+                    src={videoIframeUrl}
+                    title="YouTube & Video Ads"
+                    width="100%"
+                    height={620}
+                    frameBorder={0}
+                    allow="clipboard-write; fullscreen; popups; autoplay"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      height: 620,
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      background: '#0B121E',
+                    }}
+                  />
                 </div>
-                <iframe
-                  key={`youtube_video_${user.id}`}
-                  src={videoIframeUrl}
-                  title="YouTube & Video Ads"
-                  width="100%"
-                  height={620}
-                  frameBorder={0}
-                  allow="clipboard-write; fullscreen; popups; autoplay"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    height: 620,
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    background: '#0B121E',
-                  }}
-                />
-              </div>
+              )}
             </div>
           );
         })()}
@@ -7882,32 +7979,6 @@ export default function App() {
                       })}
                     </div>
                   )}
-                </div>
-
-                {/* Offerwall.me Multi-Size Banner Ad Showcase (728x90, 468x60, 300x250) */}
-                <div
-                  className="card"
-                  style={{
-                    padding: '20px 24px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 16,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 8 }}>
-                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
-                      OFFERWALL.ME SPONSORED BANNERS (728×90 • 468×60 • 300×250)
-                    </span>
-                    <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
-                      DIRECT PLACEMENT ACTIVE
-                    </span>
-                  </div>
-                  <OfferwallMeBanner size="728x90" />
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 16, width: '100%' }}>
-                    <OfferwallMeBanner size="468x60" />
-                    <OfferwallMeBanner size="300x250" />
-                  </div>
                 </div>
               </>
             )}
