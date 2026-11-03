@@ -664,8 +664,11 @@ function getTabFromHash(): DashboardTab {
   if (hash === 'shortlinks' || hash === 'shortlink' || rawHash.includes('sl_verify=')) {
     return 'shortlinks';
   }
-  if (hash === 'quests' || hash === 'offerwalls' || hash === 'tasks') {
+  if (hash === 'quests' || hash === 'offerwalls') {
     return 'quests';
+  }
+  if (hash === 'tasks') {
+    return 'tasks';
   }
   if (hash === 'faucet' || hash === 'roll') return 'faucet';
   if (hash === 'referrals') return 'referrals';
@@ -1189,7 +1192,7 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [user?.id, selectedWallId, activeTab, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
 
-  // Automatic Offerwall & Wallet sync on window focus / visibilitychange & every 12s on Quests tab
+  // Automatic Offerwall & Wallet sync on event-driven triggers (window focus / visibilitychange & instant data arrival) without background polling
   useEffect(() => {
     const syncLatestBalance = () => {
       const current = loadCurrentUser();
@@ -1204,14 +1207,13 @@ export default function App() {
     };
     window.addEventListener('focus', syncLatestBalance);
     document.addEventListener('visibilitychange', onVisibility);
-    const pollMs = activeTab === 'quests' ? 5000 : 20000;
-    const pollId = window.setInterval(syncLatestBalance, pollMs);
+    // Instant sync trigger on mount / tab change
+    syncLatestBalance();
     return () => {
       window.removeEventListener('focus', syncLatestBalance);
       document.removeEventListener('visibilitychange', onVisibility);
-      window.clearInterval(pollId);
     };
-  }, [activeTab, syncUserWithBackend]);
+  }, [syncUserWithBackend]);
 
   useEffect(() => {
     if (isAdminRoute && adminLoggedIn) {
@@ -5024,6 +5026,7 @@ export default function App() {
               [
                 { id: 'overview', label: '⚡ Overview' },
                 { id: 'quests', label: '🎮 Offerwalls & Quests' },
+                { id: 'tasks', label: '📋 Tasks & Micro-Jobs' },
                 { id: 'shortlinks', label: '🔗 Paid Shortlinks Wall' },
                 { id: 'faucet', label: '🚰 Free Faucet (Hourly)' },
                 { id: 'referrals', label: '👥 Refer & Earn' },
@@ -5107,6 +5110,7 @@ export default function App() {
                   [
                     { id: 'overview', label: '⚡ Overview' },
                     { id: 'quests', label: `🎮 Offerwalls (${enabledOfferwalls.length})` },
+                    { id: 'tasks', label: '📋 Tasks' },
                     {
                       id: 'shortlinks',
                       label: remSlViews > 0 ? `🔗 Shortlinks (${remSlViews})` : '🔗 Shortlinks',
@@ -6108,6 +6112,63 @@ export default function App() {
             </div>
           );
         })()}
+
+        {/* ── TAB: TASKS (Micro-Jobs & Custom Tasks) ── */}
+        {activeTab === 'tasks' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                  Player Tasks &amp; Micro-Jobs
+                </h2>
+                <p style={{ fontSize: 14, color: 'var(--txt2)', marginTop: 4 }}>
+                  Dedicated task section for Player ID <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span>. Awaiting your instructions on what tasks to add here!
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => syncUserWithBackend(user, true)}
+                className="btn btn-outline btn-sm"
+              >
+                🔄 Refresh Tasks Status
+              </button>
+            </div>
+
+            <div
+              className="card card-glow"
+              style={{
+                padding: '64px 28px',
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, rgba(0,232,154,0.06), rgba(155,110,255,0.04))',
+                border: '1px solid rgba(0,232,154,0.3)',
+              }}
+            >
+              <div style={{ fontSize: 44, marginBottom: 16 }}>📋</div>
+              <h3 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)', marginBottom: 10 }}>
+                Tasks Section Initialized &amp; Ready
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--txt2)', maxWidth: 540, margin: '0 auto 24px', lineHeight: 1.7 }}>
+                The Tasks section has been successfully added to Lootify as requested. Please let us know what specific tasks, offers, or micro-jobs you would like to display and reward in this section!
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => switchTab('overview')}
+                  className="btn btn-primary btn-sm"
+                >
+                  ⚡ Back to Overview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchTab('shortlinks')}
+                  className="btn btn-outline btn-sm"
+                >
+                  🔗 Explore Paid Shortlinks →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── TAB 2: OFFERWALLS & QUEST MODES (100% Dynamic) ── */}
         {activeTab === 'quests' && (
