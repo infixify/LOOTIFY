@@ -19,7 +19,31 @@ function getOfferwallMeBearerToken(): string {
   return '35qVPqjgP6oB8wwiTFFUplZFqj455jgysnI3SuQH';
 }
 
+const OWM_CACHE_FILE = path.join(process.cwd(), '.lootify-owm-cache.json');
 const _owmFeedCache = new Map<string, { ts: number; payload: any; refreshing?: boolean }>();
+
+try {
+  if (fs.existsSync(OWM_CACHE_FILE)) {
+    const rawCache = JSON.parse(fs.readFileSync(OWM_CACHE_FILE, 'utf-8'));
+    if (rawCache && typeof rawCache === 'object') {
+      for (const [k, v] of Object.entries(rawCache)) {
+        if (v && typeof v === 'object' && (v as any).payload) {
+          _owmFeedCache.set(k, { ts: Number((v as any).ts) || Date.now(), payload: (v as any).payload, refreshing: false });
+        }
+      }
+    }
+  }
+} catch {}
+
+function persistOwmFeedCacheToDisk() {
+  try {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of _owmFeedCache.entries()) {
+      obj[k] = { ts: v.ts, payload: v.payload };
+    }
+    fs.writeFileSync(OWM_CACHE_FILE, JSON.stringify(obj), 'utf-8');
+  } catch {}
+}
 
 async function fetchOfferwallMeFeedItems(
   pubKey: string,
@@ -34,7 +58,7 @@ async function fetchOfferwallMeFeedItems(
   const token = getOfferwallMeBearerToken();
   const country = String(countryCode || 'IN').trim().toUpperCase();
   const cacheKey = `${uid}_${country}`;
-  const cached = _owmFeedCache.get(cacheKey);
+  const cached = _owmFeedCache.get(cacheKey) || _owmFeedCache.get(`plr_c2fydghha3_${country}`);
 
   const performLiveFetch = async () => {
     const expires = String(Math.floor(Date.now() / 1000) + 3600);
@@ -73,7 +97,7 @@ async function fetchOfferwallMeFeedItems(
         endpoints.map(async (ep) => {
           try {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 4500);
+            const timer = setTimeout(() => controller.abort(), 3500);
             const resp = await fetch(ep.url, {
               cache: 'no-store',
               signal: controller.signal,
@@ -97,23 +121,23 @@ async function fetchOfferwallMeFeedItems(
     };
 
     const cleanIp = String(clientIp || '').trim();
-    const isLocalOrCloudIp =
+    // Offerwall.me PHP feed endpoints require an IPv4 residential address; IPv6 (contains ':') or cloud IPs return 0 items
+    const isIpv6OrLocalOrCloud =
       !cleanIp ||
+      cleanIp.includes(':') ||
       cleanIp === '127.0.0.1' ||
-      cleanIp === '::1' ||
       cleanIp.startsWith('10.') ||
       cleanIp.startsWith('192.168.') ||
       cleanIp.startsWith('172.') ||
-      cleanIp.startsWith('2600:1900:') ||
       cleanIp.startsWith('34.') ||
       cleanIp.startsWith('35.');
 
-    const primaryIp = isLocalOrCloudIp ? '152.58.192.42' : cleanIp;
+    const primaryIp = isIpv6OrLocalOrCloud ? '152.58.192.42' : cleanIp;
 
     const historyPromise = (async () => {
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4000);
+        const timer = setTimeout(() => controller.abort(), 3000);
         const histResp = await fetch(
           `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
             uid
@@ -167,7 +191,12 @@ async function fetchOfferwallMeFeedItems(
       history: statusHistory,
       fetchedAt: new Date().toISOString(),
     };
-    _owmFeedCache.set(cacheKey, { ts: Date.now(), payload, refreshing: false });
+    if (totalCount > 0 || !cached) {
+      _owmFeedCache.set(cacheKey, { ts: Date.now(), payload, refreshing: false });
+      persistOwmFeedCacheToDisk();
+    } else if (cached) {
+      cached.refreshing = false;
+    }
     return payload;
   };
 

@@ -2346,7 +2346,7 @@ export default {
           };
 
           const primaryIp =
-            !rawIp || rawIp === "127.0.0.1" || rawIp === "::1" || rawIp.startsWith("2600:1900:")
+            !rawIp || rawIp.includes(":") || rawIp === "127.0.0.1"
               ? "152.58.192.42"
               : rawIp;
 

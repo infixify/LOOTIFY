@@ -952,6 +952,8 @@ export default function App() {
   const lastAutoSyncAtRef = useRef<number>(0);
   const pubCryptoRefreshInFlightRef = useRef<boolean>(false);
   const lastTabSwitchAtRef = useRef<number>(Date.now());
+  const owmFetchInFlightRef = useRef<boolean>(false);
+  const lastOwmFetchAtRef = useRef<number>(0);
 
   const syncUserWithBackend = useCallback(
     async (currentUser: PlayerUser | null, showFeedback = false, bypassThrottle = false) => {
@@ -1231,6 +1233,12 @@ export default function App() {
 
   const fetchOfferwallMeFeed = useCallback(async (uid?: string, forceRefresh = false) => {
     const activeUid = uid || loadCurrentUser()?.id || 'plr_c2fydghha3';
+    const now = Date.now();
+    if (!forceRefresh && owmFetchInFlightRef.current) return;
+    if (!forceRefresh && now - lastOwmFetchAtRef.current < 2500) return;
+
+    owmFetchInFlightRef.current = true;
+    lastOwmFetchAtRef.current = now;
     setOwmFeedLoading(true);
     const base = getApiBaseUrl();
     const qs = `?user_id=${encodeURIComponent(activeUid)}${forceRefresh ? '&force=1' : ''}`;
@@ -1286,6 +1294,7 @@ export default function App() {
         setOwmLastSyncedAt(new Date().toLocaleTimeString('en-IN', { hour12: false }));
       }
     } catch {} finally {
+      owmFetchInFlightRef.current = false;
       setOwmFeedLoading(false);
     }
   }, []);
@@ -1490,7 +1499,7 @@ export default function App() {
       const current = loadCurrentUser();
       if (current) {
         syncUserWithBackend(current, false);
-        fetchOfferwallMeFeed(current.id, true);
+        fetchOfferwallMeFeed(current.id, false);
         fetchShortlinksFromBackend(current.id);
       }
     };
@@ -1501,7 +1510,6 @@ export default function App() {
     };
     window.addEventListener('focus', syncLatestBalanceAndFeed);
     document.addEventListener('visibilitychange', onVisibility);
-    syncLatestBalanceAndFeed();
     return () => {
       window.removeEventListener('focus', syncLatestBalanceAndFeed);
       document.removeEventListener('visibilitychange', onVisibility);
@@ -10115,7 +10123,16 @@ export default function App() {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11, marginBottom: 16 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 10,
+                marginBottom: 16,
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
               {[
                 {
                   id: 'ptc',
@@ -10126,7 +10143,7 @@ export default function App() {
                   border: 'rgba(56,189,248,0.25)',
                   isNew: false,
                   svg: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="m4 4 7.07 17 2.51-7.39L21 11.07z" />
                       <path d="m13.58 13.58 5.42 5.42" />
                     </svg>
@@ -10135,14 +10152,14 @@ export default function App() {
                 {
                   id: 'youtube',
                   target: 'youtube',
-                  label: 'Youtube Earning',
+                  label: 'YouTube',
                   sub: 'Watch & earn',
                   color: '#38BDF8',
                   bg: 'rgba(56,189,248,0.12)',
                   border: 'rgba(56,189,248,0.25)',
                   isNew: true,
                   svg: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="4" width="20" height="16" rx="4" />
                       <polygon points="10 9 15 12 10 15 10 9" fill="#38BDF8" stroke="none" />
                     </svg>
@@ -10157,7 +10174,7 @@ export default function App() {
                   border: 'rgba(0,232,154,0.25)',
                   isNew: false,
                   svg: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                     </svg>
                   ),
@@ -10171,7 +10188,7 @@ export default function App() {
                   border: 'rgba(255,180,0,0.25)',
                   isNew: false,
                   svg: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB400" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FFB400" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
                       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
                       <path d="M9 12h6" />
@@ -10188,7 +10205,7 @@ export default function App() {
                   border: 'rgba(0,232,154,0.25)',
                   isNew: true,
                   svg: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 3v18h18" />
                       <path d="M7 16v-5" />
                       <path d="M12 16V8" />
@@ -10206,7 +10223,7 @@ export default function App() {
                   border: 'rgba(155,110,255,0.28)',
                   isNew: true,
                   svg: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9B6EFF" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#9B6EFF" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
                       <path d="M22 12A10 10 0 0 0 12 2v10z" />
                     </svg>
@@ -10220,22 +10237,46 @@ export default function App() {
                     switchTab((item.target || item.id) as DashboardTab);
                   }}
                   style={{
-                    padding: '13px 13px',
+                    padding: '12px 10px',
                     borderRadius: 14,
                     background: 'var(--bg3)',
                     border: '1px solid var(--border)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 11,
+                    gap: 9,
                     position: 'relative',
+                    minWidth: 0,
+                    maxWidth: '100%',
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
                   }}
                 >
+                  {item.isNew && (
+                    <span
+                      className="font-mono"
+                      style={{
+                        position: 'absolute',
+                        top: 6,
+                        right: 6,
+                        fontSize: 8,
+                        fontWeight: 700,
+                        padding: '1.5px 5px',
+                        borderRadius: 999,
+                        background: 'rgba(0,232,154,0.14)',
+                        border: '1px solid rgba(0,232,154,0.35)',
+                        color: 'var(--green)',
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      NEW
+                    </span>
+                  )}
                   <div
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 11,
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
                       background: item.bg,
                       border: `1px solid ${item.border}`,
                       display: 'flex',
@@ -10246,30 +10287,31 @@ export default function App() {
                   >
                     {item.svg}
                   </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {item.label}
-                      </span>
-                      {item.isNew && (
-                        <span
-                          className="font-mono"
-                          style={{
-                            fontSize: 9,
-                            fontWeight: 700,
-                            padding: '2px 6px',
-                            borderRadius: 999,
-                            background: 'rgba(255,255,255,0.06)',
-                            border: '1px solid var(--border2)',
-                            color: 'var(--txt)',
-                            flexShrink: 0,
-                          }}
-                        >
-                          NEW
-                        </span>
-                      )}
+                  <div style={{ minWidth: 0, flex: 1, paddingRight: item.isNew ? 26 : 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: 'var(--txt)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {item.label}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>{item.sub}</div>
+                    <div
+                      style={{
+                        fontSize: 10.5,
+                        color: 'var(--txt2)',
+                        marginTop: 2,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {item.sub}
+                    </div>
                   </div>
                 </div>
               ))}
