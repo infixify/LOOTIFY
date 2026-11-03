@@ -5255,8 +5255,27 @@ export default function App() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: 'rgba(0,232,154,0.12)',
+                        border: '1px solid rgba(0,232,154,0.28)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--green)',
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                      </svg>
+                    </span>
                     <span className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>
-                      📊 Live Earning Statistics
+                      Live Earning Statistics
                     </span>
                     <span
                       className="font-mono"
@@ -5273,7 +5292,7 @@ export default function App() {
                     </span>
                   </div>
                   <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
-                    Use the <strong style={{ color: 'var(--green)' }}>🎮 Earn</strong> button in the bottom bar to open earning sections
+                    Use the <strong style={{ color: 'var(--green)' }}>Earn</strong> tab in the bottom bar to open earning sections
                   </span>
                 </div>
 
@@ -5306,11 +5325,14 @@ export default function App() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 20,
+                        color: '#00E89A',
                         flexShrink: 0,
                       }}
                     >
-                      📈
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                        <polyline points="17 6 23 6 23 12" />
+                      </svg>
                     </div>
                     <div>
                       <div className="font-mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
@@ -5346,11 +5368,15 @@ export default function App() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 20,
+                        color: '#9B6EFF',
                         flexShrink: 0,
                       }}
                     >
-                      📚
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                        <polyline points="2 17 12 22 22 17" />
+                        <polyline points="2 12 12 17 22 12" />
+                      </svg>
                     </div>
                     <div>
                       <div className="font-mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
@@ -5386,11 +5412,14 @@ export default function App() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 20,
+                        color: '#FFB400',
                         flexShrink: 0,
                       }}
                     >
-                      ⏳
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
                     </div>
                     <div>
                       <div className="font-mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em' }}>
@@ -5417,8 +5446,12 @@ export default function App() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-                    <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
-                      📈 Earnings Breakdown by Source
+                    <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                        <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                      </svg>
+                      Earnings Breakdown by Source
                     </span>
                     <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
                       100,000 Coins = $1.00 USD / ₹90 INR
@@ -8389,25 +8422,30 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                 <div
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: 'rgba(0,232,154,0.15)',
+                    width: 38,
+                    height: 38,
+                    borderRadius: 11,
+                    background: 'rgba(0,232,154,0.12)',
+                    border: '1px solid rgba(0,232,154,0.28)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: 'var(--green)',
-                    fontSize: 18,
+                    color: '#00E89A',
                   }}
                 >
-                  🪙
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="8" r="6" />
+                    <path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
+                    <path d="M7 6h1v4" />
+                    <path d="m16.71 13.88.7.71-2.82 2.82" />
+                  </svg>
                 </div>
                 <div>
-                  <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
-                    Earnings <span style={{ color: 'var(--green)', fontSize: 13, fontWeight: 500 }}>6 methods</span>
+                  <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    Earnings <span style={{ color: 'var(--txt2)', fontSize: 13, fontWeight: 500 }}>6 methods</span>
                   </h3>
                 </div>
               </div>
@@ -8422,21 +8460,115 @@ export default function App() {
                   height: 32,
                   borderRadius: 8,
                   cursor: 'pointer',
-                  fontSize: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                ✕
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11, marginBottom: 16 }}>
               {[
-                { id: 'ptc', label: 'PTC Ads', sub: 'Pay-to-click ads', icon: '📺' },
-                { id: 'tasks', label: 'Youtube Earning', sub: 'Watch & earn', icon: '▶️', target: 'tasks' },
-                { id: 'faucet', label: 'Faucet', icon: '🚰', sub: 'Free crypto claims' },
-                { id: 'tasks', label: 'Tasks', icon: '📋', sub: 'Micro-tasks' },
-                { id: 'offerwalls', label: 'Offerwalls', icon: '🎮', sub: 'Apps & games' },
-                { id: 'overview', label: 'Surveys', icon: '📊', sub: 'Paid surveys', target: 'offerwalls' },
+                {
+                  id: 'ptc',
+                  label: 'PTC Ads',
+                  sub: 'Pay-to-click ads',
+                  color: '#38BDF8',
+                  bg: 'rgba(56,189,248,0.12)',
+                  border: 'rgba(56,189,248,0.25)',
+                  isNew: false,
+                  svg: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m4 4 7.07 17 2.51-7.39L21 11.07z" />
+                      <path d="m13.58 13.58 5.42 5.42" />
+                    </svg>
+                  ),
+                },
+                {
+                  id: 'tasks',
+                  target: 'tasks',
+                  label: 'Youtube Earning',
+                  sub: 'Watch & earn',
+                  color: '#38BDF8',
+                  bg: 'rgba(56,189,248,0.12)',
+                  border: 'rgba(56,189,248,0.25)',
+                  isNew: true,
+                  svg: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="4" width="20" height="16" rx="4" />
+                      <polygon points="10 9 15 12 10 15 10 9" fill="#38BDF8" stroke="none" />
+                    </svg>
+                  ),
+                },
+                {
+                  id: 'faucet',
+                  label: 'Faucet',
+                  sub: 'Free crypto claims',
+                  color: '#00E89A',
+                  bg: 'rgba(0,232,154,0.12)',
+                  border: 'rgba(0,232,154,0.25)',
+                  isNew: false,
+                  svg: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                    </svg>
+                  ),
+                },
+                {
+                  id: 'tasks',
+                  label: 'Tasks',
+                  sub: 'Micro-tasks',
+                  color: '#FFB400',
+                  bg: 'rgba(255,180,0,0.12)',
+                  border: 'rgba(255,180,0,0.25)',
+                  isNew: false,
+                  svg: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB400" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                      <path d="M9 12h6" />
+                      <path d="M9 16h6" />
+                    </svg>
+                  ),
+                },
+                {
+                  id: 'offerwalls',
+                  label: 'Offerwalls',
+                  sub: 'Apps & games',
+                  color: '#00E89A',
+                  bg: 'rgba(0,232,154,0.12)',
+                  border: 'rgba(0,232,154,0.25)',
+                  isNew: true,
+                  svg: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 3v18h18" />
+                      <path d="M7 16v-5" />
+                      <path d="M12 16V8" />
+                      <path d="M17 16v-3" />
+                    </svg>
+                  ),
+                },
+                {
+                  id: 'overview',
+                  target: 'offerwalls',
+                  label: 'Surveys',
+                  sub: 'Paid surveys',
+                  color: '#9B6EFF',
+                  bg: 'rgba(155,110,255,0.13)',
+                  border: 'rgba(155,110,255,0.28)',
+                  isNew: true,
+                  svg: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9B6EFF" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                      <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                    </svg>
+                  ),
+                },
               ].map((item, idx) => (
                 <div
                   key={`earn_pop_${idx}`}
@@ -8445,19 +8577,55 @@ export default function App() {
                     switchTab((item.target || item.id) as DashboardTab);
                   }}
                   style={{
-                    padding: '14px 14px',
-                    borderRadius: 12,
+                    padding: '13px 13px',
+                    borderRadius: 14,
                     background: 'var(--bg3)',
                     border: '1px solid var(--border)',
                     cursor: 'pointer',
                     display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 12,
+                    alignItems: 'center',
+                    gap: 11,
+                    position: 'relative',
                   }}
                 >
-                  <span style={{ fontSize: 22 }}>{item.icon}</span>
-                  <div>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--txt)' }}>{item.label}</div>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 11,
+                      background: item.bg,
+                      border: `1px solid ${item.border}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.svg}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.label}
+                      </span>
+                      {item.isNew && (
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: 999,
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid var(--border2)',
+                            color: 'var(--txt)',
+                            flexShrink: 0,
+                          }}
+                        >
+                          NEW
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>{item.sub}</div>
                   </div>
                 </div>
@@ -8473,7 +8641,7 @@ export default function App() {
                 borderTop: '1px solid var(--border)',
               }}
             >
-              <span className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+              <span className="font-mono" style={{ fontSize: 11.5, color: 'var(--txt2)' }}>
                 More rewards &amp; contests
               </span>
               <button
@@ -8490,9 +8658,15 @@ export default function App() {
                   fontSize: 12,
                   fontWeight: 700,
                   cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                All options →
+                All options
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
               </button>
             </div>
           </div>
@@ -8519,11 +8693,65 @@ export default function App() {
         }}
       >
         {[
-          { id: 'overview', label: 'Home', icon: '🏠' },
-          { id: 'offerwalls', label: 'Earn', icon: '🎮' },
-          { id: 'faucet', label: 'Faucet', icon: '🚰' },
-          { id: 'referrals', label: 'Refer', icon: '👥' },
-          { id: 'wallet', label: 'Wallet', icon: '🏦' },
+          {
+            id: 'overview',
+            label: 'Dashboard',
+            color: '#00E89A',
+            renderIcon: (active: boolean) => (
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={active ? '#00E89A' : '#8FA89B'} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+            ),
+          },
+          {
+            id: 'offerwalls',
+            label: 'Earnings',
+            color: '#38BDF8',
+            renderIcon: (active: boolean) => (
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={active ? '#00E89A' : '#38BDF8'} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="8" cy="8" r="6" />
+                <path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
+                <path d="M7 6h1v4" />
+                <path d="m16.71 13.88.7.71-2.82 2.82" />
+              </svg>
+            ),
+          },
+          {
+            id: 'faucet',
+            label: 'Faucet',
+            color: '#00E89A',
+            renderIcon: (active: boolean) => (
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={active ? '#00E89A' : '#8FA89B'} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+              </svg>
+            ),
+          },
+          {
+            id: 'wallet',
+            label: 'Wallet',
+            color: '#FFB400',
+            renderIcon: (active: boolean) => (
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={active ? '#00E89A' : '#FFB400'} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+              </svg>
+            ),
+          },
+          {
+            id: 'referrals',
+            label: 'Referrals',
+            color: '#9B6EFF',
+            renderIcon: (active: boolean) => (
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={active ? '#00E89A' : '#9B6EFF'} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            ),
+          },
         ].map((tab) => {
           const isEarnTab = tab.id === 'offerwalls';
           const active = isEarnTab
@@ -8558,23 +8786,39 @@ export default function App() {
                 padding: '6px 0',
                 color: active ? 'var(--green)' : 'var(--txt2)',
                 transition: 'all 0.15s',
+                position: 'relative',
               }}
             >
+              {active && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    width: 28,
+                    height: 2.5,
+                    borderRadius: 99,
+                    background: 'var(--green)',
+                    boxShadow: '0 0 10px rgba(0,232,154,0.8)',
+                  }}
+                />
+              )}
               <span
                 style={{
-                  fontSize: 20,
-                  marginBottom: 2,
-                  filter: active ? 'drop-shadow(0 0 8px rgba(0,232,154,0.6))' : 'none',
+                  marginBottom: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  filter: active ? 'drop-shadow(0 0 8px rgba(0,232,154,0.55))' : 'none',
                 }}
               >
-                {tab.icon}
+                {tab.renderIcon(active)}
               </span>
               <span
                 className="font-mono"
                 style={{
                   fontSize: 10.5,
                   fontWeight: active ? 700 : 500,
-                  color: active ? 'var(--green)' : 'var(--txt2)',
+                  color: active ? 'var(--txt)' : 'var(--txt2)',
                 }}
               >
                 {tab.label}
