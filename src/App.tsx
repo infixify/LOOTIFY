@@ -8437,6 +8437,79 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* ── FIXED MOBILE & APP BOTTOM NAVIGATION BAR (HOME, EARN, FAUCET, REFER, WALLET) ── */}
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 64,
+          background: 'var(--bg2)',
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-around',
+          zIndex: 1000,
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        {[
+          { id: 'overview', label: 'Home', icon: '🏠' },
+          { id: 'offerwalls', label: 'Earn', icon: '🎮' },
+          { id: 'faucet', label: 'Faucet', icon: '🚰' },
+          { id: 'referrals', label: 'Refer', icon: '👥' },
+          { id: 'wallet', label: 'Wallet', icon: '🏦' },
+        ].map((tab) => {
+          const active =
+            activeTab === tab.id ||
+            (tab.id === 'offerwalls' &&
+              (activeTab === 'quests' || activeTab === 'ptc' || activeTab === 'tasks' || activeTab === 'shortlinks'));
+          return (
+            <button
+              key={`bnav_${tab.id}`}
+              type="button"
+              onClick={() => switchTab(tab.id as DashboardTab)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '6px 0',
+                color: active ? 'var(--green)' : 'var(--txt2)',
+                transition: 'all 0.15s',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 20,
+                  marginBottom: 2,
+                  filter: active ? 'drop-shadow(0 0 8px rgba(0,232,154,0.6))' : 'none',
+                }}
+              >
+                {tab.icon}
+              </span>
+              <span
+                className="font-mono"
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: active ? 700 : 500,
+                  color: active ? 'var(--green)' : 'var(--txt2)',
+                }}
+              >
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
