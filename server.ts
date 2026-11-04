@@ -61,7 +61,7 @@ async function fetchOfferwallMeFeedItems(
   const cached = _owmFeedCache.get(cacheKey) || _owmFeedCache.get(`plr_c2fydghha3_${country}`);
 
   const performLiveFetch = async () => {
-    const expires = String(Math.floor(Date.now() / 1000) + 3600);
+    const expires = String(Math.floor(Date.now() / 1000) + 43200);
     const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
     const signature = crypto.createHmac('sha256', secretKey).update(message, 'utf8').digest('hex');
 
@@ -97,7 +97,7 @@ async function fetchOfferwallMeFeedItems(
         endpoints.map(async (ep) => {
           try {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 3500);
+            const timer = setTimeout(() => controller.abort(), 5500);
             const resp = await fetch(ep.url, {
               cache: 'no-store',
               signal: controller.signal,
@@ -121,8 +121,8 @@ async function fetchOfferwallMeFeedItems(
     };
 
     const cleanIp = String(clientIp || '').trim();
-    // Offerwall.me PHP feed endpoints require an IPv4 residential address; IPv6 (contains ':') or cloud IPs return 0 items
     const isIpv6OrLocalOrCloud =
+      country === 'IN' ||
       !cleanIp ||
       cleanIp.includes(':') ||
       cleanIp === '127.0.0.1' ||
@@ -137,7 +137,7 @@ async function fetchOfferwallMeFeedItems(
     const historyPromise = (async () => {
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 3000);
+        const timer = setTimeout(() => controller.abort(), 3500);
         const histResp = await fetch(
           `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
             uid
@@ -183,11 +183,67 @@ async function fetchOfferwallMeFeedItems(
       ok: true,
       userId: uid,
       country,
-      ptc: feed.ptc,
-      shortlinks: feed.shortlinks,
-      tasks: feed.tasks,
-      offers: feed.offers,
-      surveys: feed.surveys,
+      ptc: (feed.ptc || []).map((x: any) => ({
+        title: x.title,
+        duration: x.duration,
+        reward: x.reward,
+        type: x.type,
+        description: String(x.description || '').slice(0, 160),
+        url: x.url,
+      })),
+      shortlinks: (feed.shortlinks || []).map((x: any) => ({
+        id: x.id,
+        name: x.name,
+        shortlink: x.shortlink,
+        remaining_views: x.remaining_views,
+        daily_limit: x.daily_limit,
+        reward: x.reward,
+        url: x.url,
+      })),
+      tasks: (feed.tasks || []).map((x: any) => ({
+        id: x.id,
+        title: x.title,
+        description: String(x.description || '').slice(0, 220),
+        instructions: x.instructions,
+        proof_type: x.proof_type,
+        proof_text: x.proof_text,
+        url: x.url,
+        image: x.image,
+        reward: x.reward,
+        approval_time: x.approval_time,
+      })),
+      offers: (feed.offers || []).map((x: any) => ({
+        id: x.id,
+        provider: x.provider,
+        title: x.title || x.name,
+        description: String(x.description || '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 160),
+        icon: x.icon || x.image || '',
+        reward: x.reward,
+        steps:
+          Array.isArray(x.steps) && x.steps.length > 1
+            ? x.steps.slice(0, 3).map((s: any) => ({ id: s.id, label: s.label, reward: s.reward }))
+            : undefined,
+        devices: x.devices,
+        url: x.url,
+      })),
+      surveys: (feed.surveys || []).map((x: any) => ({
+        id: x.id,
+        provider: x.provider,
+        title: x.title || x.name,
+        description: String(x.description || '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 150),
+        image: x.image || '',
+        reward: x.reward,
+        countries: x.countries,
+        url: x.url,
+      })),
       history: statusHistory,
       fetchedAt: new Date().toISOString(),
     };

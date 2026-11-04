@@ -2266,6 +2266,10 @@ export default {
           .toUpperCase();
         const forceFresh = url.searchParams.get("force") === "1";
         const cacheKey = `${reqUserId}_${country}`;
+        const edgeCacheKeyReq = new Request(
+          `https://lootify-owm-edge-cache.internal/v3/${encodeURIComponent(reqUserId)}/${encodeURIComponent(country)}`,
+          { method: "GET" }
+        );
         const cached = globalThis.__OWM_FEED_CACHE__.get(cacheKey);
 
         const performWorkerLiveFetch = async () => {
@@ -2286,7 +2290,7 @@ export default {
             .split(",")[0]
             .trim();
 
-          const expires = String(Math.floor(Date.now() / 1000) + 3600);
+          const expires = String(Math.floor(Date.now() / 1000) + 43200);
           const message = `offerwall-user-v1\n${pub}\n${reqUserId}\n${expires}`;
           const enc = new TextEncoder();
           const cryptoKey = await crypto.subtle.importKey(
@@ -2324,8 +2328,11 @@ export default {
             const results = { ptc: [], shortlinks: [], tasks: [], offers: [], surveys: [] };
             await Promise.all(
               endpoints.map(async (ep) => {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 5500);
                 try {
                   const resp = await fetch(ep.url, {
+                    signal: ctrl.signal,
                     cf: { cacheTtl: 0, cacheEverything: false },
                     headers: {
                       Accept: "application/json",
@@ -2339,24 +2346,29 @@ export default {
                       results[ep.key] = json.data;
                     }
                   }
-                } catch {}
+                } catch {} finally {
+                  clearTimeout(timer);
+                }
               })
             );
             return results;
           };
 
           const primaryIp =
-            !rawIp || rawIp.includes(":") || rawIp === "127.0.0.1"
+            country === "IN" || !rawIp || rawIp.includes(":") || rawIp === "127.0.0.1"
               ? "152.58.192.42"
               : rawIp;
 
           const historyPromise = (async () => {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 3500);
             try {
               const histResp = await fetch(
                 `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
                   reqUserId
                 )}&_t=${Date.now()}`,
                 {
+                  signal: ctrl.signal,
                   cf: { cacheTtl: 0, cacheEverything: false },
                   headers: {
                     "x-offerwall-user-expires": expires,
@@ -2370,7 +2382,9 @@ export default {
                   return histJson.history;
                 }
               }
-            } catch {}
+            } catch {} finally {
+              clearTimeout(timer);
+            }
             return [];
           })();
 
@@ -2396,15 +2410,85 @@ export default {
             ok: true,
             userId: reqUserId,
             country,
-            ptc: feed.ptc,
-            shortlinks: feed.shortlinks,
-            tasks: feed.tasks,
-            offers: feed.offers,
-            surveys: feed.surveys,
+            ptc: (feed.ptc || []).map((x) => ({
+              title: x.title,
+              duration: x.duration,
+              reward: x.reward,
+              type: x.type,
+              description: String(x.description || "").slice(0, 160),
+              url: x.url,
+            })),
+            shortlinks: (feed.shortlinks || []).map((x) => ({
+              id: x.id,
+              name: x.name,
+              shortlink: x.shortlink,
+              remaining_views: x.remaining_views,
+              daily_limit: x.daily_limit,
+              reward: x.reward,
+              url: x.url,
+            })),
+            tasks: (feed.tasks || []).map((x) => ({
+              id: x.id,
+              title: x.title,
+              description: String(x.description || "").slice(0, 220),
+              instructions: x.instructions,
+              proof_type: x.proof_type,
+              proof_text: x.proof_text,
+              url: x.url,
+              image: x.image,
+              reward: x.reward,
+              approval_time: x.approval_time,
+            })),
+            offers: (feed.offers || []).map((x) => ({
+              id: x.id,
+              provider: x.provider,
+              title: x.title || x.name,
+              description: String(x.description || "")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 160),
+              icon: x.icon || x.image || "",
+              reward: x.reward,
+              steps:
+                Array.isArray(x.steps) && x.steps.length > 1
+                  ? x.steps.slice(0, 3).map((s) => ({ id: s.id, label: s.label, reward: s.reward }))
+                  : undefined,
+              devices: x.devices,
+              url: x.url,
+            })),
+            surveys: (feed.surveys || []).map((x) => ({
+              id: x.id,
+              provider: x.provider,
+              title: x.title || x.name,
+              description: String(x.description || "")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 150),
+              image: x.image || "",
+              reward: x.reward,
+              countries: x.countries,
+              url: x.url,
+            })),
             history: statusHistory,
             fetchedAt: new Date().toISOString(),
           };
-          globalThis.__OWM_FEED_CACHE__.set(cacheKey, { ts: Date.now(), payload, refreshing: false });
+          const nowTs = Date.now();
+          globalThis.__OWM_FEED_CACHE__.set(cacheKey, { ts: nowTs, payload, refreshing: false });
+          try {
+            if (typeof caches !== "undefined" && caches.default) {
+              await caches.default.put(
+                edgeCacheKeyReq,
+                new Response(JSON.stringify({ ts: nowTs, payload }), {
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Cache-Control": "public, max-age=600",
+                  },
+                })
+              );
+            }
+          } catch {}
           return payload;
         };
 
@@ -2425,6 +2509,36 @@ export default {
               "Cache-Control": "no-store, no-cache, must-revalidate",
             },
           });
+        }
+
+        if (!forceFresh && typeof caches !== "undefined" && caches.default) {
+          try {
+            const edgeHit = await caches.default.match(edgeCacheKeyReq);
+            if (edgeHit) {
+              const edgeData = await edgeHit.json();
+              if (edgeData && edgeData.payload) {
+                globalThis.__OWM_FEED_CACHE__.set(cacheKey, {
+                  ts: edgeData.ts || Date.now(),
+                  payload: edgeData.payload,
+                  refreshing: true,
+                });
+                const bgPromise = performWorkerLiveFetch().catch(() => {
+                  const entry = globalThis.__OWM_FEED_CACHE__.get(cacheKey);
+                  if (entry) entry.refreshing = false;
+                });
+                if (typeof ctx !== "undefined" && ctx && typeof ctx.waitUntil === "function") {
+                  ctx.waitUntil(bgPromise);
+                }
+                return Response.json(edgeData.payload, {
+                  status: 200,
+                  headers: {
+                    ...corsHeaders,
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
+                  },
+                });
+              }
+            }
+          } catch {}
         }
 
         const freshPayload = await performWorkerLiveFetch();

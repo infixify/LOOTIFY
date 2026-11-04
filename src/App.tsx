@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DashboardTab, OfferwallConfig, PayoutChannel, PlayerUser, ShortlinkConfig, ThemeMode, WithdrawalRecord } from './types.ts';
+import { INITIAL_OWM_FEED_SEED } from './owmSeedData.ts';
 
 const STORAGE_USER_KEY = 'lootify_player_user';
 const STORAGE_ACCOUNTS_KEY = 'lootify_registered_accounts';
@@ -520,7 +521,67 @@ function saveCachedShortlinks(links: ShortlinkConfig[]) {
   } catch {}
 }
 
-const STORAGE_OWM_FEED_CACHE_KEY = 'lootify_owm_feed_cache_v2';
+const STORAGE_OWM_FEED_CACHE_KEY = 'lootify_owm_feed_cache_v3';
+
+function personalizeOwmItemUrl(rawUrl: string, uid: string): string {
+  const cleanUrl = String(rawUrl || '').trim();
+  if (!cleanUrl || !cleanUrl.includes('offerwall.me')) return cleanUrl;
+  const cleanUid = (uid || 'plr_c2fydghha3').trim();
+  const nowSec = Math.floor(Date.now() / 1000) + _cachedServerTimeOffsetSec;
+  const bucketSec = Math.floor(nowSec / 21600) * 21600;
+  const expires = String(bucketSec + 43200);
+  const message = `offerwall-user-v1\n${OFFERWALLME_PUBLIC_KEY}\n${cleanUid}\n${expires}`;
+  const signature = hmacSha256HexSync('f25hoUjdRBQpUbbogHGU4aObX1lb7W24', message);
+  return cleanUrl
+    .replace(/([?&]id=)[^&]*/i, `$1${encodeURIComponent(cleanUid)}`)
+    .replace(/([?&]identityExpires=)[^&]*/i, `$1${encodeURIComponent(expires)}`)
+    .replace(/([?&]identitySignature=)[^&]*/i, `$1${encodeURIComponent(signature)}`);
+}
+
+function personalizeOwmFeedForUser(
+  feed: {
+    ptc: any[];
+    shortlinks: any[];
+    tasks: any[];
+    offers: any[];
+    surveys: any[];
+    history: any[];
+  },
+  uid?: string
+) {
+  let activeUid = (uid || '').trim();
+  if (!activeUid) {
+    try {
+      const rawUser = localStorage.getItem(STORAGE_USER_KEY);
+      if (rawUser) {
+        const parsedUser = JSON.parse(rawUser);
+        if (parsedUser && parsedUser.id) activeUid = String(parsedUser.id).trim();
+      }
+    } catch {}
+  }
+  if (!activeUid) activeUid = 'plr_c2fydghha3';
+
+  return {
+    ptc: (Array.isArray(feed.ptc) ? feed.ptc : []).map((x) => ({
+      ...x,
+      url: personalizeOwmItemUrl(x?.url, activeUid),
+    })),
+    shortlinks: (Array.isArray(feed.shortlinks) ? feed.shortlinks : []).map((x) => ({
+      ...x,
+      url: personalizeOwmItemUrl(x?.url, activeUid),
+    })),
+    tasks: Array.isArray(feed.tasks) ? feed.tasks : [],
+    offers: (Array.isArray(feed.offers) ? feed.offers : []).map((x) => ({
+      ...x,
+      url: personalizeOwmItemUrl(x?.url, activeUid),
+    })),
+    surveys: (Array.isArray(feed.surveys) ? feed.surveys : []).map((x) => ({
+      ...x,
+      url: personalizeOwmItemUrl(x?.url, activeUid),
+    })),
+    history: Array.isArray(feed.history) ? feed.history : [],
+  };
+}
 
 function loadCachedOwmFeed(): {
   ptc: any[];
@@ -531,29 +592,29 @@ function loadCachedOwmFeed(): {
   history: any[];
 } {
   try {
-    const raw = localStorage.getItem(STORAGE_OWM_FEED_CACHE_KEY);
+    const raw =
+      localStorage.getItem(STORAGE_OWM_FEED_CACHE_KEY) ||
+      localStorage.getItem('lootify_owm_feed_cache_v2');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        return {
-          ptc: Array.isArray(parsed.ptc) ? parsed.ptc : [],
-          shortlinks: Array.isArray(parsed.shortlinks) ? parsed.shortlinks : [],
-          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-          offers: Array.isArray(parsed.offers) ? parsed.offers : [],
-          surveys: Array.isArray(parsed.surveys) ? parsed.surveys : [],
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        ((Array.isArray(parsed.offers) && parsed.offers.length > 0) ||
+          (Array.isArray(parsed.ptc) && parsed.ptc.length > 0))
+      ) {
+        return personalizeOwmFeedForUser({
+          ptc: Array.isArray(parsed.ptc) ? parsed.ptc : INITIAL_OWM_FEED_SEED.ptc,
+          shortlinks: Array.isArray(parsed.shortlinks) ? parsed.shortlinks : INITIAL_OWM_FEED_SEED.shortlinks,
+          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : INITIAL_OWM_FEED_SEED.tasks,
+          offers: Array.isArray(parsed.offers) ? parsed.offers : INITIAL_OWM_FEED_SEED.offers,
+          surveys: Array.isArray(parsed.surveys) ? parsed.surveys : INITIAL_OWM_FEED_SEED.surveys,
           history: Array.isArray(parsed.history) ? parsed.history : [],
-        };
+        });
       }
     }
   } catch {}
-  return {
-    ptc: [],
-    shortlinks: [],
-    tasks: [],
-    offers: [],
-    surveys: [],
-    history: [],
-  };
+  return personalizeOwmFeedForUser(INITIAL_OWM_FEED_SEED);
 }
 
 function saveCachedOwmFeed(feed: {
@@ -565,7 +626,15 @@ function saveCachedOwmFeed(feed: {
   history: any[];
 }) {
   try {
-    localStorage.setItem(STORAGE_OWM_FEED_CACHE_KEY, JSON.stringify(feed));
+    const compact = {
+      ptc: (feed.ptc || []).slice(0, 30),
+      shortlinks: (feed.shortlinks || []).slice(0, 60),
+      tasks: (feed.tasks || []).slice(0, 40),
+      offers: (feed.offers || []).slice(0, 60),
+      surveys: (feed.surveys || []).slice(0, 50),
+      history: (feed.history || []).slice(0, 40),
+    };
+    localStorage.setItem(STORAGE_OWM_FEED_CACHE_KEY, JSON.stringify(compact));
   } catch {}
 }
 
@@ -906,6 +975,8 @@ export default function App() {
   const [owmFeedLoading, setOwmFeedLoading] = useState<boolean>(false);
   const [owmLastSyncedAt, setOwmLastSyncedAt] = useState<string>('');
   const [owmClickedIds, setOwmClickedIds] = useState<Record<string, number>>({});
+  const [visibleOffersCount, setVisibleOffersCount] = useState<number>(24);
+  const [visibleSurveysCount, setVisibleSurveysCount] = useState<number>(24);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [taskProofInputs, setTaskProofInputs] = useState<Record<string, string>>({});
   const [taskSubmittingId, setTaskSubmittingId] = useState<string | null>(null);
@@ -1235,11 +1306,42 @@ export default function App() {
     const activeUid = uid || loadCurrentUser()?.id || 'plr_c2fydghha3';
     const now = Date.now();
     if (!forceRefresh && owmFetchInFlightRef.current) return;
-    if (!forceRefresh && now - lastOwmFetchAtRef.current < 2500) return;
+    if (!forceRefresh && now - lastOwmFetchAtRef.current < 4000) return;
 
     owmFetchInFlightRef.current = true;
     lastOwmFetchAtRef.current = now;
     setOwmFeedLoading(true);
+
+    // 1. Fast static bootstrap hydration (<50ms) if we only have the 24-item seed so far
+    if (!forceRefresh) {
+      fetch('./assets/owm-bootstrap.json')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((boot) => {
+          if (boot && boot.ok) {
+            setOwmFeed((prev) => {
+              if (prev.offers.length > 30) return prev;
+              const merged = personalizeOwmFeedForUser(
+                {
+                  ptc: Array.isArray(boot.ptc) && boot.ptc.length > 0 ? boot.ptc : prev.ptc,
+                  shortlinks:
+                    Array.isArray(boot.shortlinks) && boot.shortlinks.length > 0
+                      ? boot.shortlinks
+                      : prev.shortlinks,
+                  tasks: Array.isArray(boot.tasks) && boot.tasks.length > 0 ? boot.tasks : prev.tasks,
+                  offers: Array.isArray(boot.offers) && boot.offers.length > 0 ? boot.offers : prev.offers,
+                  surveys: Array.isArray(boot.surveys) && boot.surveys.length > 0 ? boot.surveys : prev.surveys,
+                  history: prev.history,
+                },
+                activeUid
+              );
+              saveCachedOwmFeed(merged);
+              return merged;
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
     const base = getApiBaseUrl();
     const qs = `?user_id=${encodeURIComponent(activeUid)}${forceRefresh ? '&force=1' : ''}`;
     try {
@@ -1263,32 +1365,22 @@ export default function App() {
       }
 
       if (data && data.ok) {
-        const nextFeed = {
-          ptc: Array.isArray(data.ptc) ? data.ptc : [],
-          shortlinks: Array.isArray(data.shortlinks) ? data.shortlinks : [],
-          tasks: Array.isArray(data.tasks) ? data.tasks : [],
-          offers: Array.isArray(data.offers) ? data.offers : [],
-          surveys: Array.isArray(data.surveys) ? data.surveys : [],
-          history: Array.isArray(data.history) ? data.history : [],
-        };
-        saveCachedOwmFeed(nextFeed);
         setOwmFeed((prev) => {
-          const wasEmpty =
-            prev.ptc.length +
-              prev.shortlinks.length +
-              prev.tasks.length +
-              prev.offers.length +
-              prev.surveys.length ===
-            0;
-          if (wasEmpty || Date.now() - lastTabSwitchAtRef.current < 4500) {
-            window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-            requestAnimationFrame(() => {
-              window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-            });
-            setTimeout(() => {
-              window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-            }, 50);
-          }
+          const nextFeed = personalizeOwmFeedForUser(
+            {
+              ptc: Array.isArray(data.ptc) && data.ptc.length > 0 ? data.ptc : prev.ptc,
+              shortlinks:
+                Array.isArray(data.shortlinks) && data.shortlinks.length > 0
+                  ? data.shortlinks
+                  : prev.shortlinks,
+              tasks: Array.isArray(data.tasks) && data.tasks.length > 0 ? data.tasks : prev.tasks,
+              offers: Array.isArray(data.offers) && data.offers.length > 0 ? data.offers : prev.offers,
+              surveys: Array.isArray(data.surveys) && data.surveys.length > 0 ? data.surveys : prev.surveys,
+              history: Array.isArray(data.history) ? data.history : prev.history,
+            },
+            activeUid
+          );
+          saveCachedOwmFeed(nextFeed);
           return nextFeed;
         });
         setOwmLastSyncedAt(new Date().toLocaleTimeString('en-IN', { hour12: false }));
@@ -6985,116 +7077,132 @@ export default function App() {
                     No individual surveys available right now. Switch to Full Survey Wall above.
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-                    {owmFeed.surveys.map((sv: any, idx: number) => {
-                      const rewardCoins = Number(sv.reward) || 0;
-                      const inrVal = ((rewardCoins * 90) / 100000).toFixed(2);
-                      const cleanDesc = String(sv.description || '')
-                        .replace(/<[^>]+>/g, ' ')
-                        .replace(/\s+/g, ' ')
-                        .trim();
-                      return (
-                        <div
-                          key={sv.id || idx}
-                          className="card"
-                          style={{
-                            padding: 20,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            gap: 14,
-                            border: '1px solid rgba(16,185,129,0.28)',
-                            background: 'var(--bg2)',
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                {sv.image ? (
-                                  <img
-                                    src={sv.image}
-                                    alt={sv.title || sv.name}
-                                    style={{
-                                      width: 46,
-                                      height: 46,
-                                      borderRadius: 10,
-                                      objectFit: 'cover',
-                                      border: '1px solid var(--border)',
-                                      flexShrink: 0,
-                                    }}
-                                  />
-                                ) : (
-                                  <div
-                                    style={{
-                                      width: 46,
-                                      height: 46,
-                                      borderRadius: 10,
-                                      background: 'rgba(16,185,129,0.14)',
-                                      border: '1px solid rgba(16,185,129,0.32)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      color: '#10B981',
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-                                      <path d="M22 12A10 10 0 0 0 12 2v10z" />
-                                    </svg>
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+                      {owmFeed.surveys.slice(0, visibleSurveysCount).map((sv: any, idx: number) => {
+                        const rewardCoins = Number(sv.reward) || 0;
+                        const inrVal = ((rewardCoins * 90) / 100000).toFixed(2);
+                        const cleanDesc = String(sv.description || '')
+                          .replace(/<[^>]+>/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+                        return (
+                          <div
+                            key={sv.id || idx}
+                            className="card"
+                            style={{
+                              padding: 20,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              gap: 14,
+                              border: '1px solid rgba(16,185,129,0.28)',
+                              background: 'var(--bg2)',
+                            }}
+                          >
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                  {sv.image ? (
+                                    <img
+                                      src={sv.image}
+                                      alt={sv.title || sv.name}
+                                      loading="lazy"
+                                      decoding="async"
+                                      style={{
+                                        width: 46,
+                                        height: 46,
+                                        borderRadius: 10,
+                                        objectFit: 'cover',
+                                        border: '1px solid var(--border)',
+                                        flexShrink: 0,
+                                      }}
+                                    />
+                                  ) : (
+                                    <div
+                                      style={{
+                                        width: 46,
+                                        height: 46,
+                                        borderRadius: 10,
+                                        background: 'rgba(16,185,129,0.14)',
+                                        border: '1px solid rgba(16,185,129,0.32)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#10B981',
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                                        <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                                      {sv.title || sv.name}
+                                    </h3>
+                                    <div className="font-mono" style={{ fontSize: 10.5, color: '#10B981', fontWeight: 700, marginTop: 3 }}>
+                                      {String(sv.provider || 'SURVEY ROUTER').toUpperCase()} • {Array.isArray(sv.countries) ? sv.countries.join(', ') : 'GLOBAL'}
+                                    </div>
                                   </div>
-                                )}
-                                <div>
-                                  <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                                    {sv.title || sv.name}
-                                  </h3>
-                                  <div className="font-mono" style={{ fontSize: 10.5, color: '#10B981', fontWeight: 700, marginTop: 3 }}>
-                                    {String(sv.provider || 'SURVEY ROUTER').toUpperCase()} • {Array.isArray(sv.countries) ? sv.countries.join(', ') : 'GLOBAL'}
+                                </div>
+
+                                <div
+                                  style={{
+                                    textAlign: 'right',
+                                    padding: '6px 10px',
+                                    borderRadius: 8,
+                                    background: 'rgba(0,232,154,0.1)',
+                                    border: '1px solid rgba(0,232,154,0.3)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
+                                    +{rewardCoins.toLocaleString('en-IN')}
+                                  </div>
+                                  <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
+                                    COINS (₹{inrVal})
                                   </div>
                                 </div>
                               </div>
 
-                              <div
-                                style={{
-                                  textAlign: 'right',
-                                  padding: '6px 10px',
-                                  borderRadius: 8,
-                                  background: 'rgba(0,232,154,0.1)',
-                                  border: '1px solid rgba(0,232,154,0.3)',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
-                                  +{rewardCoins.toLocaleString('en-IN')}
-                                </div>
-                                <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
-                                  COINS (₹{inrVal})
-                                </div>
-                              </div>
+                              <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
+                                {cleanDesc
+                                  ? cleanDesc.length > 140
+                                    ? cleanDesc.slice(0, 140) + '...'
+                                    : cleanDesc
+                                  : 'Complete this research survey router with honest answers to earn instant Coins.'}
+                              </p>
                             </div>
 
-                            <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
-                              {cleanDesc
-                                ? cleanDesc.length > 140
-                                  ? cleanDesc.slice(0, 140) + '...'
-                                  : cleanDesc
-                                : 'Complete this research survey router with honest answers to earn instant Coins.'}
-                            </p>
+                            <a
+                              href={sv.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-primary btn-sm btn-full"
+                              style={{ textAlign: 'center', textDecoration: 'none' }}
+                            >
+                              Start Survey (+{rewardCoins.toLocaleString('en-IN')} Coins) ↗
+                            </a>
                           </div>
-
-                          <a
-                            href={sv.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-primary btn-sm btn-full"
-                            style={{ textAlign: 'center', textDecoration: 'none' }}
-                          >
-                            Start Survey (+{rewardCoins.toLocaleString('en-IN')} Coins) ↗
-                          </a>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                    {owmFeed.surveys.length > visibleSurveysCount && (
+                      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+                        <button
+                          type="button"
+                          onClick={() => setVisibleSurveysCount((prev) => prev + 36)}
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '10px 22px' }}
+                        >
+                          Show More Surveys ({owmFeed.surveys.length - visibleSurveysCount} more available)
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )
               ) : (
                 <div className="card card-glow" style={{ padding: 20 }}>
@@ -7557,168 +7665,184 @@ export default function App() {
                   No individual offers found right now. Switch to Full Partner Offerwalls above.
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 16 }}>
-                  {owmFeed.offers.map((offer: any, idx: number) => {
-                    const rewardCoins = Number(offer.reward) || 0;
-                    const inrVal = ((rewardCoins * 90) / 100000).toFixed(2);
-                    const cleanDesc = String(offer.description || '')
-                      .replace(/<[^>]+>/g, ' ')
-                      .replace(/\s+/g, ' ')
-                      .trim();
-                    const imgSrc = offer.icon || offer.image || '';
-                    return (
-                      <div
-                        key={offer.id || idx}
-                        className="card"
-                        style={{
-                          padding: 20,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          gap: 14,
-                          border: '1px solid rgba(139,92,246,0.28)',
-                          background: 'var(--bg2)',
-                        }}
-                      >
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                              {imgSrc ? (
-                                <img
-                                  src={imgSrc}
-                                  alt={offer.title || offer.name}
-                                  style={{
-                                    width: 48,
-                                    height: 48,
-                                    borderRadius: 12,
-                                    objectFit: 'cover',
-                                    border: '1px solid var(--border)',
-                                    flexShrink: 0,
-                                  }}
-                                />
-                              ) : (
-                                <div
-                                  style={{
-                                    width: 48,
-                                    height: 48,
-                                    borderRadius: 12,
-                                    background: 'rgba(139,92,246,0.14)',
-                                    border: '1px solid rgba(139,92,246,0.32)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#A78BFA',
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <rect x="2" y="6" width="20" height="12" rx="4" />
-                                    <path d="M6 12h4" />
-                                    <path d="M8 10v4" />
-                                  </svg>
-                                </div>
-                              )}
-                              <div>
-                                <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
-                                  {offer.title || offer.name}
-                                </h3>
-                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                                  <span
-                                    className="font-mono"
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 16 }}>
+                    {owmFeed.offers.slice(0, visibleOffersCount).map((offer: any, idx: number) => {
+                      const rewardCoins = Number(offer.reward) || 0;
+                      const inrVal = ((rewardCoins * 90) / 100000).toFixed(2);
+                      const cleanDesc = String(offer.description || '')
+                        .replace(/<[^>]+>/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                      const imgSrc = offer.icon || offer.image || '';
+                      return (
+                        <div
+                          key={offer.id || idx}
+                          className="card"
+                          style={{
+                            padding: 20,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: 14,
+                            border: '1px solid rgba(139,92,246,0.28)',
+                            background: 'var(--bg2)',
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                {imgSrc ? (
+                                  <img
+                                    src={imgSrc}
+                                    alt={offer.title || offer.name}
+                                    loading="lazy"
+                                    decoding="async"
                                     style={{
-                                      fontSize: 10,
-                                      padding: '2px 7px',
-                                      borderRadius: 5,
-                                      background: 'rgba(139,92,246,0.15)',
+                                      width: 48,
+                                      height: 48,
+                                      borderRadius: 12,
+                                      objectFit: 'cover',
+                                      border: '1px solid var(--border)',
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: 48,
+                                      height: 48,
+                                      borderRadius: 12,
+                                      background: 'rgba(139,92,246,0.14)',
+                                      border: '1px solid rgba(139,92,246,0.32)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
                                       color: '#A78BFA',
-                                      fontWeight: 700,
+                                      flexShrink: 0,
                                     }}
                                   >
-                                    {String(offer.provider || 'OFFERWALL').toUpperCase()}
-                                  </span>
-                                  {Array.isArray(offer.devices) && offer.devices.length > 0 && (
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <rect x="2" y="6" width="20" height="12" rx="4" />
+                                      <path d="M6 12h4" />
+                                      <path d="M8 10v4" />
+                                    </svg>
+                                  </div>
+                                )}
+                                <div>
+                                  <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                                    {offer.title || offer.name}
+                                  </h3>
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                                     <span
                                       className="font-mono"
                                       style={{
                                         fontSize: 10,
                                         padding: '2px 7px',
                                         borderRadius: 5,
-                                        background: 'rgba(56,189,248,0.14)',
-                                        color: '#38BDF8',
+                                        background: 'rgba(139,92,246,0.15)',
+                                        color: '#A78BFA',
                                         fontWeight: 700,
                                       }}
                                     >
-                                      {offer.devices.join(' / ')}
+                                      {String(offer.provider || 'OFFERWALL').toUpperCase()}
                                     </span>
-                                  )}
+                                    {Array.isArray(offer.devices) && offer.devices.length > 0 && (
+                                      <span
+                                        className="font-mono"
+                                        style={{
+                                          fontSize: 10,
+                                          padding: '2px 7px',
+                                          borderRadius: 5,
+                                          background: 'rgba(56,189,248,0.14)',
+                                          color: '#38BDF8',
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        {offer.devices.join(' / ')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  textAlign: 'right',
+                                  padding: '6px 10px',
+                                  borderRadius: 8,
+                                  background: 'rgba(0,232,154,0.1)',
+                                  border: '1px solid rgba(0,232,154,0.3)',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
+                                  +{rewardCoins.toLocaleString('en-IN')}
+                                </div>
+                                <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
+                                  COINS (₹{inrVal})
                                 </div>
                               </div>
                             </div>
 
-                            <div
-                              style={{
-                                textAlign: 'right',
-                                padding: '6px 10px',
-                                borderRadius: 8,
-                                background: 'rgba(0,232,154,0.1)',
-                                border: '1px solid rgba(0,232,154,0.3)',
-                                flexShrink: 0,
-                              }}
-                            >
-                              <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
-                                +{rewardCoins.toLocaleString('en-IN')}
+                            <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
+                              {cleanDesc
+                                ? cleanDesc.length > 150
+                                  ? cleanDesc.slice(0, 150) + '...'
+                                  : cleanDesc
+                                : 'Complete the offer requirements to earn instant Coins.'}
+                            </p>
+
+                            {Array.isArray(offer.steps) && offer.steps.length > 1 && (
+                              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {offer.steps.slice(0, 3).map((st: any, sIdx: number) => (
+                                  <div
+                                    key={st.id || sIdx}
+                                    className="font-mono"
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      fontSize: 11,
+                                      padding: '4px 8px',
+                                      borderRadius: 6,
+                                      background: 'var(--bg3)',
+                                      color: 'var(--txt2)',
+                                    }}
+                                  >
+                                    <span>{st.label}</span>
+                                    <span style={{ color: 'var(--green)', fontWeight: 700 }}>+{st.reward}</span>
+                                  </div>
+                                ))}
                               </div>
-                              <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
-                                COINS (₹{inrVal})
-                              </div>
-                            </div>
+                            )}
                           </div>
 
-                          <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
-                            {cleanDesc
-                              ? cleanDesc.length > 150
-                                ? cleanDesc.slice(0, 150) + '...'
-                                : cleanDesc
-                              : 'Complete the offer requirements to earn instant Coins.'}
-                          </p>
-
-                          {Array.isArray(offer.steps) && offer.steps.length > 1 && (
-                            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              {offer.steps.slice(0, 3).map((st: any, sIdx: number) => (
-                                <div
-                                  key={st.id || sIdx}
-                                  className="font-mono"
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    fontSize: 11,
-                                    padding: '4px 8px',
-                                    borderRadius: 6,
-                                    background: 'var(--bg3)',
-                                    color: 'var(--txt2)',
-                                  }}
-                                >
-                                  <span>{st.label}</span>
-                                  <span style={{ color: 'var(--green)', fontWeight: 700 }}>+{st.reward}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          <a
+                            href={offer.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-primary btn-sm btn-full"
+                            style={{ textAlign: 'center', textDecoration: 'none' }}
+                          >
+                            Start Offer (+{rewardCoins.toLocaleString('en-IN')} Coins) ↗
+                          </a>
                         </div>
-
-                        <a
-                          href={offer.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-primary btn-sm btn-full"
-                          style={{ textAlign: 'center', textDecoration: 'none' }}
-                        >
-                          Start Offer (+{rewardCoins.toLocaleString('en-IN')} Coins) ↗
-                        </a>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                  {owmFeed.offers.length > visibleOffersCount && (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+                      <button
+                        type="button"
+                        onClick={() => setVisibleOffersCount((prev) => prev + 36)}
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: '10px 22px' }}
+                      >
+                        Show More Offers ({owmFeed.offers.length - visibleOffersCount} more available)
+                      </button>
+                    </div>
+                  )}
+                </>
               )
             ) : enabledOfferwalls.length === 0 ? (
               <div
@@ -10055,7 +10179,8 @@ export default function App() {
             display: 'flex',
             alignItems: 'flex-end',
             justifyContent: 'center',
-            padding: '12px',
+            padding: '10px',
+            boxSizing: 'border-box',
           }}
           onClick={() => setEarningsPopupOpen(false)}
         >
@@ -10063,31 +10188,34 @@ export default function App() {
             className="card card-glow"
             style={{
               width: '100%',
-              maxWidth: 520,
+              maxWidth: 480,
               background: 'var(--bg2)',
               borderRadius: 20,
-              padding: '22px 18px 20px',
+              padding: '16px 12px 14px',
               border: '1px solid rgba(0,232,154,0.3)',
               boxShadow: '0 -10px 40px rgba(0,0,0,0.55)',
+              boxSizing: 'border-box',
+              overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div
                   style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 11,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
                     background: 'rgba(0,232,154,0.12)',
                     border: '1px solid rgba(0,232,154,0.28)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#00E89A',
+                    flexShrink: 0,
                   }}
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="8" cy="8" r="6" />
                     <path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
                     <path d="M7 6h1v4" />
@@ -10095,8 +10223,8 @@ export default function App() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    Earnings <span style={{ color: 'var(--txt2)', fontSize: 13, fontWeight: 500 }}>6 methods</span>
+                  <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                    Earnings <span style={{ color: 'var(--txt2)', fontSize: 12.5, fontWeight: 500 }}>6 methods</span>
                   </h3>
                 </div>
               </div>
@@ -10107,16 +10235,17 @@ export default function App() {
                   background: 'var(--bg3)',
                   border: '1px solid var(--border)',
                   color: 'var(--txt2)',
-                  width: 32,
-                  height: 32,
+                  width: 30,
+                  height: 30,
                   borderRadius: 8,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -10127,8 +10256,8 @@ export default function App() {
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: 10,
-                marginBottom: 16,
+                gap: 8,
+                marginBottom: 14,
                 width: '100%',
                 boxSizing: 'border-box',
               }}
@@ -10143,7 +10272,7 @@ export default function App() {
                   border: 'rgba(56,189,248,0.25)',
                   isNew: false,
                   svg: (
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="m4 4 7.07 17 2.51-7.39L21 11.07z" />
                       <path d="m13.58 13.58 5.42 5.42" />
                     </svg>
@@ -10152,14 +10281,14 @@ export default function App() {
                 {
                   id: 'youtube',
                   target: 'youtube',
-                  label: 'YouTube',
+                  label: 'Youtube Earn',
                   sub: 'Watch & earn',
                   color: '#38BDF8',
                   bg: 'rgba(56,189,248,0.12)',
                   border: 'rgba(56,189,248,0.25)',
                   isNew: true,
                   svg: (
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="4" width="20" height="16" rx="4" />
                       <polygon points="10 9 15 12 10 15 10 9" fill="#38BDF8" stroke="none" />
                     </svg>
@@ -10174,7 +10303,7 @@ export default function App() {
                   border: 'rgba(0,232,154,0.25)',
                   isNew: false,
                   svg: (
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                     </svg>
                   ),
@@ -10188,7 +10317,7 @@ export default function App() {
                   border: 'rgba(255,180,0,0.25)',
                   isNew: false,
                   svg: (
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FFB400" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFB400" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
                       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
                       <path d="M9 12h6" />
@@ -10205,7 +10334,7 @@ export default function App() {
                   border: 'rgba(0,232,154,0.25)',
                   isNew: true,
                   svg: (
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#00E89A" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 3v18h18" />
                       <path d="M7 16v-5" />
                       <path d="M12 16V8" />
@@ -10223,7 +10352,7 @@ export default function App() {
                   border: 'rgba(155,110,255,0.28)',
                   isNew: true,
                   svg: (
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#9B6EFF" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9B6EFF" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
                       <path d="M22 12A10 10 0 0 0 12 2v10z" />
                     </svg>
@@ -10237,46 +10366,27 @@ export default function App() {
                     switchTab((item.target || item.id) as DashboardTab);
                   }}
                   style={{
-                    padding: '12px 10px',
-                    borderRadius: 14,
+                    padding: '10px 8px',
+                    borderRadius: 12,
                     background: 'var(--bg3)',
                     border: '1px solid var(--border)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 9,
+                    gap: 8,
                     position: 'relative',
                     minWidth: 0,
+                    width: '100%',
                     maxWidth: '100%',
                     boxSizing: 'border-box',
                     overflow: 'hidden',
                   }}
                 >
-                  {item.isNew && (
-                    <span
-                      className="font-mono"
-                      style={{
-                        position: 'absolute',
-                        top: 6,
-                        right: 6,
-                        fontSize: 8,
-                        fontWeight: 700,
-                        padding: '1.5px 5px',
-                        borderRadius: 999,
-                        background: 'rgba(0,232,154,0.14)',
-                        border: '1px solid rgba(0,232,154,0.35)',
-                        color: 'var(--green)',
-                        lineHeight: 1.1,
-                      }}
-                    >
-                      NEW
-                    </span>
-                  )}
                   <div
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
+                      width: 32,
+                      height: 32,
+                      borderRadius: 9,
                       background: item.bg,
                       border: `1px solid ${item.border}`,
                       display: 'flex',
@@ -10287,18 +10397,47 @@ export default function App() {
                   >
                     {item.svg}
                   </div>
-                  <div style={{ minWidth: 0, flex: 1, paddingRight: item.isNew ? 26 : 0 }}>
+                  <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
                     <div
                       style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: 'var(--txt)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 3,
+                        minWidth: 0,
                       }}
                     >
-                      {item.label}
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: 'var(--txt)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          minWidth: 0,
+                        }}
+                      >
+                        {item.label}
+                      </span>
+                      {item.isNew && (
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 7.5,
+                            fontWeight: 700,
+                            padding: '1px 4px',
+                            borderRadius: 999,
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid var(--border2)',
+                            color: 'var(--txt)',
+                            flexShrink: 0,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          NEW
+                        </span>
+                      )}
                     </div>
                     <div
                       style={{
