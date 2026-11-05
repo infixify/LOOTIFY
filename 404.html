@@ -861,7 +861,13 @@ var PLAYER_HASH_ROUTES = [
   'overview',
   'quests',
   'offerwalls',
+  'ptc',
+  'youtube',
+  'video',
+  'surveys',
+  'survey',
   'shortlinks',
+  'shortlink',
   'tasks',
   'faucet',
   'roll',
@@ -870,7 +876,7 @@ var PLAYER_HASH_ROUTES = [
 ];
 
 function getCleanHash() {
-  return (window.location.hash || '').replace(/^#\/?/, '').replace(/\.html$/, '').toLowerCase();
+  return (window.location.hash || '').replace(/^#\/?/, '').split('?')[0].replace(/\.html$/, '').toLowerCase();
 }
 
 function getSavedPlayerUser() {
@@ -1297,12 +1303,12 @@ function ensureStaticBundleLoaded() {
     } catch (e) {}
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = './assets/lootify.css?v=20261104v36';
+    link.href = './assets/lootify.css?v=20261105v34';
     document.head.appendChild(link);
 
     var s = document.createElement('script');
     s.type = 'module';
-    s.src = './assets/lootify.js?v=20261104v36';
+    s.src = './assets/lootify.js?v=20261105v34';
     document.body.appendChild(s);
   }
 }

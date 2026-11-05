@@ -521,7 +521,7 @@ function saveCachedShortlinks(links: ShortlinkConfig[]) {
   } catch {}
 }
 
-const STORAGE_OWM_FEED_CACHE_KEY = 'lootify_owm_feed_cache_v3';
+const STORAGE_OWM_FEED_CACHE_KEY = 'lootify_owm_feed_cache_v4';
 
 function personalizeOwmItemUrl(rawUrl: string, uid: string): string {
   const cleanUrl = String(rawUrl || '').trim();
@@ -561,21 +561,38 @@ function personalizeOwmFeedForUser(
   }
   if (!activeUid) activeUid = 'plr_c2fydghha3';
 
+  const rawPtc =
+    Array.isArray(feed.ptc) && feed.ptc.length > 0 ? feed.ptc : INITIAL_OWM_FEED_SEED.ptc;
+  const rawShortlinks =
+    Array.isArray(feed.shortlinks) && feed.shortlinks.length > 0
+      ? feed.shortlinks
+      : INITIAL_OWM_FEED_SEED.shortlinks;
+  const rawTasks =
+    Array.isArray(feed.tasks) && feed.tasks.length > 0 ? feed.tasks : INITIAL_OWM_FEED_SEED.tasks;
+  const rawOffers =
+    Array.isArray(feed.offers) && feed.offers.length > 0
+      ? feed.offers
+      : INITIAL_OWM_FEED_SEED.offers;
+  const rawSurveys =
+    Array.isArray(feed.surveys) && feed.surveys.length > 0
+      ? feed.surveys
+      : INITIAL_OWM_FEED_SEED.surveys;
+
   return {
-    ptc: (Array.isArray(feed.ptc) ? feed.ptc : []).map((x) => ({
+    ptc: rawPtc.map((x) => ({
       ...x,
       url: personalizeOwmItemUrl(x?.url, activeUid),
     })),
-    shortlinks: (Array.isArray(feed.shortlinks) ? feed.shortlinks : []).map((x) => ({
+    shortlinks: rawShortlinks.map((x) => ({
       ...x,
       url: personalizeOwmItemUrl(x?.url, activeUid),
     })),
-    tasks: Array.isArray(feed.tasks) ? feed.tasks : [],
-    offers: (Array.isArray(feed.offers) ? feed.offers : []).map((x) => ({
+    tasks: rawTasks,
+    offers: rawOffers.map((x) => ({
       ...x,
       url: personalizeOwmItemUrl(x?.url, activeUid),
     })),
-    surveys: (Array.isArray(feed.surveys) ? feed.surveys : []).map((x) => ({
+    surveys: rawSurveys.map((x) => ({
       ...x,
       url: personalizeOwmItemUrl(x?.url, activeUid),
     })),
@@ -592,23 +609,31 @@ function loadCachedOwmFeed(): {
   history: any[];
 } {
   try {
-    const raw =
-      localStorage.getItem(STORAGE_OWM_FEED_CACHE_KEY) ||
-      localStorage.getItem('lootify_owm_feed_cache_v2');
+    const raw = localStorage.getItem(STORAGE_OWM_FEED_CACHE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        ((Array.isArray(parsed.offers) && parsed.offers.length > 0) ||
-          (Array.isArray(parsed.ptc) && parsed.ptc.length > 0))
-      ) {
+      if (parsed && typeof parsed === 'object') {
         return personalizeOwmFeedForUser({
-          ptc: Array.isArray(parsed.ptc) ? parsed.ptc : INITIAL_OWM_FEED_SEED.ptc,
-          shortlinks: Array.isArray(parsed.shortlinks) ? parsed.shortlinks : INITIAL_OWM_FEED_SEED.shortlinks,
-          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : INITIAL_OWM_FEED_SEED.tasks,
-          offers: Array.isArray(parsed.offers) ? parsed.offers : INITIAL_OWM_FEED_SEED.offers,
-          surveys: Array.isArray(parsed.surveys) ? parsed.surveys : INITIAL_OWM_FEED_SEED.surveys,
+          ptc:
+            Array.isArray(parsed.ptc) && parsed.ptc.length > 0
+              ? parsed.ptc
+              : INITIAL_OWM_FEED_SEED.ptc,
+          shortlinks:
+            Array.isArray(parsed.shortlinks) && parsed.shortlinks.length > 0
+              ? parsed.shortlinks
+              : INITIAL_OWM_FEED_SEED.shortlinks,
+          tasks:
+            Array.isArray(parsed.tasks) && parsed.tasks.length > 0
+              ? parsed.tasks
+              : INITIAL_OWM_FEED_SEED.tasks,
+          offers:
+            Array.isArray(parsed.offers) && parsed.offers.length > 0
+              ? parsed.offers
+              : INITIAL_OWM_FEED_SEED.offers,
+          surveys:
+            Array.isArray(parsed.surveys) && parsed.surveys.length > 0
+              ? parsed.surveys
+              : INITIAL_OWM_FEED_SEED.surveys,
           history: Array.isArray(parsed.history) ? parsed.history : [],
         });
       }
@@ -1883,8 +1908,16 @@ export default function App() {
     if (window.location.hash !== hashTarget) {
       window.location.hash = hashTarget;
     }
+    try {
+      document.body.classList.remove('on-landing-home');
+      document.body.classList.add('on-app-route');
+    } catch {}
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
     requestAnimationFrame(() => {
+      try {
+        document.body.classList.remove('on-landing-home');
+        document.body.classList.add('on-app-route');
+      } catch {}
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
     });
     const latestUser = loadCurrentUser() || user;
@@ -7229,7 +7262,7 @@ export default function App() {
           );
         })()}
 
-        {/* ── TAB: PTC ADS (Single-Piece Extracted PTC Cards + Iframe/Window/PubCrypto Walls) ── */}
+        {/* ── TAB: PTC ADS (Offerwall.me Window PTC & Iframe PTC Single-Piece Cards + Walls) ── */}
         {activeTab === 'ptc' && (() => {
           const baseOwmUrl =
             signedOfferwallMeUrl ||
@@ -7244,9 +7277,20 @@ export default function App() {
                   PUBCRYPTO_SITE_KEY
                 )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`;
 
-          const filteredPtcCards = owmFeed.ptc.filter((ad: any) => {
-            if (ptcCardTypeFilter === 'iframe') return Number(ad.type) === 0;
-            if (ptcCardTypeFilter === 'window') return Number(ad.type) === 1;
+          const allPtcAds =
+            Array.isArray(owmFeed.ptc) && owmFeed.ptc.length > 0
+              ? owmFeed.ptc
+              : personalizeOwmFeedForUser(INITIAL_OWM_FEED_SEED, user.id).ptc;
+
+          const isWindowPtcAd = (ad: any) =>
+            Number(ad?.type) === 1 || String(ad?.url || '').includes('/sw.php');
+
+          const windowCount = allPtcAds.filter((ad: any) => isWindowPtcAd(ad)).length;
+          const iframeCount = allPtcAds.filter((ad: any) => !isWindowPtcAd(ad)).length;
+
+          const filteredPtcCards = allPtcAds.filter((ad: any) => {
+            if (ptcCardTypeFilter === 'window') return isWindowPtcAd(ad);
+            if (ptcCardTypeFilter === 'iframe') return !isWindowPtcAd(ad);
             return true;
           });
 
@@ -7280,17 +7324,17 @@ export default function App() {
                   </div>
                   <div>
                     <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                      PTC Ads (Single-Piece Pay-To-Click Cards)
+                      PTC Ads — Window PTC &amp; Iframe PTC
                     </h2>
                     <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
-                      {owmFeed.ptc.length} Individual PTC Ads ready (+{totalPtcCoins} Coins) for Player ID{' '}
+                      {allPtcAds.length} Live Offerwall.me PTC Ads ({windowCount} Window • {iframeCount} Iframe • +{totalPtcCoins} Coins) for{' '}
                       <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Postback: <code className="font-mono">lootify/api/postback</code>
                     </p>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
-                    { id: 'cards', label: `Single-Piece PTC (${owmFeed.ptc.length})` },
+                    { id: 'cards', label: `All PTC Cards (${allPtcAds.length})` },
                     { id: 'owm_iframe', label: 'Iframe PTC Wall' },
                     { id: 'owm_window', label: 'Window PTC Wall' },
                     { id: 'pubcrypto', label: 'PubCrypto PTC Wall' },
@@ -7327,18 +7371,18 @@ export default function App() {
 
               {ptcSubMode === 'cards' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* Sub-filter for Single-Piece PTC Cards */}
+                  {/* Sub-filter for Single-Piece Window & Iframe PTC Cards */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {[
-                        { id: 'all', label: `All PTC Ads (${owmFeed.ptc.length})` },
+                        { id: 'all', label: `All PTC Ads (${allPtcAds.length})` },
                         {
                           id: 'window',
-                          label: `Window PTC (${owmFeed.ptc.filter((x: any) => Number(x.type) === 1).length})`,
+                          label: `🪟 Window PTC (${windowCount})`,
                         },
                         {
                           id: 'iframe',
-                          label: `Iframe PTC (${owmFeed.ptc.filter((x: any) => Number(x.type) === 0).length})`,
+                          label: `🖼️ Iframe PTC (${iframeCount})`,
                         },
                       ].map((f) => {
                         const active = ptcCardTypeFilter === f.id;
@@ -7349,12 +7393,12 @@ export default function App() {
                             onClick={() => setPtcCardTypeFilter(f.id as any)}
                             className="font-mono"
                             style={{
-                              padding: '6px 12px',
+                              padding: '7px 14px',
                               borderRadius: 8,
-                              fontSize: 11.5,
+                              fontSize: 12,
                               fontWeight: 700,
                               cursor: 'pointer',
-                              background: active ? 'rgba(56,189,248,0.15)' : 'var(--bg2)',
+                              background: active ? 'rgba(56,189,248,0.16)' : 'var(--bg2)',
                               border: active ? '1.5px solid #38BDF8' : '1px solid var(--border)',
                               color: active ? '#38BDF8' : 'var(--txt2)',
                             }}
@@ -7365,24 +7409,21 @@ export default function App() {
                       })}
                     </div>
                     <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
-                      Click any card below to watch &amp; earn instant Coins
+                      Every card is tagged with <strong>WINDOW PTC</strong> or <strong>IFRAME PTC</strong>
                     </span>
                   </div>
 
-                  {owmFeedLoading && filteredPtcCards.length === 0 ? (
+                  {filteredPtcCards.length === 0 ? (
                     <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
-                      Loading individual PTC ads from Offerwall.me API...
-                    </div>
-                  ) : filteredPtcCards.length === 0 ? (
-                    <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
-                      No PTC ads in this filter right now. Try switching filter or open PubCrypto PTC Wall above.
+                      No PTC ads in this filter right now. Try switching filter above.
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
                       {filteredPtcCards.map((ad: any, idx: number) => {
                         const rewardCoins = Number(ad.reward) || 0;
                         const durationSec = Number(ad.duration) || 5;
-                        const isWindow = Number(ad.type) === 1;
+                        const isWindow = isWindowPtcAd(ad);
+                        const personalizedHref = personalizeOwmItemUrl(ad.url, user.id);
                         return (
                           <div
                             key={`${ad.title}_${idx}`}
@@ -7393,125 +7434,124 @@ export default function App() {
                               flexDirection: 'column',
                               justifyContent: 'space-between',
                               gap: 14,
-                              border: '1px solid rgba(56,189,248,0.28)',
+                              border: isWindow
+                                ? '1.5px solid rgba(56,189,248,0.38)'
+                                : '1.5px solid rgba(0,232,154,0.35)',
                               background: 'var(--bg2)',
                             }}
                           >
                             <div>
-                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                  <div
+                              {/* Prominent Top Tag Bar: WINDOW PTC vs IFRAME PTC */}
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: 8,
+                                  marginBottom: 10,
+                                  paddingBottom: 10,
+                                  borderBottom: '1px solid var(--border)',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <span
+                                    className="font-mono"
                                     style={{
-                                      width: 38,
-                                      height: 38,
-                                      borderRadius: 10,
-                                      background: isWindow ? 'rgba(56,189,248,0.14)' : 'rgba(0,232,154,0.14)',
+                                      fontSize: 11,
+                                      padding: '4px 10px',
+                                      borderRadius: 6,
+                                      background: isWindow
+                                        ? 'rgba(56,189,248,0.18)'
+                                        : 'rgba(0,232,154,0.18)',
                                       border: isWindow
-                                        ? '1px solid rgba(56,189,248,0.32)'
-                                        : '1px solid rgba(0,232,154,0.32)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
+                                        ? '1px solid rgba(56,189,248,0.45)'
+                                        : '1px solid rgba(0,232,154,0.45)',
                                       color: isWindow ? '#38BDF8' : 'var(--green)',
-                                      flexShrink: 0,
+                                      fontWeight: 700,
+                                      letterSpacing: '0.03em',
                                     }}
                                   >
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-                                      <circle cx="12" cy="12" r="10" />
-                                      <polyline points="12 6 12 12 16 14" />
-                                    </svg>
-                                  </div>
-                                  <div>
-                                    <h3 className="font-display" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--txt)' }}>
-                                      {ad.title}
-                                    </h3>
-                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                                    {isWindow ? '🪟 WINDOW PTC' : '🖼️ IFRAME PTC'}
+                                  </span>
+                                  <span
+                                    className="font-mono"
+                                    style={{
+                                      fontSize: 10.5,
+                                      padding: '3px 8px',
+                                      borderRadius: 6,
+                                      background: 'rgba(245,158,11,0.15)',
+                                      border: '1px solid rgba(245,158,11,0.32)',
+                                      color: '#F59E0B',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    ⏱️ {durationSec}s
+                                  </span>
+                                  {(() => {
+                                    const st = getOwmCardLiveStatus(`ptc_${ad.title}_${idx}`, ad.title);
+                                    if (!st) return null;
+                                    return (
                                       <span
                                         className="font-mono"
                                         style={{
                                           fontSize: 10,
-                                          padding: '2px 7px',
+                                          padding: '3px 7px',
                                           borderRadius: 5,
-                                          background: isWindow ? 'rgba(56,189,248,0.15)' : 'rgba(0,232,154,0.15)',
-                                          color: isWindow ? '#38BDF8' : 'var(--green)',
+                                          background: st.bg,
+                                          color: st.color,
                                           fontWeight: 700,
                                         }}
                                       >
-                                        {isWindow ? 'WINDOW PTC' : 'IFRAME PTC'}
+                                        {st.label}
                                       </span>
-                                      <span
-                                        className="font-mono"
-                                        style={{
-                                          fontSize: 10,
-                                          padding: '2px 7px',
-                                          borderRadius: 5,
-                                          background: 'rgba(245,158,11,0.15)',
-                                          color: '#F59E0B',
-                                          fontWeight: 700,
-                                        }}
-                                      >
-                                        {durationSec}s TIMER
-                                      </span>
-                                      {(() => {
-                                        const st = getOwmCardLiveStatus(`ptc_${ad.title}_${idx}`, ad.title);
-                                        if (!st) return null;
-                                        return (
-                                          <span
-                                            className="font-mono"
-                                            style={{
-                                              fontSize: 10,
-                                              padding: '2px 7px',
-                                              borderRadius: 5,
-                                              background: st.bg,
-                                              color: st.color,
-                                              fontWeight: 700,
-                                            }}
-                                          >
-                                            {st.label}
-                                          </span>
-                                        );
-                                      })()}
-                                    </div>
-                                  </div>
+                                    );
+                                  })()}
                                 </div>
 
                                 <div
                                   style={{
                                     textAlign: 'right',
-                                    padding: '6px 10px',
+                                    padding: '4px 10px',
                                     borderRadius: 8,
-                                    background: 'rgba(0,232,154,0.1)',
-                                    border: '1px solid rgba(0,232,154,0.3)',
+                                    background: 'rgba(0,232,154,0.12)',
+                                    border: '1px solid rgba(0,232,154,0.32)',
                                     flexShrink: 0,
                                   }}
                                 >
-                                  <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
-                                    +{rewardCoins}
-                                  </div>
-                                  <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
-                                    COINS
-                                  </div>
+                                  <span className="font-mono" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--green)' }}>
+                                    +{rewardCoins} Coins
+                                  </span>
                                 </div>
                               </div>
 
+                              <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>
+                                {ad.title}
+                              </h3>
+
                               {ad.description && (
-                                <p style={{ fontSize: 12, color: 'var(--txt2)', marginTop: 10, lineHeight: 1.5 }}>
+                                <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 6, lineHeight: 1.5 }}>
                                   {ad.description}
                                 </p>
                               )}
                             </div>
 
                             <a
-                              href={ad.url}
+                              href={personalizedHref}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => markOwmItemClicked(`ptc_${ad.title}_${idx}`)}
                               className="btn btn-primary btn-sm btn-full"
-                              style={{ textAlign: 'center', textDecoration: 'none' }}
+                              style={{
+                                textAlign: 'center',
+                                textDecoration: 'none',
+                                background: isWindow ? '#38BDF8' : 'var(--green)',
+                                color: '#03100A',
+                                fontWeight: 700,
+                              }}
                             >
                               {owmClickedIds[`ptc_${ad.title}_${idx}`]
-                                ? `Re-open Ad (${durationSec}s) • Auto-Syncing ↗`
-                                : `Watch Ad (${durationSec}s) & Earn +${rewardCoins} Coins ↗`}
+                                ? `Re-open ${isWindow ? 'Window PTC' : 'Iframe PTC'} (${durationSec}s) • Auto-Syncing ↗`
+                                : `Open ${isWindow ? 'Window PTC' : 'Iframe PTC'} (${durationSec}s) • +${rewardCoins} Coins ↗`}
                             </a>
                           </div>
                         );
@@ -8117,821 +8157,204 @@ export default function App() {
           </div>
         )}
 
-        {/* ── TAB 2B: SHORTLINKS EARNING SECTION ── */}
-        {activeTab === 'shortlinks' && (() => {
-          const enabledShortlinks = shortlinks.filter((s) => s.enabled);
-          const totalViewsPossible = enabledShortlinks.reduce((acc, s) => acc + (Number(s.daily_limit) || 1), 0);
-          const totalViewsDoneToday = enabledShortlinks.reduce(
-            (acc, s) => acc + Math.min(Number(s.daily_limit) || 1, Number(s.claims_today) || 0),
-            0
-          );
-          const totalViewsLeftToday = Math.max(0, totalViewsPossible - totalViewsDoneToday);
-          const totalCoinsLeftToday = Number(
-            enabledShortlinks
-              .reduce((acc, s) => {
-                const rem = Math.max(0, (Number(s.daily_limit) || 1) - (Number(s.claims_today) || 0));
-                return acc + rem * (Number(s.reward_coins) || 0);
-              }, 0)
-              .toFixed(2)
-          );
-          const totalCoinsEarnedToday = Number(
-            enabledShortlinks
-              .reduce((acc, s) => {
-                const done = Math.min(Number(s.daily_limit) || 1, Number(s.claims_today) || 0);
-                return acc + done * (Number(s.reward_coins) || 0);
-              }, 0)
-              .toFixed(2)
-          );
-          const activeShortlinkObj =
-            enabledShortlinks.find((s) => s.id === activeShortlinkId) || null;
-
-          const filteredShortlinks = enabledShortlinks
-            .filter((s) => {
-              const done = (Number(s.claims_today) || 0) >= (Number(s.daily_limit) || 1);
-              if (shortlinkFilter === 'available') return !done;
-              if (shortlinkFilter === 'completed') return done;
-              return true;
-            })
-            .sort((a, b) => {
-              if (shortlinkFilter === 'highest') {
-                return (Number(b.reward_coins) || 0) - (Number(a.reward_coins) || 0);
-              }
-              const aDone = (Number(a.claims_today) || 0) >= (Number(a.daily_limit) || 1) ? 1 : 0;
-              const bDone = (Number(b.claims_today) || 0) >= (Number(b.daily_limit) || 1) ? 1 : 0;
-              if (aDone !== bDone) return aDone - bDone;
-              return (Number(b.reward_coins) || 0) - (Number(a.reward_coins) || 0);
-            });
-
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-              {/* Header & Refresh Bar */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                      🔗 Paid Shortlinks Wall
-                    </h2>
-                    <span
-                      className="font-mono"
-                      style={{
-                        fontSize: 11,
-                        padding: '3px 9px',
-                        borderRadius: 6,
-                        background: 'rgba(0,232,154,0.14)',
-                        border: '1px solid rgba(0,232,154,0.35)',
-                        color: 'var(--green)',
-                        fontWeight: 700,
-                      }}
-                    >
-                      INSTANT WALLET CREDIT + 3 FAUCET ROLLS
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Visit sponsor shortlinks, complete the quick captcha/timer step, and earn instant withdrawable coins + Faucet Energy!
-                  </p>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => fetchShortlinksFromBackend(user.id)}
-                    className="btn btn-outline btn-sm"
-                  >
-                    🔄 Refresh Shortlinks
-                  </button>
-                  {user.email.toLowerCase() === ADMIN_ALLOWED_EMAIL && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.location.hash = '#/admin';
-                      }}
-                      className="btn btn-ghost btn-sm"
-                      style={{ color: 'var(--gold)' }}
-                    >
-                      ⚙️ Manage Links in Admin
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* 4-Card Daily Shortlinks Summary Stats */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
-                <div className="card" style={{ padding: 20, border: '1px solid rgba(0,232,154,0.3)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', letterSpacing: '0.06em', marginBottom: 6 }}>
-                    COINS AVAILABLE TODAY
-                  </div>
-                  <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--green)' }}>
-                    +{totalCoinsLeftToday.toLocaleString('en-IN')}{' '}
-                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Value: ₹{((totalCoinsLeftToday * 90) / 100000).toFixed(3)} (${(totalCoinsLeftToday / 100000).toFixed(4)} USDT)
-                  </div>
-                </div>
-
-                <div className="card" style={{ padding: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt2)', letterSpacing: '0.06em', marginBottom: 6 }}>
-                    SHORTLINKS REMAINING
-                  </div>
-                  <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--txt)' }}>
-                    {totalViewsLeftToday}{' '}
-                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>/ {totalViewsPossible} Views</span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Resets daily at 00:00 UTC • {enabledShortlinks.length} Active Networks
-                  </div>
-                </div>
-
-                <div className="card" style={{ padding: 20, border: '1px solid rgba(255,180,0,0.28)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gold)', letterSpacing: '0.06em', marginBottom: 6 }}>
-                    CLAIMED TODAY
-                  </div>
-                  <div className="font-mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--gold)' }}>
-                    +{totalCoinsEarnedToday.toLocaleString('en-IN')}{' '}
-                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>Coins</span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Completed {totalViewsDoneToday} Shortlink View(s) Today
-                  </div>
-                </div>
-
-                <div className="card" style={{ padding: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--violet)', letterSpacing: '0.06em', marginBottom: 6 }}>
-                    FAUCET ENERGY BONUS
-                  </div>
-                  <div className="font-mono" style={{ fontSize: 26, fontWeight: 700, color: 'var(--violet)' }}>
-                    +3 Free Rolls
-                  </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 4 }}>
-                    Unlocked automatically per Shortlink completed!
-                  </div>
-                </div>
-              </div>
-
-              {/* Overall Daily Shortlink Completion Progress Bar */}
-              <div
-                className="card"
-                style={{
-                  padding: '16px 20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                  background: 'var(--bg2)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                  <span className="font-mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt)' }}>
-                    📈 Daily Shortlinks Completion Progress: {totalViewsDoneToday} / {totalViewsPossible} Views ({totalViewsPossible > 0 ? Math.round((totalViewsDoneToday / totalViewsPossible) * 100) : 0}%)
-                  </span>
-                  <span className="font-mono" style={{ fontSize: 11.5, color: 'var(--green)', fontWeight: 700 }}>
-                    ⚡ +{totalViewsDoneToday * 3} Free Faucet Rolls Unlocked Today
-                  </span>
-                </div>
+        {/* ── TAB 2B: SHORTLINKS EARNING SECTION (Clean Offerwall.me Single-Piece Shortlinks Only) ── */}
+        {activeTab === 'shortlinks' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div
                   style={{
-                    width: '100%',
-                    height: 9,
-                    borderRadius: 999,
-                    background: 'var(--bg3)',
-                    border: '1px solid var(--border)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${totalViewsPossible > 0 ? Math.min(100, Math.round((totalViewsDoneToday / totalViewsPossible) * 100)) : 0}%`,
-                      height: '100%',
-                      background: 'linear-gradient(90deg, var(--green), var(--gold))',
-                      transition: 'width 0.35s ease',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Status Banner */}
-              {shortlinkStatusMsg && (
-                <div
-                  style={{
-                    padding: '14px 18px',
+                    width: 44,
+                    height: 44,
                     borderRadius: 12,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background:
-                      shortlinkStatusMsg.type === 'success'
-                        ? 'rgba(0,232,154,0.12)'
-                        : 'rgba(255,85,102,0.12)',
-                    border:
-                      shortlinkStatusMsg.type === 'success'
-                        ? '1.5px solid rgba(0,232,154,0.4)'
-                        : '1.5px solid rgba(255,85,102,0.4)',
-                    color: shortlinkStatusMsg.type === 'success' ? 'var(--green)' : 'var(--red)',
+                    background: 'rgba(0,232,154,0.14)',
+                    border: '1px solid rgba(0,232,154,0.35)',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
+                    justifyContent: 'center',
+                    color: 'var(--green)',
+                    flexShrink: 0,
                   }}
                 >
-                  <span>{shortlinkStatusMsg.text}</span>
-                  <button
-                    type="button"
-                    onClick={() => setShortlinkStatusMsg(null)}
-                    style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 15 }}
-                  >
-                    ✕
-                  </button>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
                 </div>
-              )}
-
-              {/* Active Shortlink Step Verification Box */}
-              {activeShortlinkObj && (() => {
-                const maxTimer = Math.max(5, Number(activeShortlinkObj.timer_seconds) || 12);
-                const verifyPct =
-                  shortlinkTimerSecs <= 0
-                    ? 100
-                    : Math.min(100, Math.max(5, Math.round(((maxTimer - shortlinkTimerSecs) / maxTimer) * 100)));
-                return (
-                  <div
-                    className="card card-glow"
-                    style={{
-                      padding: '22px 24px',
-                      border: '2px solid var(--green)',
-                      background: 'linear-gradient(135deg, rgba(0,232,154,0.11), rgba(255,180,0,0.05))',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 14,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                      <div>
-                        <div className="font-mono" style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
-                          🛡️ ACTIVE SHORTLINK VERIFICATION SESSION ({verifyPct}%)
-                        </div>
-                        <h3 className="font-display" style={{ fontSize: 19, fontWeight: 700, color: 'var(--txt)', marginTop: 2 }}>
-                          {activeShortlinkObj.name} ({activeShortlinkObj.provider}) — +{activeShortlinkObj.reward_coins} Coins
-                        </h3>
-                        <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 2 }}>
-                          {shortlinkTimerSecs > 0
-                            ? `Complete the shortlink steps in the opened tab. Verification unlocks in ${shortlinkTimerSecs} second(s)...`
-                            : '✅ Shortlink visit timer verified! Click the button below to credit your Coins immediately.'}
-                        </p>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <a
-                          href={resolveShortlinkDestinationUrl(activeShortlinkObj, user.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-outline btn-sm"
-                        >
-                          ↗ Re-open Shortlink Tab
-                        </a>
-
-                        <button
-                          type="button"
-                          disabled={!shortlinkReadyToClaim || shortlinkTimerSecs > 0 || shortlinkClaiming}
-                          onClick={() => handleVerifyAndClaimShortlink(activeShortlinkObj)}
-                          className="btn btn-primary btn-sm"
-                          style={{
-                            padding: '11px 20px',
-                            fontSize: 13,
-                            fontWeight: 700,
-                            opacity: !shortlinkReadyToClaim || shortlinkTimerSecs > 0 || shortlinkClaiming ? 0.65 : 1,
-                          }}
-                        >
-                          {shortlinkClaiming
-                            ? '⏳ Crediting Coins...'
-                            : shortlinkTimerSecs > 0
-                            ? `⏳ Waiting ${shortlinkTimerSecs}s...`
-                            : `✅ Verify & Claim +${activeShortlinkObj.reward_coins} Coins!`}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveShortlinkId(null);
-                            setShortlinkTimerSecs(0);
-                            setShortlinkReadyToClaim(false);
-                          }}
-                          className="btn btn-ghost btn-sm"
-                          style={{ padding: '8px 12px', fontSize: 12 }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Verification Countdown Progress Bar */}
-                    <div
-                      style={{
-                        width: '100%',
-                        height: 8,
-                        borderRadius: 999,
-                        background: 'var(--bg3)',
-                        overflow: 'hidden',
-                        border: '1px solid var(--border)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${verifyPct}%`,
-                          height: '100%',
-                          background:
-                            verifyPct >= 100
-                              ? 'linear-gradient(90deg, var(--green), #10B981)'
-                              : 'linear-gradient(90deg, var(--gold), var(--green))',
-                          transition: 'width 0.8s linear',
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Filter Tabs */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {(
-                    [
-                      { id: 'all', label: `All Shortlinks (${enabledShortlinks.length})` },
-                      { id: 'available', label: '⚡ Available Now' },
-                      { id: 'highest', label: '🔥 Highest Paying' },
-                      { id: 'completed', label: '✅ Completed Today' },
-                    ] as const
-                  ).map((f) => {
-                    const active = shortlinkFilter === f.id;
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        onClick={() => setShortlinkFilter(f.id)}
-                        className="font-mono"
-                        style={{
-                          padding: '7px 14px',
-                          borderRadius: 8,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          background: active ? 'rgba(0,232,154,0.14)' : 'var(--bg2)',
-                          border: active ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                          color: active ? 'var(--green)' : 'var(--txt2)',
-                        }}
-                      >
-                        {f.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
-                  100,000 Coins = $1.00 USD (₹90 INR) • 0% Fee FaucetPay Cashout
+                <div>
+                  <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
+                    Paid Shortlinks ({owmFeed.shortlinks.length})
+                  </h2>
+                  <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
+                    Complete sponsor shortlinks for Player ID{' '}
+                    <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Instant S2S credit via{' '}
+                    <code className="font-mono">lootify/api/postback</code>
+                  </p>
                 </div>
               </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchOfferwallMeFeed(user.id, true);
+                    syncUserWithBackend(user, true);
+                  }}
+                  className="btn btn-outline btn-sm"
+                >
+                  {owmFeedLoading ? 'Refreshing...' : 'Refresh & Sync'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPartnerShortlinksWall((prev) => !prev)}
+                  className="btn btn-ghost btn-sm"
+                >
+                  {showPartnerShortlinksWall ? 'Hide Iframe Wall' : 'Open Iframe Wall'}
+                </button>
+              </div>
+            </div>
 
-              {/* Shortlinks Cards Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
-                {filteredShortlinks.map((sl) => {
-                  const claimsDone = Math.min(Number(sl.daily_limit) || 1, Number(sl.claims_today) || 0);
-                  const maxViews = Math.max(1, Number(sl.daily_limit) || 1);
-                  const isCompletedToday = claimsDone >= maxViews;
-                  const isActiveSession = activeShortlinkId === sl.id;
-                  const progressPct = Math.min(100, Math.round((claimsDone / maxViews) * 100));
-                  const inrEq = ((Number(sl.reward_coins) * 90) / 100000).toFixed(3);
-                  const destHref = resolveShortlinkDestinationUrl(sl, user.id);
-
+            {owmFeed.shortlinks.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: 14 }}>
+                {owmFeed.shortlinks.map((osl: any, idx: number) => {
+                  const remViews = Number(osl.remaining_views) || 0;
+                  const maxViews = Math.max(1, Number(osl.daily_limit) || 1);
+                  const doneViews = Math.max(0, maxViews - remViews);
+                  const pct = Math.min(100, Math.round((doneViews / maxViews) * 100));
+                  const rewardCoins = Number(osl.reward) || 0;
                   return (
                     <div
-                      key={sl.id}
+                      key={osl.id || idx}
                       className="card"
                       style={{
-                        padding: 20,
+                        padding: 16,
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'space-between',
-                        gap: 14,
-                        border: isActiveSession
-                          ? '2px solid var(--green)'
-                          : isCompletedToday
-                          ? '1px solid var(--border)'
-                          : '1px solid rgba(0,232,154,0.28)',
-                        opacity: isCompletedToday ? 0.68 : 1,
-                        background: isActiveSession
-                          ? 'linear-gradient(135deg, rgba(0,232,154,0.08), var(--bg2))'
-                          : 'var(--bg2)',
+                        gap: 12,
+                        background: 'var(--bg2)',
+                        border: remViews > 0 ? '1px solid rgba(0,232,154,0.28)' : '1px solid var(--border)',
+                        opacity: remViews > 0 ? 1 : 0.6,
                       }}
                     >
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
-                                {sl.name}
-                              </h3>
-                              <span
-                                className="font-mono"
-                                style={{
-                                  fontSize: 10,
-                                  padding: '2px 7px',
-                                  borderRadius: 5,
-                                  background:
-                                    sl.difficulty === 'Fast'
-                                      ? 'rgba(0,232,154,0.15)'
-                                      : sl.difficulty === 'Easy'
-                                      ? 'rgba(56,189,248,0.15)'
-                                      : 'rgba(255,180,0,0.15)',
-                                  color:
-                                    sl.difficulty === 'Fast'
-                                      ? 'var(--green)'
-                                      : sl.difficulty === 'Easy'
-                                      ? '#38BDF8'
-                                      : 'var(--gold)',
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {sl.difficulty.toUpperCase()} • {sl.timer_seconds}s
-                              </span>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 9,
+                                background: 'rgba(0,232,154,0.12)',
+                                border: '1px solid rgba(0,232,154,0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--green)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                              </svg>
                             </div>
-                            <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 3 }}>
-                              Provider: <strong style={{ color: 'var(--txt)' }}>{sl.provider}</strong> • {sl.badge || '⚡ Instant Credit'}
+                            <div>
+                              <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                                {osl.name}
+                              </div>
+                              <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)' }}>
+                                {osl.shortlink || 'Offerwall.me Shortlink'}
+                              </div>
                             </div>
                           </div>
-
                           <div
                             style={{
                               textAlign: 'right',
-                              padding: '6px 10px',
-                              borderRadius: 8,
+                              padding: '4px 8px',
+                              borderRadius: 7,
                               background: 'rgba(0,232,154,0.1)',
-                              border: '1px solid rgba(0,232,154,0.3)',
-                              flexShrink: 0,
+                              border: '1px solid rgba(0,232,154,0.28)',
                             }}
                           >
-                            <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
-                              +{sl.reward_coins}
+                            <div className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
+                              +{rewardCoins}
                             </div>
-                            <div className="font-mono" style={{ fontSize: 9.5, color: 'var(--txt2)' }}>
-                              COINS (₹{inrEq})
+                            <div className="font-mono" style={{ fontSize: 9, color: 'var(--txt2)' }}>
+                              COINS
                             </div>
                           </div>
                         </div>
 
-                        {/* Daily Views Progress Bar */}
                         <div style={{ marginTop: 10 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 5 }}>
-                            <span className="font-mono" style={{ color: 'var(--txt2)' }}>
-                              Daily Limit Progress
-                            </span>
-                            <span
-                              className="font-mono"
-                              style={{
-                                fontWeight: 700,
-                                color: isCompletedToday ? 'var(--gold)' : 'var(--green)',
-                              }}
-                            >
-                              {claimsDone} / {maxViews} Views Today
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 4 }}>
+                            <span className="font-mono" style={{ color: 'var(--txt2)' }}>Remaining Today</span>
+                            <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 700 }}>
+                              {remViews} / {maxViews} Left
                             </span>
                           </div>
-                          <div
-                            style={{
-                              width: '100%',
-                              height: 7,
-                              borderRadius: 999,
-                              background: 'var(--bg3)',
-                              overflow: 'hidden',
-                              border: '1px solid var(--border)',
-                            }}
-                          >
+                          <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'var(--bg3)', overflow: 'hidden' }}>
                             <div
                               style={{
-                                width: `${progressPct}%`,
+                                width: `${pct}%`,
                                 height: '100%',
-                                background: isCompletedToday
-                                  ? 'linear-gradient(90deg, var(--gold), #D97706)'
-                                  : 'linear-gradient(90deg, var(--green), #059669)',
-                                transition: 'width 0.3s ease',
+                                background: 'linear-gradient(90deg, var(--green), #059669)',
                               }}
                             />
                           </div>
                         </div>
                       </div>
 
-                      {/* Action Button */}
-                      {isCompletedToday ? (
-                        <button
-                          type="button"
-                          disabled
-                          className="btn btn-outline btn-sm btn-full"
-                          style={{ opacity: 0.6, cursor: 'not-allowed' }}
-                        >
-                          ✅ Completed for Today ({claimsDone}/{maxViews})
-                        </button>
-                      ) : isActiveSession && shortlinkReadyToClaim && shortlinkTimerSecs === 0 ? (
-                        <button
-                          type="button"
-                          disabled={shortlinkClaiming}
-                          onClick={() => handleVerifyAndClaimShortlink(sl)}
-                          className="btn btn-primary btn-sm btn-full"
-                          style={{ fontWeight: 700 }}
-                        >
-                          {shortlinkClaiming
-                            ? '⏳ Crediting...'
-                            : `✅ Verify & Claim +${sl.reward_coins} Coins!`}
-                        </button>
-                      ) : isActiveSession && shortlinkTimerSecs > 0 ? (
-                        <button
-                          type="button"
-                          disabled
-                          className="btn btn-outline btn-sm btn-full"
-                          style={{ color: 'var(--gold)', borderColor: 'rgba(255,180,0,0.45)' }}
-                        >
-                          ⏳ Visiting Shortlink... ({shortlinkTimerSecs}s left)
-                        </button>
-                      ) : (
+                      {remViews > 0 ? (
                         <a
-                          href={destHref}
+                          href={osl.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          onClick={() => handleStartShortlinkVisit(sl)}
+                          onClick={() => markOwmItemClicked(`sl_${osl.id || idx}`)}
                           className="btn btn-primary btn-sm btn-full"
-                          style={{
-                            textAlign: 'center',
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                          }}
+                          style={{ textAlign: 'center', textDecoration: 'none' }}
                         >
-                          🔗 Visit &amp; Claim (+{sl.reward_coins} Coins) ↗
+                          {owmClickedIds[`sl_${osl.id || idx}`]
+                            ? `Visiting (${remViews} Left) • Auto-Syncing ↗`
+                            : `Visit Shortlink (+${rewardCoins} Coins) ↗`}
                         </a>
+                      ) : (
+                        <button type="button" disabled className="btn btn-outline btn-sm btn-full" style={{ opacity: 0.6 }}>
+                          Completed for Today
+                        </button>
                       )}
                     </div>
                   );
                 })}
               </div>
+            )}
 
-              {/* Single-Piece Extracted Offerwall.me Shortlinks Cards + Optional Wall */}
-              <div className="card card-glow" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div
+            {showPartnerShortlinksWall && (
+              <div className="card card-glow" style={{ padding: 20 }}>
+                <iframe
+                  key={`shortlinks_owm_${user.id}`}
+                  src={buildOfferwallMeTabUrl(
+                    signedOfferwallMeUrl ||
+                      buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
+                    'shortlinks'
+                  )}
+                  title="Offerwall.me Shortlinks"
+                  width="100%"
+                  height={620}
+                  frameBorder={0}
+                  allow="clipboard-write; fullscreen; popups"
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 14,
+                    display: 'block',
+                    width: '100%',
+                    height: 620,
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    background: '#0B121E',
                   }}
-                >
-                  <div>
-                    <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
-                      Offerwall.me — Single-Piece Extracted Shortlinks ({owmFeed.shortlinks.length})
-                    </h3>
-                    <p style={{ fontSize: 12.5, color: 'var(--txt2)', marginTop: 2 }}>
-                      Every shortlink below is extracted directly via API and credits your Player ID <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> via <code className="font-mono">lootify/api/postback</code>!
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => fetchOfferwallMeFeed(user.id, true)}
-                      className="btn btn-outline btn-sm"
-                    >
-                      {owmFeedLoading ? 'Refreshing...' : 'Refresh Partner Links'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowPartnerShortlinksWall((prev) => !prev)}
-                      className="btn btn-ghost btn-sm"
-                    >
-                      {showPartnerShortlinksWall ? 'Hide Iframe Wall' : 'Open Iframe Wall'}
-                    </button>
-                  </div>
-                </div>
-
-                {owmFeed.shortlinks.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: 14 }}>
-                    {owmFeed.shortlinks.map((osl: any, idx: number) => {
-                      const remViews = Number(osl.remaining_views) || 0;
-                      const maxViews = Math.max(1, Number(osl.daily_limit) || 1);
-                      const doneViews = Math.max(0, maxViews - remViews);
-                      const pct = Math.min(100, Math.round((doneViews / maxViews) * 100));
-                      const rewardCoins = Number(osl.reward) || 0;
-                      return (
-                        <div
-                          key={osl.id || idx}
-                          className="card"
-                          style={{
-                            padding: 16,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            gap: 12,
-                            background: 'var(--bg2)',
-                            border: remViews > 0 ? '1px solid rgba(0,232,154,0.28)' : '1px solid var(--border)',
-                            opacity: remViews > 0 ? 1 : 0.6,
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div
-                                  style={{
-                                    width: 34,
-                                    height: 34,
-                                    borderRadius: 9,
-                                    background: 'rgba(0,232,154,0.12)',
-                                    border: '1px solid rgba(0,232,154,0.3)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'var(--green)',
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                                  </svg>
-                                </div>
-                                <div>
-                                  <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
-                                    {osl.name}
-                                  </div>
-                                  <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)' }}>
-                                    {osl.shortlink || 'Offerwall.me Shortlink'}
-                                  </div>
-                                </div>
-                              </div>
-                              <div
-                                style={{
-                                  textAlign: 'right',
-                                  padding: '4px 8px',
-                                  borderRadius: 7,
-                                  background: 'rgba(0,232,154,0.1)',
-                                  border: '1px solid rgba(0,232,154,0.28)',
-                                }}
-                              >
-                                <div className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
-                                  +{rewardCoins}
-                                </div>
-                                <div className="font-mono" style={{ fontSize: 9, color: 'var(--txt2)' }}>
-                                  COINS
-                                </div>
-                              </div>
-                            </div>
-
-                            <div style={{ marginTop: 10 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 4 }}>
-                                <span className="font-mono" style={{ color: 'var(--txt2)' }}>Remaining Today</span>
-                                <span className="font-mono" style={{ color: 'var(--green)', fontWeight: 700 }}>
-                                  {remViews} / {maxViews} Left
-                                </span>
-                              </div>
-                              <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'var(--bg3)', overflow: 'hidden' }}>
-                                <div
-                                  style={{
-                                    width: `${pct}%`,
-                                    height: '100%',
-                                    background: 'linear-gradient(90deg, var(--green), #059669)',
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {remViews > 0 ? (
-                            <a
-                              href={osl.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => markOwmItemClicked(`sl_${osl.id || idx}`)}
-                              className="btn btn-primary btn-sm btn-full"
-                              style={{ textAlign: 'center', textDecoration: 'none' }}
-                            >
-                              {owmClickedIds[`sl_${osl.id || idx}`]
-                                ? `Visiting (${remViews} Left) • Auto-Syncing ↗`
-                                : `Visit Shortlink (+${rewardCoins} Coins) ↗`}
-                            </a>
-                          ) : (
-                            <button type="button" disabled className="btn btn-outline btn-sm btn-full" style={{ opacity: 0.6 }}>
-                              Completed for Today
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {showPartnerShortlinksWall && (
-                  <iframe
-                    key={`shortlinks_owm_${user.id}`}
-                    src={buildOfferwallMeTabUrl(
-                      signedOfferwallMeUrl ||
-                        buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
-                      'shortlinks'
-                    )}
-                    title="Offerwall.me Shortlinks"
-                    width="100%"
-                    height={620}
-                    frameBorder={0}
-                    allow="clipboard-write; fullscreen; popups"
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      height: 620,
-                      border: '1px solid var(--border)',
-                      borderRadius: 12,
-                      background: '#0B121E',
-                    }}
-                  />
-                )}
+                />
               </div>
-
-              {/* Recent Shortlink Claims History */}
-              {(() => {
-                const shortlinkClaimsHistory = (user.heldRewards || []).filter((h) =>
-                  String(h.title || '').toUpperCase().includes('SHORTLINK')
-                );
-                return (
-                  <div className="card" style={{ padding: 22 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                      <h3 className="font-display" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--txt)' }}>
-                        📜 Your Recent Shortlink Claims ({shortlinkClaimsHistory.length})
-                      </h3>
-                      <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
-                        INSTANT WALLET LEDGER
-                      </span>
-                    </div>
-                    {shortlinkClaimsHistory.length === 0 ? (
-                      <div
-                        style={{
-                          padding: '18px 14px',
-                          borderRadius: 10,
-                          background: 'var(--bg2)',
-                          border: '1px dashed var(--border2)',
-                          textAlign: 'center',
-                          fontSize: 12.5,
-                          color: 'var(--txt2)',
-                        }}
-                      >
-                        No shortlinks claimed yet today. Click <strong>&ldquo;🔗 Visit &amp; Claim&rdquo;</strong> on any shortlink card above to earn instant Coins + 3 Free Faucet Rolls!
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {shortlinkClaimsHistory.slice(0, 8).map((item) => (
-                          <div
-                            key={item.id}
-                            style={{
-                              padding: '10px 14px',
-                              borderRadius: 10,
-                              background: 'var(--bg2)',
-                              border: '1px solid var(--border)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              flexWrap: 'wrap',
-                              gap: 8,
-                            }}
-                          >
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{item.title}</div>
-                              <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--txt2)' }}>
-                                {formatIstDate(item.createdAt)} • Credited to Withdrawable Wallet
-                              </div>
-                            </div>
-                            <span className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
-                              +{item.coins} Coins
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              <div
-                className="card"
-                style={{
-                  padding: '16px 20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <span className="font-mono" style={{ fontSize: 10, color: 'var(--txt2)', letterSpacing: '0.08em' }}>
-                    SHORTLINKS SPONSOR PLACEMENT • OFFERWALL.ME
-                  </span>
-                  <span className="font-mono" style={{ fontSize: 10, color: 'var(--green)' }}>
-                    ACTIVE AD SLOT
-                  </span>
-                </div>
-                <OfferwallMeBanner size="728x90" />
-              </div>
-            </div>
-          );
-        })()}
+            )}
+          </div>
+        )}
 
         {/* ── TAB 2C: LOOTIFY BUILT-IN FREE FAUCET + FAUCETPAY INSTANT ROLL ── */}
         {activeTab === 'faucet' && (
