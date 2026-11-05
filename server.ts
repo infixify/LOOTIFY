@@ -1,11 +1,12 @@
 import crypto from 'crypto';
 import express from 'express';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 
 const ADMIN_EMAIL = 'sarthaksinghyadav1@gmail.com';
-const DB_FILE = path.join(process.cwd(), '.lootify-server-db.json');
+const DB_FILE = path.join(os.tmpdir(), '.lootify-server-db.json');
 
 // Server-side-only secret resolver for Offerwall.me (never exposed to browser/frontend)
 function getOfferwallMeSecret(dbSecret?: string): string {
@@ -19,7 +20,7 @@ function getOfferwallMeBearerToken(): string {
   return '35qVPqjgP6oB8wwiTFFUplZFqj455jgysnI3SuQH';
 }
 
-const OWM_CACHE_FILE = path.join(process.cwd(), '.lootify-owm-cache.json');
+const OWM_CACHE_FILE = path.join(os.tmpdir(), '.lootify-owm-cache.json');
 const _owmFeedCache = new Map<string, { ts: number; payload: any; refreshing?: boolean }>();
 
 try {
@@ -974,13 +975,7 @@ async function startServer() {
         (w.provider_id === 'pubcrypto' ||
           String(w.iframe_url_template || '').includes('pub.cryptolinkforearn.com'))
       ) {
-        const pubApiKey = getPubCryptoPublisherApiKey(w.secret_key);
-        signedIframeUrl = await createPubCryptoSignedEmbedUrl(
-          w.app_id || 'site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198',
-          reqUserId,
-          pubApiKey,
-          reqTheme
-        );
+        signedIframeUrl = '';
       }
       publicWalls.push({
         provider_id: w.provider_id,
@@ -1020,6 +1015,11 @@ async function startServer() {
         pubApiKey,
         reqTheme
       );
+      if (String(req.query.redirect || '') === '1' && signedUrl) {
+        res.redirect(302, signedUrl);
+        return;
+      }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.json({
         ok: true,
         provider_id: 'pubcrypto',

@@ -1,5 +1,7 @@
 node_modules/
 build/
+dist/
+site/
 coverage/
 .DS_Store
 *.log
@@ -8,4 +10,7 @@ coverage/
 data/
 .aistudio/
 public/assets/aistudio/
-
+assets/aistudio/
+.lootify-owm-cache.json
+.lootify-server-db.json
+bun.lock

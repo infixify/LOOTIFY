@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "vite build && (echo \"_worker.js\" > dist/.assetsignore 2>/dev/null || true) && (cp functions/worker.js dist/_worker.js 2>/dev/null || true) && mkdir -p assets public/assets site/assets && (cp dist/assets/* assets/ 2>/dev/null || true) && (cp dist/assets/* public/assets/ 2>/dev/null || true) && (cp dist/assets/* site/assets/ 2>/dev/null || true) && (cp index.html site/index.html 2>/dev/null || true)",
+    "build": "rm -rf public/assets/aistudio assets/aistudio site && vite build && (echo \"_worker.js\" > dist/.assetsignore 2>/dev/null || true) && (cp functions/worker.js dist/_worker.js 2>/dev/null || true) && (cp 404.html dist/404.html 2>/dev/null || true) && mkdir -p assets && (cp dist/assets/lootify.* assets/ 2>/dev/null || true)",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist site server.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

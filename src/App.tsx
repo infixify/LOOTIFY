@@ -370,33 +370,22 @@ function buildOfferwallMeTabUrl(
   }
 }
 
-function loadCachedPubCryptoUrl(uid?: string, themeMode?: string): string {
-  if (!uid) return '';
-  const cleanTheme = themeMode === 'light' ? 'light' : 'dark';
-  const key = `lootify_pc_embed_v2_${uid}_${cleanTheme}`;
+function loadCachedPubCryptoUrl(_uid?: string, _themeMode?: string): string {
+  // PubCrypto embed_token (owe_...) is strictly SINGLE-USE (1st call = 200 OK, 2nd call = 401 Embed link expired).
+  // Never cache or reuse a consumed embed_token across mounts!
   try {
-    const raw = sessionStorage.getItem(key);
-    if (!raw) return '';
-    const parsed = JSON.parse(raw);
-    if (
-      parsed &&
-      typeof parsed.url === 'string' &&
-      parsed.url.includes('embed_token=') &&
-      Date.now() - Number(parsed.ts || 0) < 4 * 60 * 60 * 1000
-    ) {
-      return parsed.url;
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('lootify_pc_embed_')) {
+        sessionStorage.removeItem(k);
+      }
     }
   } catch {}
   return '';
 }
 
-function saveCachedPubCryptoUrl(uid: string, themeMode: string, url: string) {
-  if (!uid || !url || !url.includes('embed_token=')) return;
-  const cleanTheme = themeMode === 'light' ? 'light' : 'dark';
-  const key = `lootify_pc_embed_v2_${uid}_${cleanTheme}`;
-  try {
-    sessionStorage.setItem(key, JSON.stringify({ url, ts: Date.now() }));
-  } catch {}
+function saveCachedPubCryptoUrl(_uid: string, _themeMode: string, _url: string) {
+  // Single-use embed_token must never be cached in sessionStorage
 }
 
 function OfferwallMeBanner({ size }: { size: '728x90' | '468x60' | '300x250' }) {
@@ -876,12 +865,7 @@ export default function App() {
       ? buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, initialUser.id)
       : '';
   });
-  const [signedPubCryptoUrl, setSignedPubCryptoUrl] = useState<string>(() => {
-    const initialUser = loadCurrentUser();
-    const initialTheme =
-      document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-    return loadCachedPubCryptoUrl(initialUser?.id, initialTheme);
-  });
+  const [signedPubCryptoUrl, setSignedPubCryptoUrl] = useState<string>('');
   const [pubCryptoIframeHeight, setPubCryptoIframeHeight] = useState<number>(800);
   const [syncingWallet, setSyncingWallet] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
@@ -1183,11 +1167,6 @@ export default function App() {
                 : String(owm.signed_iframe_url)
             );
           }
-          const pc = mergedWalls.find((w: OfferwallConfig) => w.provider_id === 'pubcrypto');
-          if (pc && pc.signed_iframe_url && pc.signed_iframe_url.includes('embed_token=')) {
-            saveCachedPubCryptoUrl(activeUid, currentTheme, pc.signed_iframe_url);
-            setSignedPubCryptoUrl((prev) => (prev && prev.includes('embed_token=') ? prev : String(pc.signed_iframe_url)));
-          }
         }
       }
     } catch {
@@ -1238,40 +1217,54 @@ export default function App() {
       const currentTheme =
         document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
-      // 1. Check sessionStorage cache first so we NEVER hit PubCrypto's 429 token limit!
-      if (!forceNew) {
-        const cached = loadCachedPubCryptoUrl(activeUid, currentTheme);
-        if (cached) {
-          setSignedPubCryptoUrl((prev) => (prev === cached ? prev : cached));
-          return;
-        }
-      }
-
-      if (pubCryptoRefreshInFlightRef.current) return;
+      if (pubCryptoRefreshInFlightRef.current && !forceNew) return;
       pubCryptoRefreshInFlightRef.current = true;
+
+      // Clear any previously consumed single-use token before minting a fresh one
+      setSignedPubCryptoUrl('');
 
       const base = getApiBaseUrl();
       let resolved = false;
+      const cacheBuster = Date.now();
 
       try {
-        // 2. Request via our Edge/Worker endpoint first (which caches tokens across bursts)
+        // 1. Request a fresh single-use embed_token via our Edge/Worker endpoint
         try {
           const res = await fetch(
             `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
               activeUid
-            )}&theme=${encodeURIComponent(currentTheme)}${forceNew ? '&force=1' : ''}`
+            )}&theme=${encodeURIComponent(currentTheme)}&force=1&_t=${cacheBuster}`,
+            { cache: 'no-store' }
           );
           const contentType = res.headers.get('content-type') || '';
           if (res.ok && contentType.includes('application/json')) {
             const data = await res.json();
             if (data && data.signed_iframe_url && String(data.signed_iframe_url).includes('embed_token=')) {
-              const tokenUrl = String(data.signed_iframe_url);
-              saveCachedPubCryptoUrl(activeUid, currentTheme, tokenUrl);
-              setSignedPubCryptoUrl(tokenUrl);
+              setSignedPubCryptoUrl(String(data.signed_iframe_url));
               resolved = true;
             }
           }
         } catch {}
+
+        // 2. Local relative path fallback if base was remote
+        if (!resolved && base) {
+          try {
+            const localRes = await fetch(
+              `/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+                activeUid
+              )}&theme=${encodeURIComponent(currentTheme)}&force=1&_t=${cacheBuster}`,
+              { cache: 'no-store' }
+            );
+            const contentType = localRes.headers.get('content-type') || '';
+            if (localRes.ok && contentType.includes('application/json')) {
+              const data = await localRes.json();
+              if (data && data.signed_iframe_url && String(data.signed_iframe_url).includes('embed_token=')) {
+                setSignedPubCryptoUrl(String(data.signed_iframe_url));
+                resolved = true;
+              }
+            }
+          } catch {}
+        }
 
         // 3. Direct client-side fallback ONLY if backend didn't return an embed_token
         if (!resolved) {
@@ -1293,9 +1286,7 @@ export default function App() {
             if (resp.ok) {
               const data = await resp.json();
               if (data && data.iframe_url && String(data.iframe_url).includes('embed_token=')) {
-                const tokenUrl = String(data.iframe_url);
-                saveCachedPubCryptoUrl(activeUid, currentTheme, tokenUrl);
-                setSignedPubCryptoUrl(tokenUrl);
+                setSignedPubCryptoUrl(String(data.iframe_url));
                 resolved = true;
               }
             }
@@ -1639,7 +1630,6 @@ export default function App() {
         activeTab === 'shortlinks';
       if (isWallSection) {
         refreshOfferwallMeSignedUrl(activeUid, false);
-        refreshPubCryptoSignedUrl(activeUid, false);
         fetchOfferwallMeFeed(activeUid, forceFresh);
       }
     };
@@ -1651,7 +1641,36 @@ export default function App() {
       }
     }, 20 * 1000);
     return () => window.clearInterval(intervalId);
-  }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
+  }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, refreshOfferwallMeSignedUrl]);
+
+  // Mint a brand-new single-use PubCrypto embed_token ONLY when a PubCrypto iframe wall actually mounts, and clear it when unmounted
+  useEffect(() => {
+    const activeUid = user?.id || loadCurrentUser()?.id;
+    if (!activeUid) return;
+    const isPubCryptoWallActive =
+      (activeTab === 'ptc' && ptcSubMode === 'pubcrypto') ||
+      (activeTab === 'tasks' && tasksSubMode === 'pubcrypto') ||
+      (activeTab === 'shortlinks' && shortlinksSubMode === 'pubcrypto' && !showPartnerShortlinksWall) ||
+      ((activeTab === 'quests' || activeTab === 'offerwalls') &&
+        offersViewMode === 'walls' &&
+        selectedWallId === 'pubcrypto');
+
+    if (isPubCryptoWallActive) {
+      refreshPubCryptoSignedUrl(activeUid, true);
+    } else {
+      setSignedPubCryptoUrl('');
+    }
+  }, [
+    user?.id,
+    activeTab,
+    ptcSubMode,
+    tasksSubMode,
+    shortlinksSubMode,
+    showPartnerShortlinksWall,
+    offersViewMode,
+    selectedWallId,
+    refreshPubCryptoSignedUrl,
+  ]);
 
   // Automatic Offerwall, Feed & Wallet sync on event-driven triggers + Multi-Wave Burst + Live 3s-5s Polling
   useEffect(() => {
@@ -6536,10 +6555,7 @@ export default function App() {
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'tasks', 'telegram')
               : tasksSubMode === 'owm_general'
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'tasks', 'general')
-              : signedPubCryptoUrl ||
-                `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
-                  PUBCRYPTO_SITE_KEY
-                )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`;
+              : signedPubCryptoUrl;
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -6589,9 +6605,6 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           setTasksSubMode(mode.id as any);
-                          if (mode.id === 'pubcrypto') {
-                            refreshPubCryptoSignedUrl(user.id, false);
-                          }
                         }}
                         className="btn btn-sm"
                         style={{
@@ -6911,7 +6924,16 @@ export default function App() {
                         Directly filtered to Tasks mode. Submit required proof inside the task card to credit your Lootify wallet via <code className="font-mono">lootify/api/postback</code>.
                       </p>
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {tasksSubMode === 'pubcrypto' && (
+                        <button
+                          type="button"
+                          onClick={() => refreshPubCryptoSignedUrl(user.id, true)}
+                          className="btn btn-outline btn-sm"
+                        >
+                          Reload Session
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => syncUserWithBackend(user, true)}
@@ -6919,9 +6941,15 @@ export default function App() {
                       >
                         Sync Balance
                       </button>
-                      {taskIframeUrl && (
+                      {(tasksSubMode === 'pubcrypto' || taskIframeUrl) && (
                         <a
-                          href={taskIframeUrl}
+                          href={
+                            tasksSubMode === 'pubcrypto'
+                              ? `${getApiBaseUrl()}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+                                  user.id
+                                )}&theme=${encodeURIComponent(theme)}&redirect=1`
+                              : taskIframeUrl
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-ghost btn-sm"
@@ -6931,23 +6959,36 @@ export default function App() {
                       )}
                     </div>
                   </div>
-                  <iframe
-                    key={`tasks_${tasksSubMode}_${user.id}`}
-                    src={taskIframeUrl}
-                    title="Tasks Feed"
-                    width="100%"
-                    height={tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
-                    frameBorder={0}
-                    allow="clipboard-write; fullscreen; popups"
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      height: tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
-                      border: '1px solid var(--border)',
-                      borderRadius: 12,
-                      background: '#0B121E',
-                    }}
-                  />
+                  {tasksSubMode === 'pubcrypto' && !taskIframeUrl ? (
+                    <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--txt2)' }}>
+                      Generating fresh PubCrypto session token...
+                    </div>
+                  ) : (
+                    <iframe
+                      key={`tasks_${tasksSubMode}_${user.id}_${tasksSubMode === 'pubcrypto' ? taskIframeUrl : 'owm'}`}
+                      data-pubcrypto-offerwall={tasksSubMode === 'pubcrypto' ? true : undefined}
+                      src={taskIframeUrl}
+                      title="Tasks Feed"
+                      width="100%"
+                      height={tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                      frameBorder={0}
+                      referrerPolicy={tasksSubMode === 'pubcrypto' ? 'no-referrer' : undefined}
+                      allow="clipboard-write; fullscreen; popups"
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        height: tasksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
+                        border: '1px solid var(--border)',
+                        borderRadius: 12,
+                        background: '#0B121E',
+                      }}
+                      sandbox={
+                        tasksSubMode === 'pubcrypto'
+                          ? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
+                          : undefined
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -7374,10 +7415,7 @@ export default function App() {
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'iframe')
               : ptcSubMode === 'owm_window'
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'window')
-              : signedPubCryptoUrl ||
-                `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
-                  PUBCRYPTO_SITE_KEY
-                )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`;
+              : signedPubCryptoUrl;
 
           const allPtcAds =
             Array.isArray(owmFeed.ptc) && owmFeed.ptc.length > 0
@@ -7448,9 +7486,6 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           setPtcSubMode(mode.id as any);
-                          if (mode.id === 'pubcrypto') {
-                            refreshPubCryptoSignedUrl(user.id, false);
-                          }
                         }}
                         className="btn btn-sm"
                         style={{
@@ -7681,7 +7716,16 @@ export default function App() {
                         Opens directly on the selected PTC section. Every completed view credits automatically via <code className="font-mono">lootify/api/postback</code>.
                       </p>
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {ptcSubMode === 'pubcrypto' && (
+                        <button
+                          type="button"
+                          onClick={() => refreshPubCryptoSignedUrl(user.id, true)}
+                          className="btn btn-outline btn-sm"
+                        >
+                          Reload Session
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => syncUserWithBackend(user, true)}
@@ -7689,9 +7733,15 @@ export default function App() {
                       >
                         Sync Balance
                       </button>
-                      {ptcIframeUrl && (
+                      {(ptcSubMode === 'pubcrypto' || ptcIframeUrl) && (
                         <a
-                          href={ptcIframeUrl}
+                          href={
+                            ptcSubMode === 'pubcrypto'
+                              ? `${getApiBaseUrl()}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+                                  user.id
+                                )}&theme=${encodeURIComponent(theme)}&redirect=1`
+                              : ptcIframeUrl
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-ghost btn-sm"
@@ -7701,23 +7751,36 @@ export default function App() {
                       )}
                     </div>
                   </div>
-                  <iframe
-                    key={`ptc_${ptcSubMode}_${user.id}`}
-                    src={ptcIframeUrl}
-                    title="PTC Ads Wall"
-                    width="100%"
-                    height={ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
-                    frameBorder={0}
-                    allow="clipboard-write; fullscreen; popups"
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      height: ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
-                      border: '1px solid var(--border)',
-                      borderRadius: 12,
-                      background: '#0B121E',
-                    }}
-                  />
+                  {ptcSubMode === 'pubcrypto' && !ptcIframeUrl ? (
+                    <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--txt2)' }}>
+                      Generating fresh PubCrypto session token...
+                    </div>
+                  ) : (
+                    <iframe
+                      key={`ptc_${ptcSubMode}_${user.id}_${ptcSubMode === 'pubcrypto' ? ptcIframeUrl : 'owm'}`}
+                      data-pubcrypto-offerwall={ptcSubMode === 'pubcrypto' ? true : undefined}
+                      src={ptcIframeUrl}
+                      title="PTC Ads Wall"
+                      width="100%"
+                      height={ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680}
+                      frameBorder={0}
+                      referrerPolicy={ptcSubMode === 'pubcrypto' ? 'no-referrer' : undefined}
+                      allow="clipboard-write; fullscreen; popups"
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        height: ptcSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 680,
+                        border: '1px solid var(--border)',
+                        borderRadius: 12,
+                        background: '#0B121E',
+                      }}
+                      sandbox={
+                        ptcSubMode === 'pubcrypto'
+                          ? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
+                          : undefined
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -7782,7 +7845,6 @@ export default function App() {
                   onClick={() => {
                     setOffersViewMode('walls');
                     setSelectedWallId('pubcrypto');
-                    refreshPubCryptoSignedUrl(user.id, false);
                   }}
                   className="btn btn-sm"
                   style={{
@@ -7851,9 +7913,6 @@ export default function App() {
                       onClick={() => {
                         setOffersViewMode('walls');
                         setSelectedWallId(wall.provider_id);
-                        if (wall.provider_id === 'pubcrypto') {
-                          refreshPubCryptoSignedUrl(user.id, false);
-                        }
                       }}
                       style={{
                         textAlign: 'left',
@@ -8107,9 +8166,6 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           setSelectedWallId(wall.provider_id);
-                          if (wall.provider_id === 'pubcrypto') {
-                            refreshPubCryptoSignedUrl(user.id, false);
-                          }
                         }}
                         style={{
                           textAlign: 'left',
@@ -8181,9 +8237,15 @@ export default function App() {
                             Reload Session
                           </button>
                         )}
-                        {resolvedIframeUrl && (
+                        {(selectedWall.provider_id === 'pubcrypto' || resolvedIframeUrl) && (
                           <a
-                            href={resolvedIframeUrl}
+                            href={
+                              selectedWall.provider_id === 'pubcrypto'
+                                ? `${getApiBaseUrl()}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+                                    user.id
+                                  )}&theme=${encodeURIComponent(theme)}&redirect=1`
+                                : resolvedIframeUrl
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn btn-ghost btn-sm"
@@ -8194,9 +8256,13 @@ export default function App() {
                       </div>
                     </div>
 
-                    {resolvedIframeUrl ? (
+                    {selectedWall.provider_id === 'pubcrypto' && !resolvedIframeUrl ? (
+                      <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--txt2)' }}>
+                        Generating fresh PubCrypto session token...
+                      </div>
+                    ) : resolvedIframeUrl ? (
                       <iframe
-                        key={`${selectedWall.provider_id}_${user.id}_offers`}
+                        key={`${selectedWall.provider_id}_${user.id}_${selectedWall.provider_id === 'pubcrypto' ? resolvedIframeUrl : 'offers'}`}
                         data-pubcrypto-offerwall={selectedWall.provider_id === 'pubcrypto' ? true : undefined}
                         src={
                           selectedWall.provider_id === 'offerwallme'
@@ -8403,9 +8469,6 @@ export default function App() {
                       onClick={() => {
                         setShowPartnerShortlinksWall(false);
                         setShortlinksSubMode(mode.id as any);
-                        if (mode.id === 'pubcrypto') {
-                          refreshPubCryptoSignedUrl(user.id, false);
-                        }
                       }}
                       className="btn btn-sm"
                       style={{
@@ -8583,10 +8646,9 @@ export default function App() {
                     <a
                       href={
                         shortlinksSubMode === 'pubcrypto'
-                          ? signedPubCryptoUrl ||
-                            `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
-                              PUBCRYPTO_SITE_KEY
-                            )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`
+                          ? `${getApiBaseUrl()}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+                              user.id
+                            )}&theme=${encodeURIComponent(theme)}&redirect=1`
                           : buildOfferwallMeTabUrl(
                               signedOfferwallMeUrl ||
                                 buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
@@ -8601,41 +8663,44 @@ export default function App() {
                     </a>
                   </div>
                 </div>
-                <iframe
-                  key={`shortlinks_${shortlinksSubMode}_${user.id}`}
-                  data-pubcrypto-offerwall={shortlinksSubMode === 'pubcrypto' ? true : undefined}
-                  src={
-                    shortlinksSubMode === 'pubcrypto'
-                      ? signedPubCryptoUrl ||
-                        `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
-                          PUBCRYPTO_SITE_KEY
-                        )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`
-                      : buildOfferwallMeTabUrl(
-                          signedOfferwallMeUrl ||
-                            buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
-                          'shortlinks'
-                        )
-                  }
-                  title={shortlinksSubMode === 'pubcrypto' ? 'PubCrypto Shortlinks' : 'Offerwall.me Shortlinks'}
-                  width="100%"
-                  height={shortlinksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 620}
-                  frameBorder={0}
-                  referrerPolicy={shortlinksSubMode === 'pubcrypto' ? 'no-referrer' : undefined}
-                  allow="clipboard-write; fullscreen; popups"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    height: shortlinksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 620,
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    background: '#0B121E',
-                  }}
-                  sandbox={
-                    shortlinksSubMode === 'pubcrypto'
-                      ? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
-                      : undefined
-                  }
-                />
+                {shortlinksSubMode === 'pubcrypto' && !signedPubCryptoUrl ? (
+                  <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--txt2)' }}>
+                    Generating fresh PubCrypto session token...
+                  </div>
+                ) : (
+                  <iframe
+                    key={`shortlinks_${shortlinksSubMode}_${user.id}_${shortlinksSubMode === 'pubcrypto' ? signedPubCryptoUrl : 'owm'}`}
+                    data-pubcrypto-offerwall={shortlinksSubMode === 'pubcrypto' ? true : undefined}
+                    src={
+                      shortlinksSubMode === 'pubcrypto'
+                        ? signedPubCryptoUrl
+                        : buildOfferwallMeTabUrl(
+                            signedOfferwallMeUrl ||
+                              buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
+                            'shortlinks'
+                          )
+                    }
+                    title={shortlinksSubMode === 'pubcrypto' ? 'PubCrypto Shortlinks' : 'Offerwall.me Shortlinks'}
+                    width="100%"
+                    height={shortlinksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 620}
+                    frameBorder={0}
+                    referrerPolicy={shortlinksSubMode === 'pubcrypto' ? 'no-referrer' : undefined}
+                    allow="clipboard-write; fullscreen; popups"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      height: shortlinksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 620,
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      background: '#0B121E',
+                    }}
+                    sandbox={
+                      shortlinksSubMode === 'pubcrypto'
+                        ? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
+                        : undefined
+                    }
+                  />
+                )}
               </div>
             )}
           </div>

@@ -566,32 +566,11 @@ if (!globalThis.__PUBCRYPTO_TOKEN_CACHE__) {
   globalThis.__PUBCRYPTO_TOKEN_CACHE__ = new Map();
 }
 
-async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark", requestOrigin = "", forceNew = false) {
+async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, theme = "dark", requestOrigin = "") {
   const sKey = String(siteKey || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198").trim();
   const uid = String(userId || "").trim();
   const apiKey = String(publisherApiKey || "").trim();
   const cleanTheme = theme === "light" ? "light" : "dark";
-  const cacheKey = `${sKey}_${uid}_${cleanTheme}`;
-
-  if (!forceNew && uid) {
-    const memCached = globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(cacheKey);
-    if (memCached && Date.now() - memCached.ts < 45000 && String(memCached.url).includes("embed_token=")) {
-      return memCached.url;
-    }
-    try {
-      if (typeof caches !== "undefined" && caches.default) {
-        const edgeReq = new Request(`https://edge-pc-token.lootify.internal/${encodeURIComponent(cacheKey)}`);
-        const edgeMatch = await caches.default.match(edgeReq);
-        if (edgeMatch) {
-          const edgeData = await edgeMatch.json();
-          if (edgeData && edgeData.url && Date.now() - Number(edgeData.ts || 0) < 45000) {
-            globalThis.__PUBCRYPTO_TOKEN_CACHE__.set(cacheKey, { url: edgeData.url, ts: edgeData.ts });
-            return String(edgeData.url);
-          }
-        }
-      }
-    } catch {}
-  }
 
   // Always use the registered publisher origin https://lootify.eternant.c0m.to so proxied Worker calls never fail origin validation
   const rawOrigin = String(requestOrigin || "").trim();
@@ -607,9 +586,11 @@ async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, t
     try {
       const resp = await fetch("https://pub.cryptolinkforearn.com/api/publisher/embed-tokens", {
         method: "POST",
+        cf: { cacheTtl: 0, cacheEverything: false },
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
         },
         body: JSON.stringify({
           site_key: sKey,
@@ -621,27 +602,7 @@ async function createPubCryptoSignedEmbedUrl(siteKey, userId, publisherApiKey, t
       if (resp.ok) {
         const data = await resp.json();
         if (data && data.iframe_url) {
-          const finalUrl = String(data.iframe_url);
-          const nowTs = Date.now();
-          globalThis.__PUBCRYPTO_TOKEN_CACHE__.set(cacheKey, { url: finalUrl, ts: nowTs });
-          try {
-            if (typeof caches !== "undefined" && caches.default) {
-              const edgeReq = new Request(`https://edge-pc-token.lootify.internal/${encodeURIComponent(cacheKey)}`);
-              await caches.default.put(
-                edgeReq,
-                new Response(JSON.stringify({ url: finalUrl, ts: nowTs }), {
-                  status: 200,
-                  headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=45" },
-                })
-              );
-            }
-          } catch {}
-          return finalUrl;
-        }
-      } else {
-        const stale = globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(cacheKey);
-        if (stale && stale.url && String(stale.url).includes("embed_token=")) {
-          return stale.url;
+          return String(data.iframe_url);
         }
       }
     } catch {}
@@ -1365,18 +1326,25 @@ export default {
           if (providerId === "pubcrypto") {
             const pubApiKey = getPubCryptoPublisherApiKey(env, "");
             const reqOrigin = request.headers.get("origin") || ("https://" + url.host);
-            const forceNew = url.searchParams.get("force") === "1";
             const signedUrl = await createPubCryptoSignedEmbedUrl(
               "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198",
               reqUserId,
               pubApiKey,
               reqTheme,
-              reqOrigin,
-              forceNew
+              reqOrigin
             );
+            if (url.searchParams.get("redirect") === "1" && signedUrl) {
+              return Response.redirect(signedUrl, 302);
+            }
             return Response.json(
               { ok: true, provider_id: "pubcrypto", signed_iframe_url: signedUrl, server_time: Math.floor(Date.now() / 1000) },
-              { status: 200, headers: corsHeaders }
+              {
+                status: 200,
+                headers: {
+                  ...corsHeaders,
+                  "Cache-Control": "no-store, no-cache, must-revalidate",
+                },
+              }
             );
           }
           const secret = getOfferwallMeSecret(env, "");
@@ -1392,17 +1360,11 @@ export default {
             request.headers.get("x-user-id") ||
             ""
           ).trim();
-          const reqTheme = (url.searchParams.get("theme") || "dark").trim() === "light" ? "light" : "dark";
           const secret = getOfferwallMeSecret(env, "");
           const owmSigned = reqUserId
             ? await signOfferwallMeUrl("PQhx5BxXulHlM6PxZx81pZgIs2nyRd", reqUserId, secret)
             : "";
-          const pcCached = reqUserId
-            ? globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(
-                `site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198_${reqUserId}_${reqTheme}`
-              )
-            : null;
-          const pcSigned = pcCached && Date.now() - pcCached.ts < 45000 ? pcCached.url : "";
+          const pcSigned = "";
           return Response.json(
             {
               ok: true,
@@ -2170,10 +2132,8 @@ export default {
             (w.provider_id === "pubcrypto" ||
               String(w.iframe_url_template || "").includes("pub.cryptolinkforearn.com"))
           ) {
-            const cleanT = reqTheme === "light" ? "light" : "dark";
-            const sKey = w.app_id || "site_08b2aad8e6d798b346f08dcaf9b32e176eb5a198";
-            const pcCached = globalThis.__PUBCRYPTO_TOKEN_CACHE__.get(`${sKey}_${reqUserId}_${cleanT}`);
-            signedIframeUrl = pcCached && Date.now() - pcCached.ts < 45000 ? pcCached.url : "";
+            // Never pre-mint or cache single-use PubCrypto embed_tokens in /api/offerwalls
+            signedIframeUrl = "";
           }
           publicWalls.push({
             provider_id: w.provider_id,
@@ -2204,7 +2164,6 @@ export default {
           .trim()
           .toLowerCase();
         const reqTheme = (url.searchParams.get("theme") || "dark").trim();
-        const forceNew = url.searchParams.get("force") === "1";
         if (!reqUserId) {
           return Response.json(
             { error: "user_id is required" },
@@ -2225,9 +2184,11 @@ export default {
             reqUserId,
             pubApiKey,
             reqTheme,
-            reqOrigin,
-            forceNew
+            reqOrigin
           );
+          if (url.searchParams.get("redirect") === "1" && signedUrl) {
+            return Response.redirect(signedUrl, 302);
+          }
           return Response.json(
             {
               ok: true,
@@ -2235,7 +2196,13 @@ export default {
               signed_iframe_url: signedUrl,
               has_publisher_api_key: Boolean(pubApiKey),
             },
-            { status: 200, headers: corsHeaders }
+            {
+              status: 200,
+              headers: {
+                ...corsHeaders,
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+              },
+            }
           );
         }
 
