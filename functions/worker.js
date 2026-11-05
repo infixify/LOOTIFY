@@ -715,11 +715,11 @@ if (!globalThis.__OWM_HIST_CACHE__) {
   globalThis.__OWM_HIST_CACHE__ = new Map();
 }
 
-async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU4aObX1lb7W24") {
+async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU4aObX1lb7W24", forceFresh = false) {
   const uid = String(userId || "").trim();
   if (!uid) return [];
   const cached = globalThis.__OWM_HIST_CACHE__.get(uid);
-  if (cached && Date.now() - cached.ts < 60000) {
+  if (!forceFresh && cached && Date.now() - cached.ts < 3000) {
     return cached.items;
   }
   try {
@@ -739,15 +739,17 @@ async function fetchOfferwallMeHistory(userId, secretKey = "f25hoUjdRBQpUbbogHGU
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1100);
+    const timer = setTimeout(() => controller.abort(), 3500);
     const resp = await fetch(
       `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
         uid
-      )}`,
+      )}&_t=${Date.now()}`,
       {
+        cf: { cacheTtl: 0, cacheEverything: false },
         headers: {
           "x-offerwall-user-expires": expires,
           "x-offerwall-user-signature": signature,
+          "Cache-Control": "no-cache, no-store, must-revalidate",
         },
         signal: controller.signal,
       }
@@ -1460,7 +1462,7 @@ export default {
           }
           let availableCoins = Number((Number(body.availableCoins) || 0).toFixed(2));
           let questsCompleted = Number(body.questsCompleted) || 0;
-          const owmHistory = await fetchOfferwallMeHistory(userId, getOfferwallMeSecret(env, ""));
+          const owmHistory = await fetchOfferwallMeHistory(userId, getOfferwallMeSecret(env, ""), Boolean(body.forceHistory));
           let newlyCreditedCoins = 0;
           let newlyCreditedCount = 0;
           for (const item of owmHistory) {
@@ -1808,7 +1810,7 @@ export default {
             }
 
             const owmSecret = getOfferwallMeSecret(env, "");
-            const owmHistory = await fetchOfferwallMeHistory(existingUser.id, owmSecret);
+            const owmHistory = await fetchOfferwallMeHistory(existingUser.id, owmSecret, Boolean(body.forceHistory));
             for (const item of owmHistory) {
               const rawTx = String(item.transactionId || item.id || "").trim();
               if (!rawTx) continue;
@@ -2379,6 +2381,14 @@ export default {
               if (histResp.ok) {
                 const histJson = await histResp.json();
                 if (histJson && Array.isArray(histJson.history)) {
+                  const approvedItems = histJson.history.filter((item) => {
+                    if (!item) return false;
+                    const reward = Number(item.reward) || 0;
+                    if (reward <= 0 || item.rejectionReason) return false;
+                    const st = String(item.status || "").trim().toLowerCase();
+                    return st === "approved" || st === "completed";
+                  });
+                  globalThis.__OWM_HIST_CACHE__.set(reqUserId, { ts: Date.now(), items: approvedItems });
                   return histJson.history;
                 }
               }
@@ -3073,8 +3083,17 @@ export default {
         const parsedAmount = coins;
 
         // Clear Offerwall.me memory cache for this user so next sync reflects the new postback immediately
-        if (userId && globalThis.__OWM_HIST_CACHE__) {
-          globalThis.__OWM_HIST_CACHE__.delete(userId);
+        if (userId) {
+          if (globalThis.__OWM_HIST_CACHE__) {
+            globalThis.__OWM_HIST_CACHE__.delete(userId);
+          }
+          if (globalThis.__OWM_FEED_CACHE__) {
+            for (const key of globalThis.__OWM_FEED_CACHE__.keys()) {
+              if (String(key).startsWith(`${userId}_`)) {
+                globalThis.__OWM_FEED_CACHE__.delete(key);
+              }
+            }
+          }
         }
 
         try {

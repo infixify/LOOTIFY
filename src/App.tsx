@@ -987,6 +987,7 @@ export default function App() {
   const [surveysViewMode, setSurveysViewMode] = useState<'cards' | 'wall'>('cards');
   const [youtubeViewMode, setYoutubeViewMode] = useState<'cards' | 'wall'>('cards');
   const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(false);
+  const [shortlinksSubMode, setShortlinksSubMode] = useState<'cards' | 'pubcrypto' | 'owm_wall'>('cards');
 
   // Offerwall.me Single-Piece Feed State (Hydrated in 0ms from localStorage + Live SWR Sync)
   const [owmFeed, setOwmFeed] = useState<{
@@ -1012,6 +1013,7 @@ export default function App() {
   } | null>(null);
 
   const markOwmItemClicked = useCallback((key: string) => {
+    lastAdActivityAtRef.current = Date.now();
     setOwmClickedIds((prev) => ({ ...prev, [key]: Date.now() }));
   }, []);
 
@@ -1046,6 +1048,8 @@ export default function App() {
 
   const syncInFlightRef = useRef<boolean>(false);
   const lastAutoSyncAtRef = useRef<number>(0);
+  const lastAdActivityAtRef = useRef<number>(Date.now());
+  const burstTimersRef = useRef<number[]>([]);
   const pubCryptoRefreshInFlightRef = useRef<boolean>(false);
   const lastTabSwitchAtRef = useRef<number>(Date.now());
   const owmFetchInFlightRef = useRef<boolean>(false);
@@ -1053,25 +1057,39 @@ export default function App() {
 
   const syncUserWithBackend = useCallback(
     async (currentUser: PlayerUser | null, showFeedback = false, bypassThrottle = false) => {
-      if (!currentUser) return;
+      const activeUser = loadCurrentUser() || currentUser;
+      if (!activeUser) return;
       if (syncInFlightRef.current && !showFeedback && !bypassThrottle) return;
       const now = Date.now();
-      if (!showFeedback && !bypassThrottle && now - lastAutoSyncAtRef.current < 3000) return;
+      if (!showFeedback && !bypassThrottle && now - lastAutoSyncAtRef.current < 1200) return;
 
       syncInFlightRef.current = true;
       lastAutoSyncAtRef.current = now;
       if (showFeedback) setSyncingWallet(true);
       const base = getApiBaseUrl();
+      const payloadBody = JSON.stringify({
+        ...activeUser,
+        forceHistory: Boolean(showFeedback || bypassThrottle),
+      });
       try {
-        const res = await fetch(`${base}/api/user/sync`, {
+        let res = await fetch(`${base}/api/user/sync`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(currentUser),
-        });
+          body: payloadBody,
+        }).catch(() => null);
 
-        if (res.ok) {
+        if ((!res || !res.ok) && base) {
+          res = await fetch(`/api/user/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payloadBody,
+          }).catch(() => null);
+        }
+
+        if (res && res.ok) {
           const data = await res.json();
           if (data && data.user) {
+            const freshLocal = loadCurrentUser() || activeUser;
             const sortedHeld = Array.isArray(data.user.heldRewards)
               ? [...data.user.heldRewards].sort(
                   (a, b) => parseHistoryTimestampMs(b?.createdAt) - parseHistoryTimestampMs(a?.createdAt)
@@ -1082,14 +1100,14 @@ export default function App() {
               heldRewards: sortedHeld,
             };
 
-            const prevAvail = Number(currentUser.availableCoins) || 0;
+            const prevAvail = Number(freshLocal.availableCoins) || 0;
             const nextAvail = Number(nextUser.availableCoins) || 0;
             const balanceIncrease = Number((nextAvail - prevAvail).toFixed(2));
             const newlyCredited = Number(data.newlyCreditedCoins) || 0;
 
             // Check if any new offerwall reward ID appeared compared to previous heldRewards
             const prevHeldIds = new Set(
-              (Array.isArray(currentUser.heldRewards) ? currentUser.heldRewards : []).map((h) => String(h.id))
+              (Array.isArray(freshLocal.heldRewards) ? freshLocal.heldRewards : []).map((h) => String(h.id))
             );
             let newHeldCoins = 0;
             if (prevHeldIds.size > 0 && sortedHeld.length > 0) {
@@ -1113,7 +1131,7 @@ export default function App() {
             setUser(nextUser);
             if (diffCoins > 0) {
               setSyncStatusMsg(
-                `🎉 +${diffCoins} Coins credited from Offerwall Task! Balance: ${nextUser.availableCoins} Coins`
+                `🎉 +${diffCoins} Coins credited instantly! Balance: ${nextUser.availableCoins} Coins`
               );
               setTimeout(() => setSyncStatusMsg(null), 6000);
             } else if (showFeedback) {
@@ -1409,12 +1427,37 @@ export default function App() {
           return nextFeed;
         });
         setOwmLastSyncedAt(new Date().toLocaleTimeString('en-IN', { hour12: false }));
+
+        // If feed history contains any newly approved/completed conversion not yet in local wallet, sync wallet immediately!
+        if (Array.isArray(data.history) && data.history.length > 0) {
+          const localUsr = loadCurrentUser();
+          if (localUsr) {
+            const knownIds = new Set<string>([
+              ...(Array.isArray(localUsr.creditedTxIds) ? localUsr.creditedTxIds.map(String) : []),
+              ...(Array.isArray(localUsr.heldRewards) ? localUsr.heldRewards.map((h) => String(h.id)) : []),
+            ]);
+            const hasUncreditedApproved = data.history.some((item: any) => {
+              const rawTx = String(item?.transactionId || item?.id || '').trim();
+              if (!rawTx) return false;
+              const st = String(item?.status || '').trim().toLowerCase();
+              if (st !== 'approved' && st !== 'completed') return false;
+              return (
+                !knownIds.has(`offerwallme_${localUsr.id}_${rawTx}`) &&
+                !knownIds.has(`owm_${rawTx}`) &&
+                !knownIds.has(rawTx)
+              );
+            });
+            if (hasUncreditedApproved) {
+              syncUserWithBackend(localUsr, false, true);
+            }
+          }
+        }
       }
     } catch {} finally {
       owmFetchInFlightRef.current = false;
       setOwmFeedLoading(false);
     }
-  }, []);
+  }, [syncUserWithBackend]);
 
   const handleSubmitOwmTaskProof = async (taskId: string) => {
     const activeUid = user?.id || loadCurrentUser()?.id || 'plr_c2fydghha3';
@@ -1606,29 +1649,83 @@ export default function App() {
       if (document.visibilityState === 'visible') {
         doRefresh(true);
       }
-    }, 60 * 1000);
+    }, 20 * 1000);
     return () => window.clearInterval(intervalId);
   }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, refreshOfferwallMeSignedUrl, refreshPubCryptoSignedUrl]);
 
-  // Automatic Offerwall, Feed & Wallet sync on event-driven triggers (window focus / visibilitychange when returning from ad/shortlink/task tab)
+  // Automatic Offerwall, Feed & Wallet sync on event-driven triggers + Multi-Wave Burst + Live 3s-5s Polling
   useEffect(() => {
-    const syncLatestBalanceAndFeed = () => {
-      const current = loadCurrentUser();
-      if (current) {
-        syncUserWithBackend(current, false);
-        fetchOfferwallMeFeed(current.id, false);
-        fetchShortlinksFromBackend(current.id);
+    const clearBurstTimers = () => {
+      for (const tid of burstTimersRef.current) {
+        window.clearTimeout(tid);
+      }
+      burstTimersRef.current = [];
+    };
+
+    const scheduleBurstSyncWaves = (delaysMs: number[]) => {
+      clearBurstTimers();
+      for (const delay of delaysMs) {
+        const tid = window.setTimeout(() => {
+          const latest = loadCurrentUser();
+          if (latest) {
+            syncUserWithBackend(latest, false, true);
+            if (delay === delaysMs[1] || delay === delaysMs[delaysMs.length - 1]) {
+              fetchOfferwallMeFeed(latest.id, true);
+            }
+          }
+        }, delay);
+        burstTimersRef.current.push(tid);
       }
     };
+
+    const syncLatestBalanceAndFeed = () => {
+      lastAdActivityAtRef.current = Date.now();
+      const current = loadCurrentUser();
+      if (current) {
+        syncUserWithBackend(current, false, true);
+        fetchOfferwallMeFeed(current.id, true);
+        fetchShortlinksFromBackend(current.id);
+        // Schedule follow-up waves to catch S2S postbacks arriving 1.5s-11s after returning from ad/shortlink tab
+        scheduleBurstSyncWaves([1500, 3500, 6500, 11000]);
+      }
+    };
+
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         syncLatestBalanceAndFeed();
       }
     };
+
+    const onWindowBlur = () => {
+      // When user clicks inside an Offerwall or Iframe PTC ad on the page, parent window blurs with activeElement === IFRAME
+      if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+        lastAdActivityAtRef.current = Date.now();
+        scheduleBurstSyncWaves([2500, 6000, 11000, 17000, 25000]);
+      }
+    };
+
+    // Continuous live background wallet polling while page is visible (every 3s during active ad session, every 6s idle)
+    const livePollInterval = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      const current = loadCurrentUser();
+      if (!current) return;
+      const now = Date.now();
+      const isRecentAdSession = now - lastAdActivityAtRef.current < 90 * 1000;
+      if (isRecentAdSession) {
+        syncUserWithBackend(current, false, true);
+      } else if (now - lastAutoSyncAtRef.current >= 5500) {
+        syncUserWithBackend(current, false, false);
+      }
+    }, 3000);
+
     window.addEventListener('focus', syncLatestBalanceAndFeed);
+    window.addEventListener('blur', onWindowBlur);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      clearBurstTimers();
+      window.clearInterval(livePollInterval);
       window.removeEventListener('focus', syncLatestBalanceAndFeed);
+      window.removeEventListener('blur', onWindowBlur);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchOfferwallMeFeed, fetchShortlinksFromBackend, syncUserWithBackend]);
@@ -6481,16 +6578,21 @@ export default function App() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
                     { id: 'cards', label: `Single-Piece Tasks (${owmFeed.tasks.length})` },
+                    { id: 'pubcrypto', label: '🔥 PubCrypto MoneyTask' },
                     { id: 'owm_general', label: 'Offerwall.me Wall' },
                     { id: 'owm_telegram', label: 'Telegram Join Wall' },
-                    { id: 'pubcrypto', label: 'PubCrypto MoneyTask' },
                   ].map((mode) => {
                     const active = tasksSubMode === mode.id;
                     return (
                       <button
                         key={mode.id}
                         type="button"
-                        onClick={() => setTasksSubMode(mode.id as any)}
+                        onClick={() => {
+                          setTasksSubMode(mode.id as any);
+                          if (mode.id === 'pubcrypto') {
+                            refreshPubCryptoSignedUrl(user.id, false);
+                          }
+                        }}
                         className="btn btn-sm"
                         style={{
                           background: active ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
@@ -7335,16 +7437,21 @@ export default function App() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
                     { id: 'cards', label: `All PTC Cards (${allPtcAds.length})` },
+                    { id: 'pubcrypto', label: '🔥 PubCrypto PTC Wall' },
                     { id: 'owm_iframe', label: 'Iframe PTC Wall' },
                     { id: 'owm_window', label: 'Window PTC Wall' },
-                    { id: 'pubcrypto', label: 'PubCrypto PTC Wall' },
                   ].map((mode) => {
                     const active = ptcSubMode === mode.id;
                     return (
                       <button
                         key={mode.id}
                         type="button"
-                        onClick={() => setPtcSubMode(mode.id as any)}
+                        onClick={() => {
+                          setPtcSubMode(mode.id as any);
+                          if (mode.id === 'pubcrypto') {
+                            refreshPubCryptoSignedUrl(user.id, false);
+                          }
+                        }}
                         className="btn btn-sm"
                         style={{
                           background: active ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
@@ -7668,19 +7775,56 @@ export default function App() {
                     color: offersViewMode === 'cards' ? 'var(--green)' : 'var(--txt2)',
                   }}
                 >
-                  Single-Piece Offers ({owmFeed.offers.length})
+                  🎯 Single-Piece Offers ({owmFeed.offers.length})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOffersViewMode('walls')}
+                  onClick={() => {
+                    setOffersViewMode('walls');
+                    setSelectedWallId('pubcrypto');
+                    refreshPubCryptoSignedUrl(user.id, false);
+                  }}
                   className="btn btn-sm"
                   style={{
-                    background: offersViewMode === 'walls' ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
-                    border: offersViewMode === 'walls' ? '1.5px solid var(--green)' : '1px solid var(--border)',
-                    color: offersViewMode === 'walls' ? 'var(--green)' : 'var(--txt2)',
+                    background:
+                      offersViewMode === 'walls' && selectedWall?.provider_id === 'pubcrypto'
+                        ? 'rgba(0,232,154,0.16)'
+                        : 'var(--bg2)',
+                    border:
+                      offersViewMode === 'walls' && selectedWall?.provider_id === 'pubcrypto'
+                        ? '1.5px solid var(--green)'
+                        : '1px solid var(--border)',
+                    color:
+                      offersViewMode === 'walls' && selectedWall?.provider_id === 'pubcrypto'
+                        ? 'var(--green)'
+                        : 'var(--txt2)',
                   }}
                 >
-                  Full Partner Offerwalls ({enabledOfferwalls.length})
+                  🔥 PubCrypto Offerwall
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOffersViewMode('walls');
+                    setSelectedWallId('offerwallme');
+                  }}
+                  className="btn btn-sm"
+                  style={{
+                    background:
+                      offersViewMode === 'walls' && selectedWall?.provider_id === 'offerwallme'
+                        ? 'rgba(0,232,154,0.16)'
+                        : 'var(--bg2)',
+                    border:
+                      offersViewMode === 'walls' && selectedWall?.provider_id === 'offerwallme'
+                        ? '1.5px solid var(--green)'
+                        : '1px solid var(--border)',
+                    color:
+                      offersViewMode === 'walls' && selectedWall?.provider_id === 'offerwallme'
+                        ? 'var(--green)'
+                        : 'var(--txt2)',
+                  }}
+                >
+                  🌐 Offerwall.me Wall
                 </button>
                 <button
                   type="button"
@@ -7694,6 +7838,59 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* Always-Visible Partner Offerwall Cards (PubCrypto & Offerwall.me) */}
+            {enabledOfferwalls.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+                {enabledOfferwalls.map((wall) => {
+                  const isSelected = offersViewMode === 'walls' && selectedWall?.provider_id === wall.provider_id;
+                  return (
+                    <button
+                      key={`top_wall_${wall.provider_id}`}
+                      type="button"
+                      onClick={() => {
+                        setOffersViewMode('walls');
+                        setSelectedWallId(wall.provider_id);
+                        if (wall.provider_id === 'pubcrypto') {
+                          refreshPubCryptoSignedUrl(user.id, false);
+                        }
+                      }}
+                      style={{
+                        textAlign: 'left',
+                        padding: '14px 16px',
+                        borderRadius: 12,
+                        cursor: 'pointer',
+                        background: isSelected ? 'rgba(0,232,154,0.12)' : 'var(--bg2)',
+                        border: isSelected ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                          {wall.provider_id === 'pubcrypto' ? '🔥 PubCrypto Offerwall' : `🌐 ${wall.name}`}
+                        </span>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 7px',
+                            borderRadius: 5,
+                            background: isSelected ? 'var(--green)' : 'rgba(0,232,154,0.15)',
+                            color: isSelected ? '#04120B' : 'var(--green)',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {isSelected ? 'OPENING BELOW' : 'OPEN WALL ↗'}
+                        </span>
+                      </div>
+                      <div className="font-mono" style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                        {wall.badge}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {offersViewMode === 'cards' ? (
               owmFeedLoading && owmFeed.offers.length === 0 ? (
@@ -8193,6 +8390,34 @@ export default function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'cards', label: `🔗 Single-Piece Shortlinks (${owmFeed.shortlinks.length})` },
+                  { id: 'pubcrypto', label: '🔥 PubCrypto Shortlinks Wall' },
+                  { id: 'owm_wall', label: '🌐 Offerwall.me Shortlinks Wall' },
+                ].map((mode) => {
+                  const active = shortlinksSubMode === mode.id && !showPartnerShortlinksWall;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => {
+                        setShowPartnerShortlinksWall(false);
+                        setShortlinksSubMode(mode.id as any);
+                        if (mode.id === 'pubcrypto') {
+                          refreshPubCryptoSignedUrl(user.id, false);
+                        }
+                      }}
+                      className="btn btn-sm"
+                      style={{
+                        background: active ? 'rgba(0,232,154,0.16)' : 'var(--bg2)',
+                        border: active ? '1.5px solid var(--green)' : '1px solid var(--border)',
+                        color: active ? 'var(--green)' : 'var(--txt2)',
+                      }}
+                    >
+                      {mode.label}
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => {
@@ -8203,17 +8428,10 @@ export default function App() {
                 >
                   {owmFeedLoading ? 'Refreshing...' : 'Refresh & Sync'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPartnerShortlinksWall((prev) => !prev)}
-                  className="btn btn-ghost btn-sm"
-                >
-                  {showPartnerShortlinksWall ? 'Hide Iframe Wall' : 'Open Iframe Wall'}
-                </button>
               </div>
             </div>
 
-            {owmFeed.shortlinks.length > 0 && (
+            {shortlinksSubMode === 'cards' && !showPartnerShortlinksWall && owmFeed.shortlinks.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: 14 }}>
                 {owmFeed.shortlinks.map((osl: any, idx: number) => {
                   const remViews = Number(osl.remaining_views) || 0;
@@ -8255,7 +8473,7 @@ export default function App() {
                             >
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0-7.07 7.07l1.71-1.71" />
                               </svg>
                             </div>
                             <div>
@@ -8328,28 +8546,95 @@ export default function App() {
               </div>
             )}
 
-            {showPartnerShortlinksWall && (
+            {(shortlinksSubMode === 'pubcrypto' || shortlinksSubMode === 'owm_wall' || showPartnerShortlinksWall) && (
               <div className="card card-glow" style={{ padding: 20 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 10,
+                    marginBottom: 14,
+                    paddingBottom: 12,
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div>
+                    <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--txt)' }}>
+                      {shortlinksSubMode === 'pubcrypto'
+                        ? '🔥 PubCrypto — Shortlinks (PubCryptoLink), PTC & Tasks Wall'
+                        : '🌐 Offerwall.me — Shortlinks Wall'}
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                      Instant S2S Postback credit via <code className="font-mono">lootify/api/postback</code>
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {shortlinksSubMode === 'pubcrypto' && (
+                      <button
+                        type="button"
+                        onClick={() => refreshPubCryptoSignedUrl(user.id, true)}
+                        className="btn btn-outline btn-sm"
+                      >
+                        Reload Session
+                      </button>
+                    )}
+                    <a
+                      href={
+                        shortlinksSubMode === 'pubcrypto'
+                          ? signedPubCryptoUrl ||
+                            `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
+                              PUBCRYPTO_SITE_KEY
+                            )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`
+                          : buildOfferwallMeTabUrl(
+                              signedOfferwallMeUrl ||
+                                buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
+                              'shortlinks'
+                            )
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-ghost btn-sm"
+                    >
+                      ↗ Open Fullscreen in New Tab
+                    </a>
+                  </div>
+                </div>
                 <iframe
-                  key={`shortlinks_owm_${user.id}`}
-                  src={buildOfferwallMeTabUrl(
-                    signedOfferwallMeUrl ||
-                      buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
-                    'shortlinks'
-                  )}
-                  title="Offerwall.me Shortlinks"
+                  key={`shortlinks_${shortlinksSubMode}_${user.id}`}
+                  data-pubcrypto-offerwall={shortlinksSubMode === 'pubcrypto' ? true : undefined}
+                  src={
+                    shortlinksSubMode === 'pubcrypto'
+                      ? signedPubCryptoUrl ||
+                        `https://pub.cryptolinkforearn.com/offerwall/?site_key=${encodeURIComponent(
+                          PUBCRYPTO_SITE_KEY
+                        )}&sub_id=${encodeURIComponent(user.id)}&theme=${theme}`
+                      : buildOfferwallMeTabUrl(
+                          signedOfferwallMeUrl ||
+                            buildSignedOfferwallMeUrlSync(OFFERWALLME_PUBLIC_KEY, user.id),
+                          'shortlinks'
+                        )
+                  }
+                  title={shortlinksSubMode === 'pubcrypto' ? 'PubCrypto Shortlinks' : 'Offerwall.me Shortlinks'}
                   width="100%"
-                  height={620}
+                  height={shortlinksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 620}
                   frameBorder={0}
+                  referrerPolicy={shortlinksSubMode === 'pubcrypto' ? 'no-referrer' : undefined}
                   allow="clipboard-write; fullscreen; popups"
                   style={{
                     display: 'block',
                     width: '100%',
-                    height: 620,
+                    height: shortlinksSubMode === 'pubcrypto' ? pubCryptoIframeHeight : 620,
                     border: '1px solid var(--border)',
                     borderRadius: 12,
                     background: '#0B121E',
                   }}
+                  sandbox={
+                    shortlinksSubMode === 'pubcrypto'
+                      ? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
+                      : undefined
+                  }
                 />
               </div>
             )}

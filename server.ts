@@ -318,29 +318,44 @@ function signOfferwallMeUrl(publicKey: string, userId: string, secretKey: string
   )}`;
 }
 
-async function fetchOfferwallMeHistoryForUser(userId: string, secretKey: string): Promise<any[]> {
+const _owmHistCache = new Map<string, { ts: number; items: any[] }>();
+
+async function fetchOfferwallMeHistoryForUser(
+  userId: string,
+  secretKey: string,
+  forceFresh = false
+): Promise<any[]> {
   const uid = String(userId || '').trim();
   if (!uid) return [];
+  const cached = _owmHistCache.get(uid);
+  if (!forceFresh && cached && Date.now() - cached.ts < 3000) {
+    return cached.items;
+  }
   try {
     const pub = 'PQhx5BxXulHlM6PxZx81pZgIs2nyRd';
     const expires = String(Math.floor(Date.now() / 1000) + 3600);
     const message = `offerwall-user-v1\n${pub}\n${uid}\n${expires}`;
     const signature = crypto.createHmac('sha256', secretKey).update(message, 'utf8').digest('hex');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3500);
     const resp = await fetch(
       `https://offerwall.me/api/public/history/${encodeURIComponent(pub)}?userId=${encodeURIComponent(
         uid
-      )}`,
+      )}&_t=${Date.now()}`,
       {
+        signal: ctrl.signal,
         headers: {
           'x-offerwall-user-expires': expires,
           'x-offerwall-user-signature': signature,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
         },
       }
     );
-    if (!resp.ok) return [];
+    clearTimeout(timer);
+    if (!resp.ok) return cached ? cached.items : [];
     const data: any = await resp.json();
     if (!data || !Array.isArray(data.history)) return [];
-    return data.history.filter((item: any) => {
+    const items = data.history.filter((item: any) => {
       if (!item) return false;
       const reward = Number(item.reward) || 0;
       if (reward <= 0 || item.rejectionReason) return false;
@@ -361,8 +376,10 @@ async function fetchOfferwallMeHistoryForUser(userId: string, secretKey: string)
       }
       return st === 'approved' || st === 'completed';
     });
+    _owmHistCache.set(uid, { ts: Date.now(), items });
+    return items;
   } catch {
-    return [];
+    return cached ? cached.items : [];
   }
 }
 
@@ -890,7 +907,7 @@ async function startServer() {
     try {
       const owmWall = db.offerwalls.find((w) => w.provider_id === 'offerwallme');
       const secret = getOfferwallMeSecret(owmWall && owmWall.secret_key);
-      const owmHistory = await fetchOfferwallMeHistoryForUser(user.id, secret);
+      const owmHistory = await fetchOfferwallMeHistoryForUser(user.id, secret, Boolean(body.forceHistory));
       for (const item of owmHistory) {
         const rawTx = String(item.transactionId || item.id || '').trim();
         if (!rawTx) continue;
@@ -1561,6 +1578,14 @@ async function startServer() {
       'userid',
       'click_id',
     ]);
+    if (userId) {
+      _owmHistCache.delete(userId);
+      for (const k of _owmFeedCache.keys()) {
+        if (String(k).startsWith(`${userId}_`)) {
+          _owmFeedCache.delete(k);
+        }
+      }
+    }
 
     const explicitRewardPb = pickCleanFromObj(merged, ['reward_pb', 'member_points']);
     const explicitFullReward = pickCleanFromObj(merged, ['reward', 'coins', 'points', 'currency']);
