@@ -965,13 +965,38 @@ export default function App() {
   const [copiedPlayerId, setCopiedPlayerId] = useState<boolean>(false);
   const [earningsPopupOpen, setEarningsPopupOpen] = useState<boolean>(false);
   const [ptcSubMode, setPtcSubMode] = useState<'cards' | 'owm_iframe' | 'owm_window' | 'pubcrypto'>('cards');
-  const [ptcCardTypeFilter, setPtcCardTypeFilter] = useState<'all' | 'iframe' | 'window'>('all');
+  const [ptcCardTypeFilter, setPtcCardTypeFilter] = useState<'all' | 'iframe' | 'window' | 'pubcrypto'>('all');
   const [tasksSubMode, setTasksSubMode] = useState<'cards' | 'owm_general' | 'owm_telegram' | 'pubcrypto'>('cards');
   const [offersViewMode, setOffersViewMode] = useState<'cards' | 'walls'>('cards');
   const [surveysViewMode, setSurveysViewMode] = useState<'cards' | 'wall'>('cards');
   const [youtubeViewMode, setYoutubeViewMode] = useState<'cards' | 'wall'>('cards');
   const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(false);
   const [shortlinksSubMode, setShortlinksSubMode] = useState<'cards' | 'pubcrypto' | 'owm_wall'>('cards');
+
+  // PubCrypto Native Single-Piece Feed State (0ms seed + live browser session sync)
+  const [pubCryptoNativeFeed, setPubCryptoNativeFeed] = useState<{
+    linkTasks: any[];
+    reviewMapTasks: any[];
+    ptcCampaigns: any[];
+    shortlinkCampaigns: any[];
+    readArticleCampaigns: any[];
+  }>(() => ({
+    linkTasks: [
+      { id: 83, task_name: 'UrkCik', member_reward: '320.00', total_max: 1, remaining_in_cycle: 1, used_in_cycle: 0, cooldown_seconds: 300, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
+      { id: 52, task_name: 'Cuty', member_reward: '60.00', total_max: 1, remaining_in_cycle: 1, used_in_cycle: 0, cooldown_seconds: 1, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
+      { id: 53, task_name: 'Exe', member_reward: '40.00', total_max: 1, remaining_in_cycle: 1, used_in_cycle: 0, cooldown_seconds: 30, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
+      { id: 73, task_name: 'ShrinkMy', member_reward: '40.00', total_max: 5, remaining_in_cycle: 5, used_in_cycle: 0, cooldown_seconds: 300, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
+      { id: 74, task_name: 'ShrinkMy #2', member_reward: '40.00', total_max: 5, remaining_in_cycle: 5, used_in_cycle: 0, cooldown_seconds: 300, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
+      { id: 75, task_name: 'ShrinkMe', member_reward: '40.00', total_max: 5, remaining_in_cycle: 5, used_in_cycle: 0, cooldown_seconds: 300, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
+      { id: 81, task_name: 'Cutwin', member_reward: '40.00', total_max: 1, remaining_in_cycle: 1, used_in_cycle: 0, cooldown_seconds: 300, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
+    ],
+    reviewMapTasks: [],
+    ptcCampaigns: [],
+    shortlinkCampaigns: [],
+    readArticleCampaigns: [],
+  }));
+  const [pubCryptoLaunchingId, setPubCryptoLaunchingId] = useState<string | null>(null);
+  const [pubCryptoLaunchNotice, setPubCryptoLaunchNotice] = useState<string | null>(null);
 
   // Offerwall.me Single-Piece Feed State (Hydrated in 0ms from localStorage + Live SWR Sync)
   const [owmFeed, setOwmFeed] = useState<{
@@ -1035,6 +1060,13 @@ export default function App() {
   const lastAdActivityAtRef = useRef<number>(Date.now());
   const burstTimersRef = useRef<number[]>([]);
   const pubCryptoRefreshInFlightRef = useRef<boolean>(false);
+  const pubCryptoSessionRef = useRef<{
+    token: string;
+    siteKey: string;
+    subId: string;
+    expiresAt: number;
+  } | null>(null);
+  const pubCryptoNativeFetchInFlightRef = useRef<boolean>(false);
   const lastTabSwitchAtRef = useRef<number>(Date.now());
   const owmFetchInFlightRef = useRef<boolean>(false);
   const lastOwmFetchAtRef = useRef<number>(0);
@@ -1297,6 +1329,422 @@ export default function App() {
       }
     },
     [user?.id]
+  );
+
+  // Reusable 12-hour PubCrypto Browser Session (ows_...) for Native Single-Piece Extraction
+  const ensurePubCryptoBrowserSession = useCallback(
+    async (uid?: string, forceFresh = false) => {
+      const activeUid = uid || user?.id || loadCurrentUser()?.id || 'plr_c2fydghha3';
+      const now = Date.now();
+      if (
+        !forceFresh &&
+        pubCryptoSessionRef.current &&
+        pubCryptoSessionRef.current.subId === activeUid &&
+        pubCryptoSessionRef.current.token.startsWith('ows_') &&
+        pubCryptoSessionRef.current.expiresAt > now + 15000
+      ) {
+        return pubCryptoSessionRef.current;
+      }
+
+      if (!forceFresh) {
+        try {
+          const cachedRaw = sessionStorage.getItem(`lootify_pc_ows_session_${activeUid}`);
+          if (cachedRaw) {
+            const parsed = JSON.parse(cachedRaw);
+            if (
+              parsed &&
+              typeof parsed.token === 'string' &&
+              parsed.token.startsWith('ows_') &&
+              Number(parsed.expiresAt) > now + 15000
+            ) {
+              pubCryptoSessionRef.current = parsed;
+              return parsed;
+            }
+          }
+        } catch {}
+      }
+
+      const base = getApiBaseUrl();
+      let embedToken = '';
+      try {
+        const res = await fetch(
+          `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+            activeUid
+          )}&theme=dark&force=1&_t=${Date.now()}`,
+          { cache: 'no-store' }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.signed_iframe_url) {
+            embedToken = new URL(String(data.signed_iframe_url)).searchParams.get('embed_token') || '';
+          }
+        }
+      } catch {}
+
+      if (!embedToken) {
+        try {
+          const localRes = await fetch(
+            `/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+              activeUid
+            )}&theme=dark&force=1&_t=${Date.now()}`,
+            { cache: 'no-store' }
+          );
+          if (localRes.ok) {
+            const data = await localRes.json();
+            if (data?.signed_iframe_url) {
+              embedToken = new URL(String(data.signed_iframe_url)).searchParams.get('embed_token') || '';
+            }
+          }
+        } catch {}
+      }
+
+      if (!embedToken) return null;
+
+      try {
+        const sessRes = await fetch('https://pub.cryptolinkforearn.com/api/offerwall/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ embed_token: embedToken }),
+        });
+        if (!sessRes.ok) return null;
+        const sessData = await sessRes.json();
+        if (!sessData?.session_token || !String(sessData.session_token).startsWith('ows_')) return null;
+
+        const sessionObj = {
+          token: String(sessData.session_token),
+          siteKey: String(sessData.site_key || PUBCRYPTO_SITE_KEY),
+          subId: String(sessData.sub_id || activeUid),
+          expiresAt: Date.now() + Math.max(600, Number(sessData.expires_in) || 43200) * 1000,
+        };
+        pubCryptoSessionRef.current = sessionObj;
+        try {
+          sessionStorage.setItem(`lootify_pc_ows_session_${activeUid}`, JSON.stringify(sessionObj));
+        } catch {}
+        return sessionObj;
+      } catch {
+        return null;
+      }
+    },
+    [user?.id]
+  );
+
+  const fetchPubCryptoNativeFeed = useCallback(
+    async (uid?: string, forceFresh = false) => {
+      if (pubCryptoNativeFetchInFlightRef.current && !forceFresh) return;
+      pubCryptoNativeFetchInFlightRef.current = true;
+      try {
+        const activeUid = uid || user?.id || loadCurrentUser()?.id || 'plr_c2fydghha3';
+        let sess = await ensurePubCryptoBrowserSession(activeUid, forceFresh);
+        if (!sess) return;
+
+        const authHeaders = { Authorization: `Bearer ${sess.token}` };
+        const qs = `?site_key=${encodeURIComponent(sess.siteKey)}&sub_id=${encodeURIComponent(sess.subId)}`;
+
+        let extRes = await fetch(`https://pub.cryptolinkforearn.com/api/link-tasks/external${qs}`, {
+          headers: authHeaders,
+        }).catch(() => null);
+
+        if (extRes && extRes.status === 401) {
+          sess = await ensurePubCryptoBrowserSession(activeUid, true);
+          if (!sess) return;
+          authHeaders.Authorization = `Bearer ${sess.token}`;
+          extRes = await fetch(
+            `https://pub.cryptolinkforearn.com/api/link-tasks/external?site_key=${encodeURIComponent(
+              sess.siteKey
+            )}&sub_id=${encodeURIComponent(sess.subId)}`,
+            { headers: authHeaders }
+          ).catch(() => null);
+        }
+
+        const [
+          extJson,
+          revJson,
+          bitcoPtcJson,
+          bitcoSlJson,
+          readArtJson,
+          pcOwmPtcJson,
+          pcOwmSlJson,
+        ] = await Promise.all([
+          extRes && extRes.ok ? extRes.json().catch(() => null) : Promise.resolve(null),
+          fetch(`https://pub.cryptolinkforearn.com/api/link-tasks/review-map${qs}`, { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/ptc', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/shortlink', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/read-article', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/offerwallme/ptc', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/offerwallme/shortlink', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+
+        setPubCryptoNativeFeed((prev) => {
+          const linkTasks =
+            extJson && Array.isArray(extJson.tasks) && extJson.tasks.length > 0
+              ? extJson.tasks
+              : prev.linkTasks;
+          const reviewMapTasks =
+            revJson && Array.isArray(revJson.tasks) ? revJson.tasks : prev.reviewMapTasks;
+          const bitcoPtc = Array.isArray(bitcoPtcJson?.campaigns)
+            ? bitcoPtcJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'BITCOTASK PTC' }))
+            : [];
+          const pcOwmPtc = Array.isArray(pcOwmPtcJson?.campaigns)
+            ? pcOwmPtcJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'PUBCRYPTO PTC' }))
+            : [];
+          const bitcoSl = Array.isArray(bitcoSlJson?.campaigns)
+            ? bitcoSlJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'BITCOTASK LINK' }))
+            : [];
+          const pcOwmSl = Array.isArray(pcOwmSlJson?.campaigns)
+            ? pcOwmSlJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'PUBCRYPTO SHORTLINK' }))
+            : [];
+          const readArticleCampaigns = Array.isArray(readArtJson?.campaigns)
+            ? readArtJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'BITCOTASK READ & EARN' }))
+            : prev.readArticleCampaigns;
+
+          return {
+            linkTasks,
+            reviewMapTasks,
+            ptcCampaigns: [...bitcoPtc, ...pcOwmPtc].length > 0 ? [...bitcoPtc, ...pcOwmPtc] : prev.ptcCampaigns,
+            shortlinkCampaigns: [...bitcoSl, ...pcOwmSl].length > 0 ? [...bitcoSl, ...pcOwmSl] : prev.shortlinkCampaigns,
+            readArticleCampaigns,
+          };
+        });
+      } finally {
+        pubCryptoNativeFetchInFlightRef.current = false;
+      }
+    },
+    [ensurePubCryptoBrowserSession, user?.id]
+  );
+
+  const getOrCreatePubCryptoDeviceId = () => {
+    const key = 'pubcrypto_link_device';
+    try {
+      const existing = localStorage.getItem(key);
+      if (existing && /^[a-f0-9]{64}$/.test(existing)) return existing;
+      const bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(key, hex);
+      return hex;
+    } catch {
+      return 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    }
+  };
+
+  const handleLaunchPubCryptoLinkTask = useCallback(
+    async (task: any) => {
+      const popup = window.open('about:blank', '_blank');
+      if (!popup) {
+        setPubCryptoLaunchNotice('Please allow popups in your browser to open this task.');
+        return;
+      }
+      const key = `pc_link_${task.id}`;
+      setPubCryptoLaunchingId(key);
+      setPubCryptoLaunchNotice(null);
+      markOwmItemClicked(key);
+
+      try {
+        const activeUid = user?.id || loadCurrentUser()?.id || 'plr_c2fydghha3';
+        let sess = await ensurePubCryptoBrowserSession(activeUid, false);
+        if (!sess) {
+          sess = await ensurePubCryptoBrowserSession(activeUid, true);
+        }
+        if (!sess) throw new Error('Could not initialize PubCrypto session.');
+
+        const deviceId = getOrCreatePubCryptoDeviceId();
+        let res = await fetch('https://pub.cryptolinkforearn.com/api/link-tasks/external-launch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sess.token}`,
+          },
+          body: JSON.stringify({ task_id: task.id, device_id: deviceId }),
+        });
+
+        if (res.status === 401) {
+          sess = await ensurePubCryptoBrowserSession(activeUid, true);
+          if (sess) {
+            res = await fetch('https://pub.cryptolinkforearn.com/api/link-tasks/external-launch', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${sess.token}`,
+              },
+              body: JSON.stringify({ task_id: task.id, device_id: deviceId }),
+            });
+          }
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.launch_url) {
+          throw new Error(data?.error || 'Task is currently on cooldown or unavailable.');
+        }
+
+        try {
+          popup.opener = null;
+        } catch {}
+        popup.location.replace(String(data.launch_url));
+        fetchPubCryptoNativeFeed(activeUid, true);
+      } catch (err: any) {
+        popup.close();
+        setPubCryptoLaunchNotice(err?.message || 'Unable to launch PubCrypto Link task.');
+      } finally {
+        setPubCryptoLaunchingId(null);
+      }
+    },
+    [ensurePubCryptoBrowserSession, fetchPubCryptoNativeFeed, markOwmItemClicked, user?.id]
+  );
+
+  const handleLaunchPubCryptoCampaign = useCallback(
+    async (campaign: any) => {
+      const popup = window.open('about:blank', '_blank');
+      if (!popup) {
+        setPubCryptoLaunchNotice('Please allow popups in your browser to open this campaign.');
+        return;
+      }
+      const key = `pc_camp_${campaign.id || campaign.campaign_token}`;
+      setPubCryptoLaunchingId(key);
+      setPubCryptoLaunchNotice(null);
+      markOwmItemClicked(key);
+
+      try {
+        const activeUid = user?.id || loadCurrentUser()?.id || 'plr_c2fydghha3';
+        let sess = await ensurePubCryptoBrowserSession(activeUid, false);
+        if (!sess) {
+          sess = await ensurePubCryptoBrowserSession(activeUid, true);
+        }
+        if (!sess) throw new Error('Could not initialize PubCrypto session.');
+
+        const clickBody = JSON.stringify({
+          campaign_token: campaign.campaign_token,
+          interaction: {
+            visible_ms: 4200,
+            pointer_events: 5,
+            page_visible: true,
+            trusted_click: true,
+          },
+        });
+
+        let res = await fetch('https://pub.cryptolinkforearn.com/api/offerwall/click', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sess.token}`,
+          },
+          body: clickBody,
+        });
+
+        if (res.status === 401) {
+          sess = await ensurePubCryptoBrowserSession(activeUid, true);
+          if (sess) {
+            res = await fetch('https://pub.cryptolinkforearn.com/api/offerwall/click', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${sess.token}`,
+              },
+              body: clickBody,
+            });
+          }
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.redirect_url) {
+          try {
+            popup.opener = null;
+          } catch {}
+          popup.location.replace(String(data.redirect_url));
+          return;
+        }
+        // Fallback: open full PubCrypto session if anti-bot challenge is requested
+        const base = getApiBaseUrl();
+        popup.location.replace(
+          `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+            activeUid
+          )}&theme=dark&redirect=1`
+        );
+      } catch (err: any) {
+        popup.close();
+        setPubCryptoLaunchNotice(err?.message || 'Unable to open campaign.');
+      } finally {
+        setPubCryptoLaunchingId(null);
+      }
+    },
+    [ensurePubCryptoBrowserSession, markOwmItemClicked, user?.id]
+  );
+
+  const handleLaunchPubCryptoPartnerWall = useCallback(
+    async (partner: 'bitcotasks' | 'timewall') => {
+      const popup = window.open('about:blank', '_blank');
+      if (!popup) return;
+      const key = `pc_partner_${partner}`;
+      setPubCryptoLaunchingId(key);
+      markOwmItemClicked(key);
+      try {
+        const activeUid = user?.id || loadCurrentUser()?.id || 'plr_c2fydghha3';
+        let sess = await ensurePubCryptoBrowserSession(activeUid, false);
+        if (!sess) sess = await ensurePubCryptoBrowserSession(activeUid, true);
+        if (!sess) throw new Error('Session failed');
+
+        if (partner === 'timewall') {
+          const twRes = await fetch('https://pub.cryptolinkforearn.com/api/offerwall/timewall/frame?tab=tasks', {
+            headers: { Authorization: `Bearer ${sess.token}` },
+          });
+          const twData = await twRes.json().catch(() => ({}));
+          if (twRes.ok && twData?.frame_url) {
+            popup.location.replace(String(twData.frame_url));
+            return;
+          }
+        } else {
+          const otRes = await fetch('https://pub.cryptolinkforearn.com/api/offerwall/other-task', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sess.token}`,
+            },
+            body: '{}',
+          });
+          const otData = await otRes.json().catch(() => ({}));
+          if (otRes.ok && otData?.campaign_token) {
+            const clickRes = await fetch('https://pub.cryptolinkforearn.com/api/offerwall/click', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${sess.token}`,
+              },
+              body: JSON.stringify({
+                campaign_token: otData.campaign_token,
+                interaction: { visible_ms: 4200, pointer_events: 5, page_visible: true, trusted_click: true },
+              }),
+            });
+            const clickData = await clickRes.json().catch(() => ({}));
+            if (clickRes.ok && clickData?.redirect_url) {
+              popup.location.replace(String(clickData.redirect_url));
+              return;
+            }
+          }
+        }
+        const base = getApiBaseUrl();
+        popup.location.replace(
+          `${base}/api/offerwalls/signed-url?provider_id=pubcrypto&user_id=${encodeURIComponent(
+            activeUid
+          )}&theme=dark&redirect=1`
+        );
+      } catch {
+        popup.close();
+      } finally {
+        setPubCryptoLaunchingId(null);
+      }
+    },
+    [ensurePubCryptoBrowserSession, markOwmItemClicked, user?.id]
   );
 
   // Official PubCrypto Offerwall Auto-Resize postMessage Listener
@@ -1631,6 +2079,7 @@ export default function App() {
       if (isWallSection) {
         refreshOfferwallMeSignedUrl(activeUid, false);
         fetchOfferwallMeFeed(activeUid, forceFresh);
+        fetchPubCryptoNativeFeed(activeUid, forceFresh);
       }
     };
 
@@ -1641,7 +2090,7 @@ export default function App() {
       }
     }, 20 * 1000);
     return () => window.clearInterval(intervalId);
-  }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, refreshOfferwallMeSignedUrl]);
+  }, [user?.id, selectedWallId, activeTab, fetchOfferwallMeFeed, fetchPubCryptoNativeFeed, refreshOfferwallMeSignedUrl]);
 
   // Mint a brand-new single-use PubCrypto embed_token ONLY when a PubCrypto iframe wall actually mounts, and clear it when unmounted
   useEffect(() => {
@@ -6619,7 +7068,10 @@ export default function App() {
                   })}
                   <button
                     type="button"
-                    onClick={() => fetchOfferwallMeFeed(user.id, true)}
+                    onClick={() => {
+                      fetchOfferwallMeFeed(user.id, true);
+                      fetchPubCryptoNativeFeed(user.id, true);
+                    }}
                     className="btn btn-outline btn-sm"
                   >
                     {owmFeedLoading ? 'Refreshing...' : 'Refresh Tasks'}
@@ -6627,8 +7079,190 @@ export default function App() {
                 </div>
               </div>
 
+              {pubCryptoLaunchNotice && (
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(245,158,11,0.12)',
+                    border: '1px solid rgba(245,158,11,0.35)',
+                    color: '#F59E0B',
+                    fontSize: 12.5,
+                  }}
+                >
+                  ⚡ {pubCryptoLaunchNotice}
+                </div>
+              )}
+
               {tasksSubMode === 'cards' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Extracted Single-Piece PubCrypto Partner Launchers + Read & Earn / Link Quests */}
+                  <div
+                    className="card"
+                    style={{
+                      padding: 18,
+                      background: 'var(--bg2)',
+                      border: '1px solid rgba(139,92,246,0.35)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 14,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: 10.5,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(139,92,246,0.18)',
+                            color: '#A78BFA',
+                            fontWeight: 700,
+                          }}
+                        >
+                          🚀 PUBCRYPTO EXTRACTED ELEMENTS
+                        </span>
+                        <h3 className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', marginTop: 6 }}>
+                          PubCrypto Direct Partner Tasks &amp; High-Reward Quests
+                        </h3>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleLaunchPubCryptoPartnerWall('bitcotasks')}
+                          className="btn btn-sm"
+                          style={{
+                            background: 'rgba(139,92,246,0.18)',
+                            border: '1px solid rgba(139,92,246,0.45)',
+                            color: '#C4B5FD',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {pubCryptoLaunchingId === 'pc_partner_bitcotasks'
+                            ? 'Launching BitcoTasks...'
+                            : '⚡ Open BitcoTasks Full Wall ↗'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleLaunchPubCryptoPartnerWall('timewall')}
+                          className="btn btn-sm"
+                          style={{
+                            background: 'rgba(56,189,248,0.16)',
+                            border: '1px solid rgba(56,189,248,0.4)',
+                            color: '#38BDF8',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {pubCryptoLaunchingId === 'pc_partner_timewall'
+                            ? 'Launching TimeWall...'
+                            : '⏱️ Open TimeWall Tasks Direct ↗'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {(pubCryptoNativeFeed.readArticleCampaigns.length > 0 ||
+                      pubCryptoNativeFeed.reviewMapTasks.length > 0) && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: 12 }}>
+                        {pubCryptoNativeFeed.readArticleCampaigns.map((art: any, idx: number) => {
+                          const rewardVal = Number(art.reward) || 0;
+                          return (
+                            <div
+                              key={`pc_art_${art.id || idx}`}
+                              style={{
+                                padding: 14,
+                                borderRadius: 10,
+                                background: 'var(--bg3)',
+                                border: '1px solid rgba(139,92,246,0.32)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                gap: 10,
+                              }}
+                            >
+                              <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                  <span
+                                    className="font-mono"
+                                    style={{
+                                      fontSize: 10,
+                                      padding: '2px 7px',
+                                      borderRadius: 5,
+                                      background: 'rgba(139,92,246,0.18)',
+                                      color: '#A78BFA',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    📖 READ &amp; EARN
+                                  </span>
+                                  <span className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
+                                    +{rewardVal} {art.currency_name || 'COINS'}
+                                  </span>
+                                </div>
+                                <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginTop: 6 }}>
+                                  {art.title}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleLaunchPubCryptoCampaign(art)}
+                                className="btn btn-primary btn-sm btn-full"
+                              >
+                                Start Read &amp; Earn ↗
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {pubCryptoNativeFeed.reviewMapTasks.map((rm: any, idx: number) => (
+                          <div
+                            key={`pc_rm_${rm.id || idx}`}
+                            style={{
+                              padding: 14,
+                              borderRadius: 10,
+                              background: 'var(--bg3)',
+                              border: '1px solid rgba(0,232,154,0.32)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                            }}
+                          >
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                <span
+                                  className="font-mono"
+                                  style={{
+                                    fontSize: 10,
+                                    padding: '2px 7px',
+                                    borderRadius: 5,
+                                    background: 'rgba(0,232,154,0.16)',
+                                    color: 'var(--green)',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  🗺️ REVIEW MAP
+                                </span>
+                                <span className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
+                                  +{rm.member_reward} COINS
+                                </span>
+                              </div>
+                              <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginTop: 6 }}>
+                                {rm.task_name}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleLaunchPubCryptoLinkTask(rm)}
+                              className="btn btn-primary btn-sm btn-full"
+                            >
+                              Start Review Map Task ↗
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {owmFeedLoading && owmFeed.tasks.length === 0 ? (
                     <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--txt2)' }}>
                       Loading individual micro-tasks from Offerwall.me API...
@@ -7417,20 +8051,30 @@ export default function App() {
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'window')
               : signedPubCryptoUrl;
 
-          const allPtcAds =
+          const owmPtcAds =
             Array.isArray(owmFeed.ptc) && owmFeed.ptc.length > 0
               ? owmFeed.ptc
               : personalizeOwmFeedForUser(INITIAL_OWM_FEED_SEED, user.id).ptc;
 
-          const isWindowPtcAd = (ad: any) =>
-            Number(ad?.type) === 1 || String(ad?.url || '').includes('/sw.php');
+          const pcExtractedPtcAds = (pubCryptoNativeFeed.ptcCampaigns || []).map((c: any) => ({
+            ...c,
+            isPubCryptoNative: true,
+            reward: Number(c.reward) > 0 && Number(c.reward) < 1 ? Number((Number(c.reward) * 25).toFixed(2)) : Number(c.reward) || 0.5,
+          }));
 
-          const windowCount = allPtcAds.filter((ad: any) => isWindowPtcAd(ad)).length;
-          const iframeCount = allPtcAds.filter((ad: any) => !isWindowPtcAd(ad)).length;
+          const allPtcAds = [...pcExtractedPtcAds, ...owmPtcAds];
+
+          const isWindowPtcAd = (ad: any) =>
+            !ad?.isPubCryptoNative && (Number(ad?.type) === 1 || String(ad?.url || '').includes('/sw.php'));
+
+          const windowCount = owmPtcAds.filter((ad: any) => isWindowPtcAd(ad)).length;
+          const iframeCount = owmPtcAds.filter((ad: any) => !isWindowPtcAd(ad)).length;
+          const pcPtcCount = pcExtractedPtcAds.length;
 
           const filteredPtcCards = allPtcAds.filter((ad: any) => {
-            if (ptcCardTypeFilter === 'window') return isWindowPtcAd(ad);
-            if (ptcCardTypeFilter === 'iframe') return !isWindowPtcAd(ad);
+            if (ptcCardTypeFilter === 'pubcrypto') return Boolean(ad?.isPubCryptoNative);
+            if (ptcCardTypeFilter === 'window') return !ad?.isPubCryptoNative && isWindowPtcAd(ad);
+            if (ptcCardTypeFilter === 'iframe') return !ad?.isPubCryptoNative && !isWindowPtcAd(ad);
             return true;
           });
 
@@ -7464,10 +8108,10 @@ export default function App() {
                   </div>
                   <div>
                     <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                      PTC Ads — Window PTC &amp; Iframe PTC
+                      PTC Ads — Window PTC, Iframe PTC &amp; PubCrypto PTC
                     </h2>
                     <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
-                      {allPtcAds.length} Live Offerwall.me PTC Ads ({windowCount} Window • {iframeCount} Iframe • +{totalPtcCoins} Coins) for{' '}
+                      {allPtcAds.length} Live PTC Ads ({windowCount} Window • {iframeCount} Iframe • {pcPtcCount} PubCrypto • +{totalPtcCoins} Coins) for{' '}
                       <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Postback: <code className="font-mono">lootify/api/postback</code>
                     </p>
                   </div>
@@ -7502,6 +8146,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       fetchOfferwallMeFeed(user.id, true);
+                      fetchPubCryptoNativeFeed(user.id, true);
                       syncUserWithBackend(user, true);
                     }}
                     className="btn btn-outline btn-sm"
@@ -7513,7 +8158,7 @@ export default function App() {
 
               {ptcSubMode === 'cards' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* Sub-filter for Single-Piece Window & Iframe PTC Cards */}
+                  {/* Sub-filter for Single-Piece Window, Iframe & PubCrypto PTC Cards */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {[
@@ -7525,6 +8170,10 @@ export default function App() {
                         {
                           id: 'iframe',
                           label: `🖼️ Iframe PTC (${iframeCount})`,
+                        },
+                        {
+                          id: 'pubcrypto',
+                          label: `🚀 PubCrypto PTC (${pcPtcCount})`,
                         },
                       ].map((f) => {
                         const active = ptcCardTypeFilter === f.id;
@@ -7551,7 +8200,7 @@ export default function App() {
                       })}
                     </div>
                     <span className="font-mono" style={{ fontSize: 11, color: 'var(--green)' }}>
-                      Every card is tagged with <strong>WINDOW PTC</strong> or <strong>IFRAME PTC</strong>
+                      Every card is tagged with <strong>WINDOW PTC</strong>, <strong>IFRAME PTC</strong>, or <strong>PUBCRYPTO PTC</strong>
                     </span>
                   </div>
 
@@ -7564,11 +8213,12 @@ export default function App() {
                       {filteredPtcCards.map((ad: any, idx: number) => {
                         const rewardCoins = Number(ad.reward) || 0;
                         const durationSec = Number(ad.duration) || 5;
+                        const isPcNative = Boolean(ad?.isPubCryptoNative);
                         const isWindow = isWindowPtcAd(ad);
-                        const personalizedHref = personalizeOwmItemUrl(ad.url, user.id);
+                        const personalizedHref = isPcNative ? '#' : personalizeOwmItemUrl(ad.url, user.id);
                         return (
                           <div
-                            key={`${ad.title}_${idx}`}
+                            key={`${ad.id || ad.title}_${idx}`}
                             className="card"
                             style={{
                               padding: 20,
@@ -7576,14 +8226,16 @@ export default function App() {
                               flexDirection: 'column',
                               justifyContent: 'space-between',
                               gap: 14,
-                              border: isWindow
-                                ? '1.5px solid rgba(56,189,248,0.38)'
-                                : '1.5px solid rgba(0,232,154,0.35)',
+                              border: isPcNative
+                                ? '1.5px solid rgba(139,92,246,0.45)'
+                                : isWindow
+                                  ? '1.5px solid rgba(56,189,248,0.38)'
+                                  : '1.5px solid rgba(0,232,154,0.35)',
                               background: 'var(--bg2)',
                             }}
                           >
                             <div>
-                              {/* Prominent Top Tag Bar: WINDOW PTC vs IFRAME PTC */}
+                              {/* Prominent Top Tag Bar: WINDOW PTC vs IFRAME PTC vs PUBCRYPTO PTC */}
                               <div
                                 style={{
                                   display: 'flex',
@@ -7602,18 +8254,26 @@ export default function App() {
                                       fontSize: 11,
                                       padding: '4px 10px',
                                       borderRadius: 6,
-                                      background: isWindow
-                                        ? 'rgba(56,189,248,0.18)'
-                                        : 'rgba(0,232,154,0.18)',
-                                      border: isWindow
-                                        ? '1px solid rgba(56,189,248,0.45)'
-                                        : '1px solid rgba(0,232,154,0.45)',
-                                      color: isWindow ? '#38BDF8' : 'var(--green)',
+                                      background: isPcNative
+                                        ? 'rgba(139,92,246,0.2)'
+                                        : isWindow
+                                          ? 'rgba(56,189,248,0.18)'
+                                          : 'rgba(0,232,154,0.18)',
+                                      border: isPcNative
+                                        ? '1px solid rgba(139,92,246,0.5)'
+                                        : isWindow
+                                          ? '1px solid rgba(56,189,248,0.45)'
+                                          : '1px solid rgba(0,232,154,0.45)',
+                                      color: isPcNative ? '#C4B5FD' : isWindow ? '#38BDF8' : 'var(--green)',
                                       fontWeight: 700,
                                       letterSpacing: '0.03em',
                                     }}
                                   >
-                                    {isWindow ? '🪟 WINDOW PTC' : '🖼️ IFRAME PTC'}
+                                    {isPcNative
+                                      ? `🚀 ${ad.sourceLabel || 'PUBCRYPTO PTC'}`
+                                      : isWindow
+                                        ? '🪟 WINDOW PTC'
+                                        : '🖼️ IFRAME PTC'}
                                   </span>
                                   <span
                                     className="font-mono"
@@ -7630,7 +8290,10 @@ export default function App() {
                                     ⏱️ {durationSec}s
                                   </span>
                                   {(() => {
-                                    const st = getOwmCardLiveStatus(`ptc_${ad.title}_${idx}`, ad.title);
+                                    const st = getOwmCardLiveStatus(
+                                      isPcNative ? `pc_camp_${ad.id || ad.campaign_token}` : `ptc_${ad.title}_${idx}`,
+                                      ad.title
+                                    );
                                     if (!st) return null;
                                     return (
                                       <span
@@ -7677,24 +8340,41 @@ export default function App() {
                               )}
                             </div>
 
-                            <a
-                              href={personalizedHref}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => markOwmItemClicked(`ptc_${ad.title}_${idx}`)}
-                              className="btn btn-primary btn-sm btn-full"
-                              style={{
-                                textAlign: 'center',
-                                textDecoration: 'none',
-                                background: isWindow ? '#38BDF8' : 'var(--green)',
-                                color: '#03100A',
-                                fontWeight: 700,
-                              }}
-                            >
-                              {owmClickedIds[`ptc_${ad.title}_${idx}`]
-                                ? `Re-open ${isWindow ? 'Window PTC' : 'Iframe PTC'} (${durationSec}s) • Auto-Syncing ↗`
-                                : `Open ${isWindow ? 'Window PTC' : 'Iframe PTC'} (${durationSec}s) • +${rewardCoins} Coins ↗`}
-                            </a>
+                            {isPcNative ? (
+                              <button
+                                type="button"
+                                onClick={() => handleLaunchPubCryptoCampaign(ad)}
+                                className="btn btn-primary btn-sm btn-full"
+                                style={{
+                                  background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                                  color: '#FFFFFF',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {pubCryptoLaunchingId === `pc_camp_${ad.id || ad.campaign_token}`
+                                  ? 'Opening PubCrypto Ad...'
+                                  : `Open PubCrypto PTC (${durationSec}s) • +${rewardCoins} Coins ↗`}
+                              </button>
+                            ) : (
+                              <a
+                                href={personalizedHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => markOwmItemClicked(`ptc_${ad.title}_${idx}`)}
+                                className="btn btn-primary btn-sm btn-full"
+                                style={{
+                                  textAlign: 'center',
+                                  textDecoration: 'none',
+                                  background: isWindow ? '#38BDF8' : 'var(--green)',
+                                  color: '#03100A',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {owmClickedIds[`ptc_${ad.title}_${idx}`]
+                                  ? `Re-open ${isWindow ? 'Window PTC' : 'Iframe PTC'} (${durationSec}s) • Auto-Syncing ↗`
+                                  : `Open ${isWindow ? 'Window PTC' : 'Iframe PTC'} (${durationSec}s) • +${rewardCoins} Coins ↗`}
+                              </a>
+                            )}
                           </div>
                         );
                       })}
@@ -8446,10 +9126,10 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>
-                    Paid Shortlinks ({owmFeed.shortlinks.length})
+                    Paid Shortlinks ({pubCryptoNativeFeed.linkTasks.length + pubCryptoNativeFeed.shortlinkCampaigns.length + owmFeed.shortlinks.length})
                   </h2>
                   <p style={{ fontSize: 13.5, color: 'var(--txt2)', marginTop: 2 }}>
-                    Complete sponsor shortlinks for Player ID{' '}
+                    Single-piece extracted PubCrypto Link + Offerwall.me shortlinks for{' '}
                     <span className="font-mono" style={{ color: 'var(--green)' }}>{user.id}</span> • Instant S2S credit via{' '}
                     <code className="font-mono">lootify/api/postback</code>
                   </p>
@@ -8457,7 +9137,10 @@ export default function App() {
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {[
-                  { id: 'cards', label: `🔗 Single-Piece Shortlinks (${owmFeed.shortlinks.length})` },
+                  {
+                    id: 'cards',
+                    label: `🔗 Single-Piece Shortlinks (${pubCryptoNativeFeed.linkTasks.length + pubCryptoNativeFeed.shortlinkCampaigns.length + owmFeed.shortlinks.length})`,
+                  },
                   { id: 'pubcrypto', label: '🔥 PubCrypto Shortlinks Wall' },
                   { id: 'owm_wall', label: '🌐 Offerwall.me Shortlinks Wall' },
                 ].map((mode) => {
@@ -8485,6 +9168,7 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     fetchOfferwallMeFeed(user.id, true);
+                    fetchPubCryptoNativeFeed(user.id, true);
                     syncUserWithBackend(user, true);
                   }}
                   className="btn btn-outline btn-sm"
@@ -8493,6 +9177,240 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {pubCryptoLaunchNotice && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: 'rgba(245,158,11,0.12)',
+                  border: '1px solid rgba(245,158,11,0.35)',
+                  color: '#F59E0B',
+                  fontSize: 12.5,
+                }}
+              >
+                ⚡ {pubCryptoLaunchNotice}
+              </div>
+            )}
+
+            {/* ── EXTRACTED SINGLE-PIECE PUBCRYPTO LINK & BITCOTASK SHORTLINKS ── */}
+            {shortlinksSubMode === 'cards' &&
+              !showPartnerShortlinksWall &&
+              (pubCryptoNativeFeed.linkTasks.length > 0 || pubCryptoNativeFeed.shortlinkCampaigns.length > 0) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span
+                        className="font-mono"
+                        style={{
+                          fontSize: 11,
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: 'rgba(139,92,246,0.2)',
+                          border: '1px solid rgba(139,92,246,0.45)',
+                          color: '#C4B5FD',
+                          fontWeight: 700,
+                        }}
+                      >
+                        🚀 PUBCRYPTO SINGLE-PIECE SHORTLINKS
+                      </span>
+                      <span className="font-mono" style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                        Direct 1-Click Launch • No Iframe Required
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: 14 }}>
+                    {pubCryptoNativeFeed.linkTasks.map((ptask: any, idx: number) => {
+                      const maxViews = Math.max(1, Number(ptask.total_max) || 1);
+                      const usedViews = Math.max(0, Number(ptask.used_in_cycle ?? ptask.completed_in_cycle ?? ptask.done_today) || 0);
+                      const remViews =
+                        ptask.remaining_in_cycle !== undefined
+                          ? Math.max(0, Number(ptask.remaining_in_cycle))
+                          : Math.max(0, maxViews - usedViews);
+                      const pct = Math.min(100, Math.round(((maxViews - remViews) / maxViews) * 100));
+                      const rewardCoins = Number(ptask.member_reward) || 40;
+                      const cooldownSec = Number(ptask.cooldown_seconds) || 0;
+                      const cardKey = `pc_link_${ptask.id || idx}`;
+                      return (
+                        <div
+                          key={cardKey}
+                          className="card"
+                          style={{
+                            padding: 16,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            background: 'var(--bg2)',
+                            border: remViews > 0 ? '1.5px solid rgba(139,92,246,0.42)' : '1px solid var(--border)',
+                            opacity: remViews > 0 ? 1 : 0.65,
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div
+                                  style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 9,
+                                    background: 'rgba(139,92,246,0.18)',
+                                    border: '1px solid rgba(139,92,246,0.4)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#C4B5FD',
+                                    flexShrink: 0,
+                                    fontWeight: 800,
+                                    fontSize: 14,
+                                  }}
+                                >
+                                  🚀
+                                </div>
+                                <div>
+                                  <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                                    {ptask.task_name}
+                                  </div>
+                                  <div className="font-mono" style={{ fontSize: 10, color: '#A78BFA', fontWeight: 700 }}>
+                                    PUBCRYPTO LINK {cooldownSec > 0 ? `• ⏱️ ${Math.round(cooldownSec / 60) || 1}m CD` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                              <div
+                                style={{
+                                  textAlign: 'right',
+                                  padding: '4px 8px',
+                                  borderRadius: 7,
+                                  background: 'rgba(0,232,154,0.12)',
+                                  border: '1px solid rgba(0,232,154,0.32)',
+                                }}
+                              >
+                                <div className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
+                                  +{rewardCoins}
+                                </div>
+                                <div className="font-mono" style={{ fontSize: 9, color: 'var(--txt2)' }}>
+                                  COINS
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ marginTop: 10 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 4 }}>
+                                <span className="font-mono" style={{ color: 'var(--txt2)' }}>Remaining in 24h Cycle</span>
+                                <span className="font-mono" style={{ color: '#C4B5FD', fontWeight: 700 }}>
+                                  {remViews} / {maxViews} Left
+                                </span>
+                              </div>
+                              <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'var(--bg3)', overflow: 'hidden' }}>
+                                <div
+                                  style={{
+                                    width: `${pct}%`,
+                                    height: '100%',
+                                    background: 'linear-gradient(90deg, #8B5CF6, var(--green))',
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {remViews > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleLaunchPubCryptoLinkTask(ptask)}
+                              disabled={pubCryptoLaunchingId === cardKey}
+                              className="btn btn-primary btn-sm btn-full"
+                              style={{
+                                background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                                color: '#FFFFFF',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {pubCryptoLaunchingId === cardKey
+                                ? 'Redirecting to Shortlink...'
+                                : owmClickedIds[cardKey]
+                                  ? `Start Again (${remViews} Left) • Auto-Syncing ↗`
+                                  : `Start PubCrypto Link (+${rewardCoins} Coins) ↗`}
+                            </button>
+                          ) : (
+                            <button type="button" disabled className="btn btn-outline btn-sm btn-full" style={{ opacity: 0.6 }}>
+                              Cycle Limit Reached
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {pubCryptoNativeFeed.shortlinkCampaigns.map((camp: any, idx: number) => {
+                      const maxViews = Math.max(1, Number(camp.limit) || 1);
+                      const remViews = camp.available !== null && camp.available !== undefined ? Number(camp.available) : maxViews;
+                      const rewardCoins =
+                        Number(camp.reward) > 0 && Number(camp.reward) < 1
+                          ? Number((Number(camp.reward) * 25).toFixed(2))
+                          : Number(camp.reward) || 1;
+                      const cardKey = `pc_camp_${camp.id || camp.campaign_token || idx}`;
+                      return (
+                        <div
+                          key={cardKey}
+                          className="card"
+                          style={{
+                            padding: 16,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            background: 'var(--bg2)',
+                            border: '1px solid rgba(139,92,246,0.35)',
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                              <div>
+                                <div className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>
+                                  {camp.title}
+                                </div>
+                                <div className="font-mono" style={{ fontSize: 10, color: '#A78BFA', fontWeight: 700 }}>
+                                  ⚡ {camp.sourceLabel || 'PUBCRYPTO SHORTLINK'} • {remViews}/{maxViews} Left
+                                </div>
+                              </div>
+                              <div
+                                style={{
+                                  textAlign: 'right',
+                                  padding: '4px 8px',
+                                  borderRadius: 7,
+                                  background: 'rgba(0,232,154,0.12)',
+                                  border: '1px solid rgba(0,232,154,0.32)',
+                                }}
+                              >
+                                <div className="font-mono" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--green)' }}>
+                                  +{rewardCoins}
+                                </div>
+                                <div className="font-mono" style={{ fontSize: 9, color: 'var(--txt2)' }}>
+                                  COINS
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleLaunchPubCryptoCampaign(camp)}
+                            className="btn btn-primary btn-sm btn-full"
+                            style={{
+                              background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                              color: '#FFFFFF',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {pubCryptoLaunchingId === cardKey
+                              ? 'Opening Shortlink...'
+                              : `Open Shortlink (+${rewardCoins} Coins) ↗`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
             {shortlinksSubMode === 'cards' && !showPartnerShortlinksWall && owmFeed.shortlinks.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: 14 }}>
