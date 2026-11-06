@@ -964,22 +964,23 @@ export default function App() {
   >('all');
   const [copiedPlayerId, setCopiedPlayerId] = useState<boolean>(false);
   const [earningsPopupOpen, setEarningsPopupOpen] = useState<boolean>(false);
-  const [ptcSubMode, setPtcSubMode] = useState<'cards' | 'owm_iframe' | 'owm_window' | 'pubcrypto'>('cards');
+  const [ptcSubMode, setPtcSubMode] = useState<'cards' | 'owm_iframe' | 'owm_window' | 'pubcrypto' | 'timewall_clicks'>('cards');
   const [ptcCardTypeFilter, setPtcCardTypeFilter] = useState<'all' | 'iframe' | 'window' | 'pubcrypto'>('all');
-  const [tasksSubMode, setTasksSubMode] = useState<'cards' | 'owm_general' | 'owm_telegram' | 'pubcrypto'>('cards');
+  const [tasksSubMode, setTasksSubMode] = useState<'cards' | 'owm_general' | 'owm_telegram' | 'pubcrypto' | 'timewall_tasks'>('cards');
   const [offersViewMode, setOffersViewMode] = useState<'cards' | 'walls'>('cards');
-  const [surveysViewMode, setSurveysViewMode] = useState<'cards' | 'wall'>('cards');
+  const [surveysViewMode, setSurveysViewMode] = useState<'cards' | 'wall' | 'timewall'>('cards');
   const [youtubeViewMode, setYoutubeViewMode] = useState<'cards' | 'wall'>('cards');
   const [showPartnerShortlinksWall, setShowPartnerShortlinksWall] = useState<boolean>(false);
   const [shortlinksSubMode, setShortlinksSubMode] = useState<'cards' | 'pubcrypto' | 'owm_wall'>('cards');
 
-  // PubCrypto Native Single-Piece Feed State (0ms seed + live browser session sync)
+  // PubCrypto Native Single-Piece Feed State (0ms seed + live browser session sync across all internal sub-providers)
   const [pubCryptoNativeFeed, setPubCryptoNativeFeed] = useState<{
     linkTasks: any[];
     reviewMapTasks: any[];
     ptcCampaigns: any[];
     shortlinkCampaigns: any[];
     readArticleCampaigns: any[];
+    timewallBaseUrl: string;
   }>(() => ({
     linkTasks: [
       { id: 83, task_name: 'UrkCik', member_reward: '320.00', total_max: 1, remaining_in_cycle: 1, used_in_cycle: 0, cooldown_seconds: 300, cooldown_remaining: 0, reset_mode: 'rolling_24h', available: true },
@@ -994,6 +995,7 @@ export default function App() {
     ptcCampaigns: [],
     shortlinkCampaigns: [],
     readArticleCampaigns: [],
+    timewallBaseUrl: 'https://timewall.io/users/login?oid=fa4d255aee98efc5&uid=717d7a4e3d7d7b13dc82d3d5cd71fcf504280875474fac23',
   }));
   const [pubCryptoLaunchingId, setPubCryptoLaunchingId] = useState<string | null>(null);
   const [pubCryptoLaunchNotice, setPubCryptoLaunchNotice] = useState<string | null>(null);
@@ -1462,8 +1464,11 @@ export default function App() {
           bitcoPtcJson,
           bitcoSlJson,
           readArtJson,
+          aoyPtcJson,
+          aoySlJson,
           pcOwmPtcJson,
           pcOwmSlJson,
+          twJson,
         ] = await Promise.all([
           extRes && extRes.ok ? extRes.json().catch(() => null) : Promise.resolve(null),
           fetch(`https://pub.cryptolinkforearn.com/api/link-tasks/review-map${qs}`, { headers: authHeaders })
@@ -1478,10 +1483,19 @@ export default function App() {
           fetch('https://pub.cryptolinkforearn.com/api/offerwall/read-article', { headers: authHeaders })
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/aoytasks/ptc', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/aoytasks/shortlink', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
           fetch('https://pub.cryptolinkforearn.com/api/offerwall/offerwallme/ptc', { headers: authHeaders })
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null),
           fetch('https://pub.cryptolinkforearn.com/api/offerwall/offerwallme/shortlink', { headers: authHeaders })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch('https://pub.cryptolinkforearn.com/api/offerwall/timewall/frame?tab=featured', { headers: authHeaders })
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null),
         ]);
@@ -1496,25 +1510,39 @@ export default function App() {
           const bitcoPtc = Array.isArray(bitcoPtcJson?.campaigns)
             ? bitcoPtcJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'BITCOTASK PTC' }))
             : [];
+          const aoyPtc = Array.isArray(aoyPtcJson?.campaigns)
+            ? aoyPtcJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'AOYTASKS PTC' }))
+            : [];
           const pcOwmPtc = Array.isArray(pcOwmPtcJson?.campaigns)
-            ? pcOwmPtcJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'PUBCRYPTO PTC' }))
+            ? pcOwmPtcJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'PC • OFFERWALL.ME PTC' }))
             : [];
           const bitcoSl = Array.isArray(bitcoSlJson?.campaigns)
             ? bitcoSlJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'BITCOTASK LINK' }))
             : [];
+          const aoySl = Array.isArray(aoySlJson?.campaigns)
+            ? aoySlJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'AOYTASKS LINK' }))
+            : [];
           const pcOwmSl = Array.isArray(pcOwmSlJson?.campaigns)
-            ? pcOwmSlJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'PUBCRYPTO SHORTLINK' }))
+            ? pcOwmSlJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'PC • OFFERWALL.ME LINK' }))
             : [];
           const readArticleCampaigns = Array.isArray(readArtJson?.campaigns)
             ? readArtJson.campaigns.map((c: any) => ({ ...c, sourceLabel: 'BITCOTASK READ & EARN' }))
             : prev.readArticleCampaigns;
+          const timewallBaseUrl =
+            twJson && typeof twJson.frame_url === 'string' && twJson.frame_url.startsWith('https://timewall.io')
+              ? twJson.frame_url.replace(/&tab=[^&]+/, '')
+              : prev.timewallBaseUrl;
+
+          const allMergedPtc = [...bitcoPtc, ...aoyPtc, ...pcOwmPtc];
+          const allMergedSl = [...bitcoSl, ...aoySl, ...pcOwmSl];
 
           return {
             linkTasks,
             reviewMapTasks,
-            ptcCampaigns: [...bitcoPtc, ...pcOwmPtc].length > 0 ? [...bitcoPtc, ...pcOwmPtc] : prev.ptcCampaigns,
-            shortlinkCampaigns: [...bitcoSl, ...pcOwmSl].length > 0 ? [...bitcoSl, ...pcOwmSl] : prev.shortlinkCampaigns,
+            ptcCampaigns: allMergedPtc.length > 0 ? allMergedPtc : prev.ptcCampaigns,
+            shortlinkCampaigns: allMergedSl.length > 0 ? allMergedSl : prev.shortlinkCampaigns,
             readArticleCampaigns,
+            timewallBaseUrl,
           };
         });
       } finally {
@@ -7004,6 +7032,8 @@ export default function App() {
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'tasks', 'telegram')
               : tasksSubMode === 'owm_general'
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'tasks', 'general')
+              : tasksSubMode === 'timewall_tasks'
+              ? `${pubCryptoNativeFeed.timewallBaseUrl}&tab=tasks`
               : signedPubCryptoUrl;
 
           return (
@@ -7042,7 +7072,8 @@ export default function App() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
-                    { id: 'cards', label: `Single-Piece Tasks (${owmFeed.tasks.length})` },
+                    { id: 'cards', label: `Single-Piece Tasks (${owmFeed.tasks.length + pubCryptoNativeFeed.readArticleCampaigns.length + pubCryptoNativeFeed.reviewMapTasks.length})` },
+                    { id: 'timewall_tasks', label: '⏱️ TimeWall Tasks' },
                     { id: 'pubcrypto', label: '🔥 PubCrypto MoneyTask' },
                     { id: 'owm_general', label: 'Offerwall.me Wall' },
                     { id: 'owm_telegram', label: 'Telegram Join Wall' },
@@ -7857,6 +7888,18 @@ export default function App() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setSurveysViewMode('timewall')}
+                    className="btn btn-sm"
+                    style={{
+                      background: surveysViewMode === 'timewall' ? 'rgba(56,189,248,0.16)' : 'var(--bg2)',
+                      border: surveysViewMode === 'timewall' ? '1.5px solid #38BDF8' : '1px solid var(--border)',
+                      color: surveysViewMode === 'timewall' ? '#38BDF8' : 'var(--txt2)',
+                    }}
+                  >
+                    ⏱️ TimeWall Surveys
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setSurveysViewMode('wall')}
                     className="btn btn-sm"
                     style={{
@@ -7865,7 +7908,7 @@ export default function App() {
                       color: surveysViewMode === 'wall' ? 'var(--green)' : 'var(--txt2)',
                     }}
                   >
-                    Full Survey Wall
+                    Offerwall.me Survey Wall
                   </button>
                   <button
                     type="button"
@@ -8017,8 +8060,12 @@ export default function App() {
               ) : (
                 <div className="card card-glow" style={{ padding: 20 }}>
                   <iframe
-                    key={`surveys_${user.id}`}
-                    src={surveysIframeUrl}
+                    key={`surveys_${surveysViewMode}_${user.id}`}
+                    src={
+                      surveysViewMode === 'timewall'
+                        ? `${pubCryptoNativeFeed.timewallBaseUrl}&tab=surveys`
+                        : surveysIframeUrl
+                    }
                     title="Paid Surveys"
                     width="100%"
                     height={680}
@@ -8049,6 +8096,8 @@ export default function App() {
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'iframe')
               : ptcSubMode === 'owm_window'
               ? buildOfferwallMeTabUrl(baseOwmUrl, 'window')
+              : ptcSubMode === 'timewall_clicks'
+              ? `${pubCryptoNativeFeed.timewallBaseUrl}&tab=clicks`
               : signedPubCryptoUrl;
 
           const owmPtcAds =
@@ -8119,6 +8168,7 @@ export default function App() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
                     { id: 'cards', label: `All PTC Cards (${allPtcAds.length})` },
+                    { id: 'timewall_clicks', label: '⏱️ TimeWall Clicks' },
                     { id: 'pubcrypto', label: '🔥 PubCrypto PTC Wall' },
                     { id: 'owm_iframe', label: 'Iframe PTC Wall' },
                     { id: 'owm_window', label: 'Window PTC Wall' },
